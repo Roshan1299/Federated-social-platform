@@ -1,0 +1,10 @@
+# Python virtual environment
+/venv/
+__pycache__/
+*.pyc
+.DS_Store
+*.log
+.env
+.idea/
+.vscode/
+*.sqlite3
