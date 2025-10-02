@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}Social Distribution{% endblock %}</title>
+</head>
+<body>
+  <nav>
+    {% if user.is_authenticated %}
+      <span>Hello, {{ user.username }}!</span>
+      <form action="{% url 'logout' %}" method="post" style="display: inline;">
+        {% csrf_token %}
+        <button type="submit">Logout</button>
+      </form>
+    {% else %}
+      <a href="{% url 'login' %}">Login</a> | 
+      <a href="{% url 'signup' %}">Sign Up</a>
+    {% endif %}
+  </nav>
+  <hr>
+  <main>
+    {% block content %}
+    {% endblock %}
+  </main>
+</body>
+</html>
