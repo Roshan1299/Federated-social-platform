@@ -18,6 +18,32 @@ See [the web page](https://uofa-cmput404.github.io/general/project.html) for a d
 
 Make a distributed social network!
 
+## Running the Project Locally
+
+Follow these steps to set up and run the development server. It is recommended to run these commands within an activated virtual environment.
+
+1.  **Install Dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+2.  **Apply Database Migrations:**
+    This command creates and updates the database schema.
+    ```bash
+    python manage.py migrate
+    ```
+
+3.  **Create a Superuser (for Admin Access):**
+    ```bash
+    python manage.py createsuperuser
+    ```
+
+4.  **Run the Development Server:**
+    ```bash
+    python manage.py runserver
+    ```
+    The server will be running at `http://127.0.0.1:8000/`.
+
 ## License
 
 * Choose an OSI approved license, name it here, and copy the license text to a file called `LICENSE`.
