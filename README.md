@@ -27,3 +27,53 @@ Make a distributed social network!
 The authors claiming copyright, if they wish to be known, can list their names here...
 
 * 
+
+## API Documentation
+
+This section details the REST API endpoints for the Social Distribution project.
+
+---
+
+### Get a Single Author's Profile
+
+Retrieves the public profile information of a single author.
+
+*   **URL:** `/api/authors/{AUTHOR_ID}/`
+*   **Method:** `GET`
+*   **URL Params:**
+    *   `AUTHOR_ID` (required): The UUID of the author to retrieve.
+
+#### Example Request:
+
+```bash
+curl http://127.0.0.1:8000/api/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/
+```
+
+#### Example Response:
+
+*   **Code:** `200 OK`
+*   **Content:**
+
+```json
+{
+    "type": "author",
+    "id": "http://127.0.0.1:8000/api/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/",
+    "host": "http://127.0.0.1:8000",
+    "displayName": "Roshan123",
+    "github": "http://github.com/Roshan2",
+    "profileImage": "https://example.com/path/to/image.png",
+    "web": "http://127.0.0.1:8000/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/"
+}
+```
+
+#### Response Fields:
+
+| Field          | Type   | Description                                                                 | Example                                                              |
+|----------------|--------|-----------------------------------------------------------------------------|----------------------------------------------------------------------|
+| `type`         | string | The type of the object. Always "author".                                    | `"author"`                                                           |
+| `id`           | URL    | The fully qualified API URL for this author. This is their unique identifier. | `"http://127.0.0.1:8000/api/authors/..."`                             |
+| `host`         | URL    | The hostname of the node where the author is registered.                    | `"http://127.0.0.1:8000"`                                            |
+| `displayName`  | string | The author's preferred display name.                                        | `"Roshan123"`                                                         |
+| `github`       | URL    | The URL to the author's GitHub profile. Can be null.                        | `"http://github.com/Roshan2"`                                        |
+| `profileImage` | URL    | A URL to an image for the author's profile picture. Can be null.            | `"https://example.com/path/to/image.png"`                            |
+| `web`          | URL    | The fully qualified URL to the author's web-based profile page.             | `"http://127.0.0.1:8000/authors/..."`                                 |
