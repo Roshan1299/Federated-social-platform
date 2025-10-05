@@ -1,8 +1,10 @@
 from django.urls import path
-from .views import SignUpView, AuthorProfileView, AuthorAPIView
+from .views import SignUpView, AuthorProfileView, AuthorAPIView, EditView
 
+app_name = "authors"
 urlpatterns = [
     path("accounts/signup/", SignUpView.as_view(), name="signup"),
     path("authors/<uuid:author_id>/", AuthorProfileView.as_view(), name="author_profile"),
+    path("authors/<uuid:author_id>/edit", EditView.as_view(), name="edit_profile"),
     path("api/authors/<uuid:author_id>/", AuthorAPIView.as_view(), name="author_api"),
 ]
