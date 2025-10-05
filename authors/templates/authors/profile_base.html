@@ -10,7 +10,13 @@
     <p>
       <textarea name="description" {% if not editable %}readonly{% endif %}>{{ author.description }}</textarea>
     </p>
+    {% if editable %}
+    <input type="url" name="github" value="{{ author.github }}">
+    {% else %}
     <a href="{{ author.github }}">GitHub Profile</a>
+    {% endif %}
+
+    
     <br>
     {% block edit_button %}
       <a href="{% url 'authors:edit_profile' author.id %}">Edit Profile</a>
