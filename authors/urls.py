@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import SignUpView, AuthorProfileView, AuthorAPIView, AuthorEditView
+from .views import SignUpView, AuthorProfileView, AuthorsListAPIView, AuthorAPIView, AuthorEditView
 
 app_name = "authors"
 urlpatterns = [
@@ -7,4 +7,5 @@ urlpatterns = [
     path("authors/<uuid:author_id>/", AuthorProfileView.as_view(), name="author_profile"),
     path("authors/<uuid:author_id>/edit", AuthorEditView.as_view(), name="edit_profile"),
     path("api/authors/<uuid:author_id>/", AuthorAPIView.as_view(), name="author_api"),
+    path("api/authors/", AuthorsListAPIView.as_view(), name="authors_api"),
 ]
