@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+
+{% block title %}
+  Posts by {{ posts.0.author.displayName }}
+{% endblock %}
+
+{% block content %}
+  <h2>Posts by {{ posts.0.author.displayName }}</h2>
+  
+  {% if posts %}
+    {% for post in posts %}
+      <article>
+        <h3><a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a></h3>
+        {% if post.description %}
+          <p>{{ post.description }}</p>
+        {% endif %}
+        <p>Published: {{ post.published }}</p>
+        <p>Visibility: {{ post.get_visibility_display }}</p>
+      </article>
+      <hr>
+    {% endfor %}
+  {% else %}
+    <p>No posts yet.</p>
+  {% endif %}
+  
+  {% if user.is_authenticated and user.id == posts.0.author.id %}
+    <a href="{% url 'authors:create_post' %}">Create New Post</a>
+  {% endif %}
+  
+  <a href="{% url 'authors:author_profile' posts.0.author.id %}">Back to Profile</a>
+{% endblock %}

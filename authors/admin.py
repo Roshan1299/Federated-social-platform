@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.utils.translation import gettext_lazy as _
-from .models import Author
+from .models import Author, Post
 
 class AuthorAdmin(UserAdmin):
     model = Author
@@ -27,4 +27,11 @@ class AuthorAdmin(UserAdmin):
         (_("Important dates"), {"fields": ("last_login", "date_joined")}),
     )
 
+class PostAdmin(admin.ModelAdmin):
+    list_display = ('title', 'author', 'contentType', 'visibility', 'published', 'updated')
+    list_filter = ('contentType', 'visibility', 'published')
+    search_fields = ('title', 'content', 'author__displayName')
+    readonly_fields = ('id', 'published', 'updated')
+
 admin.site.register(Author, AuthorAdmin)
+admin.site.register(Post, PostAdmin)

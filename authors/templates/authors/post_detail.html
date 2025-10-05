@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block title %}
+  {{ post.title }}
+{% endblock %}
+
+{% block content %}
+  <article>
+    <header>
+      <h1>{{ post.title }}</h1>
+      <p>By <a href="{% url 'authors:author_profile' post.author.id %}">{{ post.author.displayName }}</a></p>
+      <p>Published: {{ post.published }}</p>
+      <p>Visibility: {{ post.get_visibility_display }}</p>
+    </header>
+    
+    <section>
+      {% if post.description %}
+        <p><strong>Description:</strong> {{ post.description }}</p>
+      {% endif %}
+      
+      <div class="post-content">
+        {{ content_html|safe }}
+      </div>
+    </section>
+  </article>
+  
+  <a href="{% url 'authors:author_profile' post.author.id %}">Back to Author Profile</a>
+{% endblock %}

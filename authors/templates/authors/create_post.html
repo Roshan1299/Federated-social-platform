@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+
+{% block title %}
+  Create Post
+{% endblock %}
+
+{% block content %}
+  <h2>Create New Post</h2>
+  <form method="post">
+    {% csrf_token %}
+    <p>
+      <label for="id_title">Title:</label><br>
+      <input type="text" name="title" id="id_title" required><br>
+    </p>
+    <p>
+      <label for="id_description">Description (Optional):</label><br>
+      <textarea name="description" id="id_description">{{ form.description.value|default:"" }}</textarea><br>
+    </p>
+    <p>
+      <label for="id_content">Content:</label><br>
+      <textarea name="content" id="id_content" required></textarea><br>
+    </p>
+    <p>
+      <label for="id_contentType">Content Type:</label><br>
+      <select name="contentType" id="id_contentType">
+        <option value="text/plain" {% if form.contentType.value == "text/plain" %}selected{% endif %}>Plain Text</option>
+        <option value="text/markdown" {% if form.contentType.value == "text/markdown" %}selected{% endif %}>Markdown/ CommonMark</option>
+      </select><br>
+    </p>
+    <p>
+      <label for="id_visibility">Visibility:</label><br>
+      <select name="visibility" id="id_visibility">
+        <option value="PUBLIC" {% if form.visibility.value == "PUBLIC" %}selected{% endif %}>Public</option>
+        <option value="PRIVATE" {% if form.visibility.value == "PRIVATE" %}selected{% endif %}>Private</option>
+      </select><br>
+    </p>
+    <p>
+      <input type="checkbox" name="unlisted" id="id_unlisted" value="True">
+      <label for="id_unlisted">Unlisted (Public but not in feeds)</label><br>
+    </p>
+    <button type="submit">Publish Post</button>
+  </form>
+  <a href="{% url 'authors:author_profile' user.id %}">Back to Profile</a>
+{% endblock %}

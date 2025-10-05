@@ -1,6 +1,35 @@
 {% extends 'authors/profile_base.html' %}
+
 {% block edit_button %}
   <a href="{% url 'authors:edit_profile' author.id %}">Edit Profile</a>
 {% endblock %}
+
+{% block content %}
+  {{ block.super }}
+  
+  <!-- Show posts section -->
+  <section>
+    <h2>Posts</h2>
+    {% if user.id == author.id %}
+      <a href="{% url 'authors:create_post' %}">Create New Post</a>
+    {% endif %}
+    
+    <a href="{% url 'authors:author_posts' author.id %}">View All Posts</a>
+    
+    <!-- Show recent posts -->
+    {% for post in author.posts.all|slice:":5" %}
+      <div>
+        <h3><a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a></h3>
+        {% if post.description %}
+          <p>{{ post.description }}</p>
+        {% endif %}
+        <p>Published: {{ post.published }}</p>
+      </div>
+    {% empty %}
+      <p>No posts yet.</p>
+    {% endfor %}
+  </section>
+{% endblock %}
+
 {% with editable=False %}
 {% endwith %}
