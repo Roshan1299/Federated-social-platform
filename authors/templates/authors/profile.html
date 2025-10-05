@@ -1,10 +1,6 @@
-{% extends 'base.html' %}
-
-{% block content %}
-  <img src=" {{author.profileImage}}" alt="{{ author.displayName}}'s Profile Image">
-  <h1>{{ author.displayName }}</h1>
-  <p>{{ author.description }}</p>
-  <a href="{{ author.github }}">GitHub Profile</a>
-  <br>
+{% extends 'authors/profile_base.html' %}
+{% block edit_button %}
   <a href="{% url 'authors:edit_profile' author.id %}">Edit Profile</a>
 {% endblock %}
+{% with editable=False %}
+{% endwith %}

@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block content %}
+  <form method="post">
+    {% csrf_token %}
+    <img src="{{ author.profileImage }}" alt="{{ author.displayName }}'s Profile Image">
+    <h1>
+      <input type="text" name="displayName" value="{{ author.displayName }}" {% if not editable %}readonly{% endif %}>
+    </h1>
+    <p>
+      <textarea name="description" {% if not editable %}readonly{% endif %}>{{ author.description }}</textarea>
+    </p>
+    <a href="{{ author.github }}">GitHub Profile</a>
+    <br>
+    {% block edit_button %}
+      <a href="{% url 'authors:edit_profile' author.id %}">Edit Profile</a>
+    {% endblock %}
+    {% if editable %}
+      <button type="submit">Save Changes</button>
+    {% endif %}
+  </form>
+{% endblock %}
