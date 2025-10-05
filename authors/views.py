@@ -9,6 +9,8 @@ from django.http import HttpResponse, JsonResponse
 from .models import Author, Post
 
 from .forms import AuthorCreationForm, AuthorProfileForm, PostForm
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.contrib.auth.decorators import login_required
 
 class SignUpView(CreateView):
     form_class = AuthorCreationForm
@@ -107,6 +109,37 @@ class CreatePostView(CreateView):
     def get_success_url(self):
         return reverse('authors:author_profile', kwargs={'author_id': self.request.user.id})
 
+class EditPostView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
+    model = Post
+    form_class = PostForm
+    template_name = "authors/edit_post.html"
+    pk_url_kwarg = "post_id"
+
+    def test_func(self):
+        # Ensure only the post author can edit it
+        post = self.get_object()
+        return self.request.user == post.author
+
+    def get_success_url(self):
+        return reverse("authors:post_detail", kwargs={"post_id": self.object.id})
+
+class DeletePostView(LoginRequiredMixin, UserPassesTestMixin, View):
+    def test_func(self):
+        post = get_object_or_404(Post, id=self.kwargs['post_id'])
+        return self.request.user == post.author
+
+    def post(self, request, post_id):
+        post = get_object_or_404(Post, id=post_id)
+        if self.request.user == post.author:
+            post.delete()
+            return redirect('authors:author_profile', author_id=self.request.user.id)
+        return HttpResponse("Unauthorized", status=403)
+
+    def get(self, request, post_id):
+        post = get_object_or_404(Post, id=post_id)
+        if self.request.user == post.author:
+            return render(request, "authors/delete_post.html", {"post": post})
+        return HttpResponse("Unauthorized", status=403)
 
 class PostDetailView(DetailView):
     model = Post
@@ -158,3 +191,7 @@ class PostAPIView(View):
             "updated": post.updated.isoformat(),
         }
         return JsonResponse(data)
+    
+@login_required
+def redirect_to_profile(request):
+    return redirect('authors:author_profile', author_id=request.user.id)

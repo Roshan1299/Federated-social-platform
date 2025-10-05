@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+
+{% block title %}
+  Edit Post
+{% endblock %}
+
+{% block content %}
+  <h2>Edit Post: {{ form.instance.title }}</h2>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Save Changes</button>
+  </form>
+  <a href="{% url 'authors:post_detail' form.instance.id %}">Cancel</a>
+{% endblock %}

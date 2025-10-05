@@ -8,7 +8,12 @@
   <article>
     <header>
       <h1>{{ post.title }}</h1>
-      <p>By <a href="{% url 'authors:author_profile' post.author.id %}">{{ post.author.displayName }}</a></p>
+      <p>
+        By 
+        <a href="{% url 'authors:author_profile' post.author.id %}">
+          {{ post.author.displayName }}
+        </a>
+      </p>
       <p>Published: {{ post.published }}</p>
       <p>Visibility: {{ post.get_visibility_display }}</p>
     </header>
@@ -23,6 +28,15 @@
       </div>
     </section>
   </article>
-  
+
+  {% if user.is_authenticated and user.id == post.author.id %}
+    <a href="{% url 'authors:edit_post' post.id %}">Edit Post</a>
+  {% endif %}
+
+{% if user.is_authenticated and user.id == post.author.id %}
+  <a href="{% url 'authors:edit_post' post.id %}">Edit Post</a> |
+  <a href="{% url 'authors:delete_post' post.id %}">Delete Post</a>
+{% endif %}
+
   <a href="{% url 'authors:author_profile' post.author.id %}">Back to Author Profile</a>
 {% endblock %}
