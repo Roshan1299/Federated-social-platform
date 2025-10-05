@@ -14,6 +14,21 @@
         {% if post.description %}
           <p>{{ post.description }}</p>
         {% endif %}
+        
+        {% if post.contentType|slice:":6" == "image/" %}
+          <!-- If the post is an image post, display a thumbnail -->
+          {% if post.image %}
+            <div class="post-image-preview">
+              <a href="{% url 'authors:post_detail' post.id %}">
+                <img src="{{ post.image.url }}" alt="{{ post.title }}" style="max-width: 200px; height: auto; border: 1px solid #ccc;">
+              </a>
+            </div>
+          {% endif %}
+        {% else %}
+          <!-- For text posts, display a preview of the content -->
+          <p>{{ post.content|truncatechars:200 }}</p>
+        {% endif %}
+        
         <p>Published: {{ post.published }}</p>
         <p>Visibility: {{ post.get_visibility_display }}</p>
       </article>

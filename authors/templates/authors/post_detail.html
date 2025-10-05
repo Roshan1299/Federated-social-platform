@@ -23,20 +23,31 @@
         <p><strong>Description:</strong> {{ post.description }}</p>
       {% endif %}
       
-      <div class="post-content">
-        {{ content_html|safe }}
-      </div>
+      {% if post.contentType|slice:":6" == "image/" %}
+        <!-- If the post is an image post, display the image -->
+        {% if post.image %}
+          <div class="post-image">
+            <img src="{{ post.image.url }}" alt="{{ post.title }}" style="max-width: 100%; height: auto;">
+          </div>
+        {% endif %}
+        {% if post.content %}
+          <div class="post-content">
+            {{ content_html|safe }}
+          </div>
+        {% endif %}
+      {% else %}
+        <!-- For text posts, display the content -->
+        <div class="post-content">
+          {{ content_html|safe }}
+        </div>
+      {% endif %}
     </section>
   </article>
 
   {% if user.is_authenticated and user.id == post.author.id %}
-    <a href="{% url 'authors:edit_post' post.id %}">Edit Post</a>
+    <a href="{% url 'authors:edit_post' post.id %}">Edit Post</a> |
+    <a href="{% url 'authors:delete_post' post.id %}">Delete Post</a>
   {% endif %}
-
-{% if user.is_authenticated and user.id == post.author.id %}
-  <a href="{% url 'authors:edit_post' post.id %}">Edit Post</a> |
-  <a href="{% url 'authors:delete_post' post.id %}">Delete Post</a>
-{% endif %}
 
   <a href="{% url 'authors:author_profile' post.author.id %}">Back to Author Profile</a>
 {% endblock %}

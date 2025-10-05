@@ -6,7 +6,7 @@
 
 {% block content %}
   <h2>Create New Post</h2>
-  <form method="post">
+  <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
     <p>
       <label for="id_title">Title:</label><br>
@@ -25,6 +25,11 @@
       <select name="contentType" id="id_contentType">
         <option value="text/plain" {% if form.contentType.value == "text/plain" %}selected{% endif %}>Plain Text</option>
         <option value="text/markdown" {% if form.contentType.value == "text/markdown" %}selected{% endif %}>Markdown/ CommonMark</option>
+        <option value="image/png" {% if form.contentType.value == "image/png" %}selected{% endif %}>PNG Image</option>
+        <option value="image/jpeg" {% if form.contentType.value == "image/jpeg" %}selected{% endif %}>JPEG Image</option>
+        <option value="image/gif" {% if form.contentType.value == "image/gif" %}selected{% endif %}>GIF Image</option>
+        <option value="image/bmp" {% if form.contentType.value == "image/bmp" %}selected{% endif %}>BMP Image</option>
+        <option value="image/webp" {% if form.contentType.value == "image/webp" %}selected{% endif %}>WebP Image</option>
       </select><br>
     </p>
     <p>
@@ -37,6 +42,10 @@
     <p>
       <input type="checkbox" name="unlisted" id="id_unlisted" value="True">
       <label for="id_unlisted">Unlisted (Public but not in feeds)</label><br>
+    </p>
+    <p>
+      <label for="id_image">Image (Optional):</label><br>
+      <input type="file" name="image" id="id_image" accept="image/*"><br>
     </p>
     <button type="submit">Publish Post</button>
   </form>

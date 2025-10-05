@@ -17,6 +17,11 @@ class Post(models.Model):
     CONTENT_TYPE_CHOICES = [
         ('text/plain', 'Plain Text'),
         ('text/markdown', 'Markdown/ CommonMark'),
+        ('image/png', 'PNG Image'),
+        ('image/jpeg', 'JPEG Image'),
+        ('image/gif', 'GIF Image'),
+        ('image/bmp', 'BMP Image'),
+        ('image/webp', 'WebP Image'),
     ]
     
     VISIBILITY_CHOICES = [
@@ -39,6 +44,8 @@ class Post(models.Model):
     # Optional image for the post
     source = models.URLField(blank=True, null=True)  # Where the post originated from
     origin = models.URLField(blank=True, null=True)  # Original source URL
+    # Image field for image posts
+    image = models.ImageField(upload_to="post_images/", blank=True, null=True)
     
     def __str__(self):
         return f"{self.title} by {self.author.displayName}"

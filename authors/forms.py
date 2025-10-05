@@ -15,12 +15,13 @@ class AuthorProfileForm(ModelForm):
 class PostForm(ModelForm):
     class Meta:
         model = Post
-        fields = ('title', 'description', 'content', 'contentType', 'visibility', 'unlisted')
+        fields = ('title', 'description', 'content', 'contentType', 'visibility', 'unlisted', 'image')
         labels = {
             'title': 'Post Title',
             'description': 'Description (Optional)',
             'content': 'Content',
             'contentType': 'Content Type',
             'visibility': 'Visibility',
-            'unlisted': 'Unlisted (Public but not in feeds)'
+            'unlisted': 'Unlisted (Public but not in feeds)',
+            'image': 'Image (Optional)'
         }
