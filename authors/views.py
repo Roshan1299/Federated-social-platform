@@ -71,7 +71,7 @@ class AuthorAPIView(View):
             "host": author.host,
             "displayName": author.displayName,
             "github": author.github,
-            "profileImage": author.profileImage,
+            "profileImage": author.profileImage.name,
             "web": request.scheme + "://" + request.get_host() + web_url,
         }
         return JsonResponse(data)
@@ -88,7 +88,7 @@ class AuthorsListAPIView(View):
                 "host": author.host,
                 "displayName": author.displayName,
                 "github": author.github,
-                "profileImage": author.profileImage,
+                "profileImage": author.profileImage.name,
                 "web": request.scheme + "://" + request.get_host() + web_url,
             })
         return JsonResponse(authors_data, safe=False, json_dumps_params={'indent': 2}) # by default jsonresponse only accepts a dictionary

@@ -1,9 +1,14 @@
 {% extends 'base.html' %}
 
 {% block content %}
-  <form method="post">
+  <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
-    <img src="{{ author.profileImage }}" alt="{{ author.displayName }}'s Profile Image">
+    <img width=150px src="{% if author.profileImage %} {{author.profileImage.url}} {% endif %}" alt="{{ author.displayName }}'s Profile Image">
+    <br>
+    {% if editable %}
+      <input type="file" name="profileImage" accept="image/*">
+    {% endif %}
+    
     <h1>
       <input type="text" name="displayName" value="{{ author.displayName }}" {% if not editable %}readonly{% endif %}>
     </h1>
@@ -16,8 +21,7 @@
     <a href="{{ author.github }}">GitHub Profile</a>
     {% endif %}
 
-    
-    <br>
+        <br>
     {% block edit_button %}
       <a href="{% url 'authors:edit_profile' author.id %}">Edit Profile</a>
     {% endblock %}
