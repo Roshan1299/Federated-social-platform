@@ -6,10 +6,12 @@ from .models import Author
 class AuthorAdmin(UserAdmin):
     model = Author
     list_display = ('username', 'displayName', 'email', 'is_staff', 'is_active')
+    readonly_fields = ("id", "host", "url",)
 
     fieldsets = (
         (None, {"fields": ("username", "password")}),
-        (_("Personal info"), {"fields": ("displayName", "first_name", "last_name", "email")}),
+        (_("Profile info"), {"fields": ("displayName", "id", "host", "url", "github", "description", "profileImage")}),
+        (_("Personal info"), {"fields": ("first_name", "last_name", "email")}),
         (
             _("Permissions"),
             {
