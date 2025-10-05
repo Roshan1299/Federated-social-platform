@@ -1,5 +1,8 @@
 {% extends 'base.html' %}
 
 {% block content %}
+  <img src=" {{author.profileImage}}" alt="{{ author.displayName}}'s Profile Image">
   <h1>{{ author.displayName }}</h1>
+  <p>{{ author.description }}</p>
+  <a href="{{ author.github }}">GitHub Profile</a>
 {% endblock %}

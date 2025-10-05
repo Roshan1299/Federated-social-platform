@@ -8,4 +8,5 @@ class Author(AbstractUser):
     url = models.URLField(blank=True, null=True)
     displayName = models.CharField(max_length=255)
     github = models.URLField(blank=True, null=True)
+    description = models.CharField(blank=True, null=True)
     profileImage = models.URLField(blank=True, null=True) # URL to an image
