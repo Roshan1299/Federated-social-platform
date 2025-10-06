@@ -109,19 +109,6 @@ class CreatePostView(CreateView):
     def get_success_url(self):
         return reverse('authors:author_profile', kwargs={'author_id': self.request.user.id})
 
-class EditPostView(UpdateView):
-    form_class = PostForm
-    model = Post
-    template_name = "authors/edit_post.html"
-    pk_url_kwarg = "post_id"
-    
-    def get_success_url(self):
-        return reverse('authors:post_detail', kwargs={'post_id': self.object.id})
-    
-    def get_queryset(self):
-        # Only allow the author of the post to edit it
-        return Post.objects.filter(author=self.request.user)
-
 class EditPostView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     model = Post
     form_class = PostForm
