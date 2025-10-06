@@ -23,4 +23,4 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path("accounts/", include("django.contrib.auth.urls")),
     path("", include("authors.urls")),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) # tells django to serve files from MEDIA_ROOT directory at URLs starting with MEDIA_URL

@@ -157,6 +157,8 @@ class PostDetailView(DetailView):
         
         # Add image context if image exists
         context['has_image'] = post.image and post.image.url
+        # User will not have option to copy link if post is private
+        context['VISIBILITY_PRIVATE'] = "PRIVATE"
         return context
 
 
