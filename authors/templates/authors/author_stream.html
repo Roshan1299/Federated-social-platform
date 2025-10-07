@@ -10,6 +10,40 @@
     <h1>My Stream</h1>
     <p>Showing latest posts.</p>
 
+    {# Show posts from followed authors first #}
+    {% if followed_data %}
+      <h2>Posts from authors you follow</h2>
+      {% for entry in followed_data %}
+        <section style="margin-bottom: 30px;">
+          <h3>
+            <a href="{% url 'authors:author_profile' entry.author.id %}">
+              {{ entry.author.displayName }}'s Posts
+            </a>
+          </h3>
+
+          {% for post in entry.posts %}
+            <article style="margin-left: 20px;">
+              <h4>
+                <a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a>
+              </h4>
+              <p class="meta">
+                Published {{ post.published|naturaltime }}
+              </p>
+              {% if post.description %}
+                <p>{{ post.description }}</p>
+              {% endif %}
+              {% if post.image %}
+                <img src="{{ post.image.url }}" alt="{{ post.title }}" style="max-width:200px;">
+              {% endif %}
+            </article>
+          {% empty %}
+            <p style="margin-left: 20px;">No posts yet.</p>
+          {% endfor %}
+        </section>
+      {% endfor %}
+      <hr>
+    {% endif %}
+
     {% if posts %}
       <ul class="post-list">
         {% for post in posts %}
@@ -38,7 +72,6 @@
             <div class="excerpt">
               {% if post.contentType == "text/markdown" %}
                 {{ post.content|linebreaksbr|truncatechars:300 }}
-                {# to be replaced with markdown rendering #}
               {% else %}
                 {{ post.content|linebreaksbr|truncatechars:300 }}
               {% endif %}

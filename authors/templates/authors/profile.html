@@ -1,11 +1,30 @@
 {% extends 'authors/profile_base.html' %}
 
 {% block edit_button %}
-  <a href="{% url 'authors:edit_profile' author.id %}">Edit Profile</a>
+  {% if user.id == author.id %}
+    <a href="{% url 'authors:edit_profile' author.id %}">Edit Profile</a>
+  {% endif %}
 {% endblock %}
 
 {% block content %}
   {{ block.super }}
+
+  {% if user.is_authenticated and user.id != author.id %}
+    {% if is_following %}
+      <form action="{% url 'authors:unfollow_author' author.id %}" method="post" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit">Unfollow</button>
+      </form>
+    {% elif has_pending_request %}
+      <button type="button" disabled>Follow request pending</button>
+    {% else %}
+      <form action="{% url 'authors:follow_author' author.id %}" method="post" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit">Follow</button>
+      </form>
+    {% endif %}
+
+  {% endif %}
   
   <!-- Show posts section -->
   <section>

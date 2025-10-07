@@ -9,6 +9,8 @@
     {% if user.is_authenticated %}
       <span>Hello, {{ user.username }}!</span>
       <form action="{% url 'logout' %}" method="post" style="display: inline;">
+        <a href="{% url 'authors:follow_requests' %}">Follow Requests</a>
+
         {% csrf_token %}
         <button type="submit">Logout</button>
       </form>

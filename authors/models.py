@@ -52,3 +52,34 @@ class Post(models.Model):
     
     class Meta:
         ordering = ['-published']
+
+class Follow(models.Model):
+    follower = models.ForeignKey(Author, on_delete=models.CASCADE, related_name='following')
+    following = models.ForeignKey(Author, on_delete=models.CASCADE, related_name='followers')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('follower', 'following')
+
+    def __str__(self):
+        return f"{self.follower.displayName} follows {self.following.displayName}"
+
+class FollowRequest(models.Model):
+    sender = models.ForeignKey(Author, on_delete=models.CASCADE, related_name='sent_follow_requests')
+    receiver = models.ForeignKey(Author, on_delete=models.CASCADE, related_name='received_follow_requests')
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('PENDING', 'Pending'),
+            ('APPROVED', 'Approved'),
+            ('DENIED', 'Denied'),
+        ],
+        default='PENDING'
+    )
+
+    class Meta:
+        unique_together = ('sender', 'receiver')
+
+    def __str__(self):
+        return f"{self.sender.displayName} requested to follow {self.receiver.displayName} ({self.status})"

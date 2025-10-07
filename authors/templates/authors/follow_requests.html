@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Follow Requests{% endblock %}
+
+{% block content %}
+  <div class="container">
+    <h1>Follow Requests</h1>
+
+    {% if requests %}
+      <ul>
+        {% for req in requests %}
+          <li>
+            <strong>{{ req.sender.displayName }}</strong> wants to follow you.
+            <form action="{% url 'authors:approve_follow_request' req.id %}" method="post" style="display:inline;">
+              {% csrf_token %}
+              <button type="submit">Approve</button>
+            </form>
+            <form action="{% url 'authors:deny_follow_request' req.id %}" method="post" style="display:inline;">
+              {% csrf_token %}
+              <button type="submit">Deny</button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No pending follow requests.</p>
+    {% endif %}
+  </div>
+{% endblock %}

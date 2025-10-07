@@ -6,11 +6,13 @@ from django.views.generic.edit import CreateView, UpdateView
 from django.views.generic import DetailView, ListView
 from django.views import View
 from django.http import HttpResponse, JsonResponse
-from .models import Author, Post
+from .models import Author, Post, Follow, FollowRequest
 
 from .forms import AuthorCreationForm, AuthorProfileForm, PostForm
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+
 
 class SignUpView(CreateView):
     form_class = AuthorCreationForm
@@ -37,11 +39,22 @@ class AuthorProfileView(DetailView):
     model = Author
     template_name = "authors/profile.html"
     pk_url_kwarg = "author_id"
+    context_object_name = "author"
 
     # Both AuthorProfileView and AuthorEditView extend profile_base.html. To distinguish between them, set 'editable' context.
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['editable'] = False
+        
+        # Determine if the current user follows this author
+        user = self.request.user
+        author = self.get_object()
+        if user.is_authenticated and user != author:
+            context['is_following'] = Follow.objects.filter(follower=user, following=author).exists()
+            context['has_pending_request'] = FollowRequest.objects.filter(sender=user, receiver=author, status='PENDING').exists()
+        else:
+            context['is_following'] = False
+            context['has_pending_request'] = False
         return context
 
 class AuthorEditView(UpdateView):
@@ -201,7 +214,8 @@ class PostAPIView(View):
             data["image"] = request.build_absolute_uri(post.image.url)
         
         return JsonResponse(data)
-    
+
+'''
 class AuthorStreamView(ListView):
     """
     HTML stream page for an author.
@@ -227,7 +241,104 @@ class AuthorStreamView(ListView):
         # extra context (author info)
         context['author_id'] = self.kwargs['author_id']
         return context
+'''
 
+class AuthorStreamView(ListView):
+    model = Post
+    template_name = "authors/author_stream.html"
+    context_object_name = "posts"
+    paginate_by = 20
+
+    def get_queryset(self):
+        # Keep existing logic: show all public, non-unlisted posts ordered by latest
+        return (
+            Post.objects
+            .filter(visibility='PUBLIC', unlisted=False)
+            .order_by('-updated')
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+
+        if user.is_authenticated:
+            followed_authors = Follow.objects.filter(follower=user).select_related("following")
+            followed_data = []
+            for follow in followed_authors:
+                author = follow.following
+                posts = Post.objects.filter(
+                    author=author,
+                    visibility='PUBLIC',
+                    unlisted=False
+                ).order_by('-updated')[:5]  # show latest 5 per author
+                if posts.exists():
+                    followed_data.append({
+                        "author": author,
+                        "posts": posts
+                    })
+            context["followed_data"] = followed_data
+        else:
+            context["followed_data"] = []
+
+        context["author_id"] = self.kwargs.get("author_id", None)
+        return context
+
+class FollowRequestsView(LoginRequiredMixin, ListView):
+    model = FollowRequest
+    template_name = "authors/follow_requests.html"
+    context_object_name = "requests"
+
+    def get_queryset(self):
+        return FollowRequest.objects.filter(receiver=self.request.user, status='PENDING').select_related('sender')
+
+
+@login_required
+def follow_author(request, author_id):
+    author_to_follow = get_object_or_404(Author, id=author_id)
+    if author_to_follow == request.user:
+        messages.error(request, "You cannot follow yourself.")
+        return redirect('authors:author_profile', author_id=author_id)
+
+    existing_follow = Follow.objects.filter(follower=request.user, following=author_to_follow).exists()
+    if existing_follow:
+        messages.info(request, f"You are already following {author_to_follow.displayName}.")
+        return redirect('authors:author_profile', author_id=author_id)
+
+    # Check if request already sent
+    existing_request = FollowRequest.objects.filter(sender=request.user, receiver=author_to_follow, status='PENDING').exists()
+    if existing_request:
+        messages.info(request, f"Follow request already sent to {author_to_follow.displayName}.")
+    else:
+        FollowRequest.objects.create(sender=request.user, receiver=author_to_follow)
+        messages.success(request, f"Follow request sent to {author_to_follow.displayName}!")
+
+    return redirect('authors:author_profile', author_id=author_id)
+
+
+@login_required
+def unfollow_author(request, author_id):
+    author_to_unfollow = get_object_or_404(Author, id=author_id)
+    Follow.objects.filter(follower=request.user, following=author_to_unfollow).delete()
+    messages.success(request, f"You have unfollowed {author_to_unfollow.displayName}.")
+    return redirect('authors:author_profile', author_id=author_id)
+
+@login_required
+def approve_follow_request(request, request_id):
+    follow_request = get_object_or_404(FollowRequest, id=request_id, receiver=request.user)
+    Follow.objects.get_or_create(follower=follow_request.sender, following=request.user)
+    follow_request.status = 'APPROVED'
+    follow_request.save()
+    messages.success(request, f"You approved {follow_request.sender.displayName}'s follow request.")
+    return redirect('authors:follow_requests')
+
+
+@login_required
+def deny_follow_request(request, request_id):
+    follow_request = get_object_or_404(FollowRequest, id=request_id, receiver=request.user)
+    follow_request.status = 'DENIED'
+    follow_request.save()
+    messages.warning(request, f"You denied {follow_request.sender.displayName}'s follow request.")
+    return redirect('authors:follow_requests')
     
 @login_required
 def redirect_to_profile(request):
