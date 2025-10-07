@@ -1,5 +1,7 @@
 {% extends "base.html" %}
-{% load humanize %}
+{% load humanize %} 
+    {# For formatting numbers and dates into human readable format
+        Naturaltime filter converts to relative time strings #}
 
 {% block title %}Author Stream{% endblock %}
 
@@ -31,11 +33,12 @@
                 </a>
               </div>
             {% endif %}
-
+            
+            <!-- Show first 300 char of content -->
             <div class="excerpt">
               {% if post.contentType == "text/markdown" %}
                 {{ post.content|linebreaksbr|truncatechars:300 }}
-                {# If you have a markdown template tag/filter, replace above with safe markdown rendering #}
+                {# to be replaced with markdown rendering #}
               {% else %}
                 {{ post.content|linebreaksbr|truncatechars:300 }}
               {% endif %}
