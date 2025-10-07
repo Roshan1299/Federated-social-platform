@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Author Stream{% endblock %}
+
+{% block content %}
+  <div class="container">
+    <h1>Stream</h1>
+    <p>Showing latest posts.</p>
+
+    {% if posts %}
+      <ul class="post-list">
+        {% for post in posts %}
+          <li class="post-item">
+            <h2>
+              <a href="{% url 'authors:post_detail' post_id=post.id %}">{{ post.title }}</a>
+            </h2>
+
+            <p class="meta">
+              by <a href="{% url 'authors:author_profile' author_id=post.author.id %}">{{ post.author.displayName }}</a>
+              • published {{ post.published|naturaltime }}
+              {% if post.updated and post.updated != post.published %}
+                • updated {{ post.updated|naturaltime }}
+              {% endif %}
+            </p>
+
+            {% if post.image %}
+              <div class="post-image">
+                <a href="{% url 'authors:post_detail' post_id=post.id %}">
+                  <img src="{{ post.image.url }}" alt="image for {{ post.title }}" style="max-width:300px;">
+                </a>
+              </div>
+            {% endif %}
+
+            <div class="excerpt">
+              {% if post.contentType == "text/markdown" %}
+                {{ post.content|linebreaksbr|truncatechars:300 }}
+                {# If you have a markdown template tag/filter, replace above with safe markdown rendering #}
+              {% else %}
+                {{ post.content|linebreaksbr|truncatechars:300 }}
+              {% endif %}
+            </div>
+
+            <p>
+              <a href="{% url 'authors:post_detail' post_id=post.id %}">Read more</a>
+            </p>
+          </li>
+        {% endfor %}
+      </ul>
+
+      {% if is_paginated %}
+        <div class="pagination">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}">previous</a>
+          {% endif %}
+          <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}">next</a>
+          {% endif %}
+        </div>
+      {% endif %}
+
+    {% else %}
+      <p>No public posts available yet.</p>
+    {% endif %}
+  </div>
+{% endblock %}

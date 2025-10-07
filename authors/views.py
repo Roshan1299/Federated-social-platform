@@ -202,6 +202,33 @@ class PostAPIView(View):
         
         return JsonResponse(data)
     
+class AuthorStreamView(ListView):
+    """
+    HTML stream page for an author.
+    Shows public, non-unlisted posts, ordered by most recent 'updated' timestamp.
+    Only the author can view their personal stream page
+    """
+    model = Post
+    template_name = "authors/author_stream.html"
+    context_object_name = "posts"
+    paginate_by = 20  # paginate the stream
+
+    def get_queryset(self):
+        # Oosts the node knows about, exclude deleted (removed from DB)
+        # Order by -updated (for most recently edited/created entries)
+        return (
+            Post.objects
+            .filter(visibility='PUBLIC', unlisted=False)
+            .order_by('-updated')
+        )
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # extra context (author info)
+        context['author_id'] = self.kwargs['author_id']
+        return context
+
+    
 @login_required
 def redirect_to_profile(request):
     return redirect('authors:author_profile', author_id=request.user.id)
