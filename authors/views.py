@@ -446,7 +446,28 @@ class PostLikesView(LoginRequiredMixin, TemplateView):
             ctx["error"] = "You don’t have permission to view likes for this post."
             return ctx
 
-        likes = post.likes.order_by("-created_at")
+        likes = post.likes.select_related("author").order_by("-created_at")
+
+        def compute_username_display(author):
+            uname = (getattr(author, "username", "") or "").strip()
+            if uname:
+                return uname
+            gh = (getattr(author, "github", "") or "").strip()
+            if gh:
+                try:
+                    last = gh.rstrip("/").split("/")[-1]
+                    if last:
+                        return last
+                except Exception:
+                    pass
+            dn = (getattr(author, "displayName", "") or "").strip()
+            if dn:
+                return "".join(ch for ch in dn.lower() if ch.isalnum())
+            return ""
+
+        for like in likes:
+            like.username_display = compute_username_display(like.author)
+
         ctx["post"] = post
         ctx["likes"] = likes
         ctx["like_count"] = likes.count()

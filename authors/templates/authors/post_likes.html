@@ -12,7 +12,17 @@
     {% if likes %}
       <ul>
         {% for like in likes %}
-          <li>{{ like.created_at|date:"Y-m-d H:i:s" }}</li>
+          <li>
+            <strong>
+              <a href="{% url 'authors:author_profile' like.author.id %}">
+                {{ like.author.displayName }}
+              </a>
+            </strong>
+            {% if like.username_display %}
+              <span style="color:#888;">(@{{ like.username_display }})</span>
+            {% endif %}
+            — <span style="color:#666;">{{ like.created_at|date:"Y-m-d H:i:s" }}</span>
+          </li>
         {% endfor %}
       </ul>
     {% else %}
