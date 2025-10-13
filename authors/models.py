@@ -83,3 +83,42 @@ class FollowRequest(models.Model):
 
     def __str__(self):
         return f"{self.sender.displayName} requested to follow {self.receiver.displayName} ({self.status})"
+    
+class Like(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    author = models.ForeignKey(Author, on_delete=models.CASCADE, related_name='likes')
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='likes')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('author', 'post')
+
+    def __str__(self):
+        return f"{self.author.displayName} likes {self.post.title}"
+
+class Comment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
+    author = models.ForeignKey(Author, on_delete=models.CASCADE, related_name='comments')
+    content = models.TextField(max_length=2000)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Comment by {self.author.displayName} on {self.post.title}"
+
+class CommentLike(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    author = models.ForeignKey(Author, on_delete=models.CASCADE, related_name='comment_likes')
+    comment = models.ForeignKey(Comment, on_delete=models.CASCADE, related_name='likes')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('author', 'comment')
+
+    def __str__(self):
+        return f"{self.author.displayName} likes a comment on {self.comment.post.title}"
+

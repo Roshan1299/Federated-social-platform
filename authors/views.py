@@ -3,15 +3,17 @@ from django.forms import BaseModelForm
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy, reverse
 from django.views.generic.edit import CreateView, UpdateView
-from django.views.generic import DetailView, ListView
+from django.views.generic import DetailView, ListView, TemplateView
 from django.views import View
 from django.http import HttpResponse, JsonResponse
-from .models import Author, Post, Follow, FollowRequest
+from .models import Author, Post, Follow, FollowRequest, Like, Comment, CommentLike
+from .forms import CommentForm
 
 from .forms import AuthorCreationForm, AuthorProfileForm, PostForm
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.views.decorators.http import require_POST
 
 
 class SignUpView(CreateView):
@@ -172,6 +174,70 @@ class PostDetailView(DetailView):
         context['has_image'] = post.image and post.image.url
         # User will not have option to copy link if post is private
         context['VISIBILITY_PRIVATE'] = "PRIVATE"
+
+        user = self.request.user
+        context['like_count'] = post.likes.count()
+        context['liked_by_me'] = user.is_authenticated and post.likes.filter(author=user).exists()
+        context['can_like'] = user.is_authenticated and (
+            post.visibility == 'PUBLIC' or user == post.author
+        )
+
+        user = self.request.user
+        context['can_interact'] = user.is_authenticated and (
+        post.visibility == 'PUBLIC' or user == post.author
+        )
+
+        context["comment_form"] = CommentForm()
+
+        comments = (
+            post.comments
+                .select_related("author")
+                .prefetch_related("likes")
+                .all()
+        )
+
+        def compute_username_display(author):
+            # Try the Django username first
+            uname = (getattr(author, "username", "") or "").strip()
+            if uname:
+                return uname
+            # Try to derive from GitHub URL if present
+            gh = (getattr(author, "github", "") or "").strip()
+            if gh:
+                try:
+                    last = gh.rstrip("/").split("/")[-1]
+                    if last:
+                        return last
+                except Exception:
+                    pass
+            # Derive from displayName
+            dn = (getattr(author, "displayName", "") or "").strip()
+            if dn:
+                return "".join(ch for ch in dn.lower() if ch.isalnum())  # simple slug
+            # As a last resort, show nothing (template will skip the @ block)
+            return ""
+
+        user = self.request.user
+
+        # Which comments did I like?
+        if user.is_authenticated:
+            liked_comment_ids = set(
+                CommentLike.objects
+                .filter(author=user, comment__in=comments)
+                .values_list("comment_id", flat=True)
+            )
+        else:
+            liked_comment_ids = set()
+
+        for c in comments:
+            c.liked_by_me = c.id in liked_comment_ids
+            c.username_display = compute_username_display(c.author)
+
+        context["comments"] = comments
+
+        context["absolute_url"] = self.request.build_absolute_uri(
+            reverse("authors:post_detail", kwargs={"post_id": post.id})
+        )
         return context
 
 
@@ -343,3 +409,86 @@ def deny_follow_request(request, request_id):
 @login_required
 def redirect_to_profile(request):
     return redirect('authors:author_profile', author_id=request.user.id)
+
+@login_required
+@require_POST
+def toggle_like(request, post_id):
+    post = get_object_or_404(Post, id=post_id)
+    can_like = (post.visibility == 'PUBLIC') or (request.user == post.author)
+    if not can_like:
+        return HttpResponse("Forbidden", status=403)
+
+    like, created = Like.objects.get_or_create(author=request.user, post=post)
+    if not created:
+        like.delete()
+        liked = False
+        messages.info(request, "Unliked.")
+    else:
+        liked = True
+        messages.success(request, "Liked!")
+    if request.headers.get('HX-Request') or request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'liked': liked, 'count': post.likes.count()})
+    return redirect('authors:post_detail', post_id=post.id)
+
+class PostLikesView(LoginRequiredMixin, TemplateView):
+    """
+    Simple HTML page showing like count and times.
+    """
+    template_name = "authors/post_likes.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        post = get_object_or_404(Post, id=self.kwargs["post_id"])
+
+        # Permission check
+        is_owner = self.request.user == post.author
+        if post.visibility != 'PUBLIC' and not is_owner:
+            ctx["error"] = "You don’t have permission to view likes for this post."
+            return ctx
+
+        likes = post.likes.order_by("-created_at")
+        ctx["post"] = post
+        ctx["likes"] = likes
+        ctx["like_count"] = likes.count()
+        return ctx
+    
+@login_required
+@require_POST
+def add_comment(request, post_id):
+    post = get_object_or_404(Post, id=post_id)
+
+    # allow commenting only if post is PUBLIC or owned by current user
+    if post.visibility != 'PUBLIC' and post.author != request.user:
+        return HttpResponse("Forbidden", status=403)
+
+    form = CommentForm(request.POST)
+    if form.is_valid():
+        Comment.objects.create(
+            post=post,
+            author=request.user,
+            content=form.cleaned_data["content"]
+        )
+        messages.success(request, "Comment posted!")
+    else:
+        messages.error(request, "Could not post comment.")
+    return redirect('authors:post_detail', post_id=post.id)
+
+
+@login_required
+@require_POST
+def toggle_comment_like(request, comment_id):
+    comment = get_object_or_404(Comment, id=comment_id)
+    post = comment.post
+
+    # allow liking comment only if post is PUBLIC or owned by current user
+    if post.visibility != 'PUBLIC' and post.author != request.user:
+        return HttpResponse("Forbidden", status=403)
+
+    like, created = CommentLike.objects.get_or_create(author=request.user, comment=comment)
+    if not created:
+        like.delete()
+        messages.info(request, "Unliked comment.")
+    else:
+        messages.success(request, "Liked comment.")
+
+    return redirect('authors:post_detail', post_id=post.id)

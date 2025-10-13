@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import SignUpView, redirect_to_profile, AuthorProfileView, AuthorsListAPIView, AuthorAPIView, AuthorEditView, CreatePostView, PostDetailView, EditPostView, DeletePostView, AuthorPostsView, PostAPIView, AuthorStreamView, follow_author, unfollow_author, FollowRequest, FollowRequestsView, approve_follow_request, deny_follow_request
+from .views import SignUpView, redirect_to_profile, AuthorProfileView, AuthorsListAPIView, AuthorAPIView, AuthorEditView, CreatePostView, PostDetailView, EditPostView, DeletePostView, AuthorPostsView, PostAPIView, AuthorStreamView, follow_author, unfollow_author, FollowRequest, FollowRequestsView, approve_follow_request, deny_follow_request, toggle_like, PostLikesView, add_comment, toggle_comment_like
 
 app_name = "authors"
 urlpatterns = [
@@ -22,6 +22,10 @@ urlpatterns = [
     path("posts/<uuid:post_id>/", PostDetailView.as_view(), name="post_detail"),
     path("posts/<uuid:post_id>/edit/", EditPostView.as_view(), name="edit_post"),
     path("posts/<uuid:post_id>/delete/", DeletePostView.as_view(), name="delete_post"),
+    path("posts/<uuid:post_id>/like/", toggle_like, name="toggle_like"),
+    path("posts/<uuid:post_id>/comments/add/", add_comment, name="add_comment"),
+    path("comments/<uuid:comment_id>/like/", toggle_comment_like, name="toggle_comment_like"),
+    path("api/posts/<uuid:post_id>/likes/", PostLikesView.as_view(), name="post_likes_page"),
     path("api/authors/<uuid:author_id>/", AuthorAPIView.as_view(), name="author_api"),
     path("api/authors/", AuthorsListAPIView.as_view(), name="authors_api"),
     path("api/posts/<uuid:post_id>/", PostAPIView.as_view(), name="post_api"),

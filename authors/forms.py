@@ -1,6 +1,7 @@
 from django.contrib.auth.forms import UserCreationForm
 from django.forms import ModelForm
-from .models import Author, Post
+from django import forms
+from .models import Author, Post, Comment
 
 class AuthorCreationForm(UserCreationForm):
     class Meta(UserCreationForm.Meta):
@@ -25,3 +26,16 @@ class PostForm(ModelForm):
             'unlisted': 'Unlisted (Public but not in feeds)',
             'image': 'Image (Optional)'
         }
+
+class CommentForm(ModelForm):
+    content = forms.CharField(
+        label="",
+        widget=forms.Textarea(attrs={
+            "rows": 3,
+            "placeholder": "Write a comment...",
+            "required": "required",  
+        })
+    )
+    class Meta:
+        model = Comment
+        fields = ["content"]
