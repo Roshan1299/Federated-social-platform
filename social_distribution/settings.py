@@ -118,6 +118,10 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
+]
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # User Uploaded Media files
 # Source: Codemy.com Django Profile Pictures Tutorial : https://www.youtube.com/watch?v=CA5duCGDSUE
@@ -130,3 +134,6 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'authors.Author'
+
+# Logout redirect
+LOGOUT_REDIRECT_URL = 'login'

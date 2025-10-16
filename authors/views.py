@@ -12,8 +12,21 @@ from .forms import CommentForm
 from .forms import AuthorCreationForm, AuthorProfileForm, PostForm
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import LoginView
 from django.contrib import messages
 from django.views.decorators.http import require_POST
+
+
+class CustomLoginView(LoginView):
+    """Custom login view that redirects to the user's stream page after login"""
+    def get_success_url(self):
+        # Redirect to the user's own stream page after successful login
+        from django.urls import reverse
+        # After successful login, redirect to the current user's stream
+        if self.request.user.is_authenticated:
+            return reverse('authors:author_stream', kwargs={'author_id': self.request.user.id})
+        # Fallback if user is somehow not authenticated
+        return reverse('authors:redirect_profile')  # redirect to profile as fallback
 
 
 class SignUpView(CreateView):
@@ -354,8 +367,19 @@ class AuthorStreamView(ListView):
         else:
             context["followed_data"] = []
 
-        context["author_id"] = self.kwargs.get("author_id", None)
+        # Pass the authenticated user's ID, not from URL kwargs
+        context["author_id"] = user.id if user.is_authenticated else None
         return context
+
+
+class StreamRedirectView(TemplateView):
+    """Redirect view to send user to their personalized stream"""
+    def get(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            return redirect('authors:author_stream', author_id=request.user.id)
+        else:
+            # If not authenticated, redirect to login
+            return redirect('login')
 
 class FollowRequestsView(LoginRequiredMixin, ListView):
     model = FollowRequest
