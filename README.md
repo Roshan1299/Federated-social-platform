@@ -103,3 +103,124 @@ curl http://127.0.0.1:8000/api/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/
 | `github`       | URL    | The URL to the author's GitHub profile. Can be null.                        | `"http://github.com/Roshan2"`                                        |
 | `profileImage` | URL    | A URL to an image for the author's profile picture. Can be null.            | `"https://example.com/path/to/image.png"`                            |
 | `web`          | URL    | The fully qualified URL to the author's web-based profile page.             | `"http://127.0.0.1:8000/authors/..."`                                 |
+
+
+### Create a New Post
+
+Creates a new post for an authenticated author.
+
+*   **URL:** `/api/posts/`
+*   **Method:** `POST`
+*   **Authorization:** Required (user must be logged in)
+*   **Content-Type:** `application/json`
+*   **Request Body:**
+    *   `title` (required): The title of the post
+    *   `description` (optional): Short description or summary of the post
+    *   `content` (required): The actual content of the post
+    *   `contentType` (required): The type of content ('text/plain', 'text/markdown', 'image/png', etc.)
+    *   `visibility` (required): The visibility of the post ('PUBLIC', 'PRIVATE')
+    *   `unlisted` (optional): Whether the post is unlisted (default: false)
+    *   `image` (optional): URL to an image if the post includes one
+
+#### Example Request:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/posts/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "title": "My New Post",
+    "description": "A short description",
+    "content": "Hello world!",
+    "contentType": "text/plain",
+    "visibility": "PUBLIC",
+    "unlisted": false
+  }'
+```
+
+#### Example Response:
+
+*   **Code:** `201 Created`
+*   **Content:**
+
+```json
+{
+    "type": "post",
+    "id": "http://127.0.0.1:8000/api/posts/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/",
+    "author": {
+        "type": "author",
+        "id": "http://127.0.0.1:8000/api/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/",
+        "host": "http://127.0.0.1:8000",
+        "displayName": "Roshan123",
+        "url": "http://127.0.0.1:8000/api/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/",
+        "github": "http://github.com/Roshan2",
+        "profileImage": "https://example.com/path/to/image.png"
+    },
+    "title": "My New Post",
+    "description": "A short description",
+    "content": "Hello world!",
+    "contentType": "text/plain",
+    "visibility": "PUBLIC",
+    "published": "2023-01-01T00:00:00Z",
+    "updated": "2023-01-01T00:00:00Z"
+}
+```
+
+### Get a Single Post
+
+Retrieves the details of a single post by its ID.
+
+*   **URL:** `/api/posts/{POST_ID}/`
+*   **Method:** `GET`
+*   **URL Params:**
+    *   `POST_ID` (required): The UUID of the post to retrieve.
+
+#### Example Request:
+
+```bash
+curl http://127.0.0.1:8000/api/posts/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/
+```
+
+#### Example Response:
+
+*   **Code:** `200 OK`
+*   **Content:**
+
+```json
+{
+    "type": "post",
+    "id": "http://127.0.0.1:8000/api/posts/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/",
+    "author": {
+        "type": "author",
+        "id": "http://127.0.0.1:8000/api/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/",
+        "host": "http://127.0.0.1:8000",
+        "displayName": "Roshan123",
+        "url": "http://127.0.0.1:8000/api/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/",
+        "github": "http://github.com/Roshan2",
+        "profileImage": "https://example.com/path/to/image.png"
+    },
+    "title": "My Post",
+    "description": "A short description",
+    "content": "Hello world!",
+    "contentType": "text/plain",
+    "visibility": "PUBLIC",
+    "published": "2023-01-01T00:00:00Z",
+    "updated": "2023-01-01T00:00:00Z"
+}
+```
+
+#### Post Response Fields:
+
+| Field          | Type   | Description                                                                 | Example                                                              |
+|----------------|--------|-----------------------------------------------------------------------------|----------------------------------------------------------------------|
+| `type`         | string | The type of the object. Always "post".                                     | `"post"`                                                             |
+| `id`           | URL    | The fully qualified API URL for this post. This is the unique identifier.    | `"http://127.0.0.1:8000/api/posts/..."`                             |
+| `author`       | object | The author object containing information about the post creator.            | See author response format above                                     |
+| `title`        | string | The title of the post.                                                      | `"My New Post"`                                                      |
+| `description`  | string | A short description or summary of the post. Can be null.                    | `"A short description"`                                              |
+| `content`      | string | The actual content of the post.                                             | `"Hello world!"`                                                     |
+| `contentType`  | string | The content type of the post.                                               | `"text/plain"`, `"text/markdown"`, `"image/png"`, etc.              |
+| `visibility`   | string | The visibility setting of the post.                                         | `"PUBLIC"`, `"PRIVATE"`                                              |
+| `published`    | datetime | When the post was published (ISO 8601 format).                              | `"2023-01-01T00:00:00Z"`                                            |
+| `updated`      | datetime | When the post was last updated (ISO 8601 format).                           | `"2023-01-01T00:00:00Z"`                                            |
+| `image`        | URL    | URL to the post image (if applicable). Can be null.                         | `"http://127.0.0.1:8000/media/post_images/post_image.png"`          |
