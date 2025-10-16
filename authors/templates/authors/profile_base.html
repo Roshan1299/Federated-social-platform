@@ -1,4 +1,9 @@
 {% extends 'base.html' %}
+<!-- Base template for author profile pages. profile.html extends this file to display author's posts, edit profile and follow buttons, etc. -->
+
+{% block title %}
+  {{ author.displayName }}'s Profile
+{% endblock %}
 
 {% block content %}
   <form method="post" enctype="multipart/form-data">
@@ -36,7 +41,6 @@
 
     <br>
     {% block edit_button %}
-      <a href="{% url 'authors:edit_profile' author.id %}">Edit Profile</a>
     {% endblock %}
     {% if editable %}
       <button type="submit">Save Changes</button>

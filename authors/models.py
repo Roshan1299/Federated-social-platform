@@ -10,7 +10,7 @@ class Author(AbstractUser):
     displayName = models.CharField(max_length=255)
     github = models.URLField(blank=True, null=True)
     description = models.CharField(max_length=500, blank=True, null=True)
-    profileImage = models.ImageField(blank=True, null=True, upload_to="user_images/")
+    profileImage = models.ImageField(blank=True, null=True, upload_to="user_images/") # Store images in media/user_images/
 
 
 class Post(models.Model):

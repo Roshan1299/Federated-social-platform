@@ -58,7 +58,10 @@ class AuthorProfileView(DetailView):
             context['is_following'] = False
             context['has_pending_request'] = False
         return context
-
+'''
+Allows editing author profile.
+url: "authors/<uuid:author_id>/edit"
+'''
 class AuthorEditView(UpdateView):
     form_class = AuthorProfileForm
     model = Author
@@ -93,7 +96,12 @@ class AuthorAPIView(View):
             "web": request.scheme + "://" + request.get_host() + web_url,
         }
         return JsonResponse(data)
-    
+
+'''
+AuthorsListAPIView: returns a JSON list of all authors.
+Same format as AuthorAPIView but for multiple authors.
+GET requests only.
+'''
 class AuthorsListAPIView(View):
     def get(self, request):
         authors = Author.objects.all()
