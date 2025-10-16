@@ -7,97 +7,129 @@
 
 {% block content %}
   <div class="container">
-    <h1>My Stream</h1>
-    <p>Showing latest posts.</p>
+    <div class="stream-header">
+      <div class="header-content">
+        <h1>My Stream</h1>
+        <p>Latest posts from your network</p>
+      </div>
+      {% if user.is_authenticated %}
+        <div class="header-actions">
+          <a href="{% url 'authors:create_post' %}" class="btn btn-primary">Create Post</a>
+        </div>
+      {% endif %}
+    </div>
 
     {# Show posts from followed authors first #}
     {% if followed_data %}
-      <h2>Posts from authors you follow</h2>
-      {% for entry in followed_data %}
-        <section style="margin-bottom: 30px;">
-          <h3>
-            <a href="{% url 'authors:author_profile' entry.author.id %}">
-              {{ entry.author.displayName }}'s Posts
-            </a>
-          </h3>
+      <section class="followed-posts-section">
+        <h2 class="section-title">Posts from authors you follow</h2>
+        {% for entry in followed_data %}
+          <div class="author-posts">
+            <h3 class="author-name">
+              <a href="{% url 'authors:author_profile' entry.author.id %}">
+                {{ entry.author.displayName }}
+              </a>
+            </h3>
 
-          {% for post in entry.posts %}
-            <article style="margin-left: 20px;">
-              <h4>
-                <a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a>
-              </h4>
-              <p class="meta">
-                Published {{ post.published|naturaltime }}
-              </p>
-              {% if post.description %}
-                <p>{{ post.description }}</p>
-              {% endif %}
-              {% if post.image %}
-                <img src="{{ post.image.url }}" alt="{{ post.title }}" style="max-width:200px;">
-              {% endif %}
-            </article>
-          {% empty %}
-            <p style="margin-left: 20px;">No posts yet.</p>
-          {% endfor %}
-        </section>
-      {% endfor %}
-      <hr>
+            {% for post in entry.posts %}
+              <article class="stream-post-card">
+                <div class="post-header">
+                  <h4 class="post-title">
+                    <a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a>
+                  </h4>
+                  <p class="post-meta">
+                    Published {{ post.published|naturaltime }}
+                  </p>
+                </div>
+                
+                {% if post.description %}
+                  <p class="post-description">{{ post.description }}</p>
+                {% endif %}
+                
+                {% if post.image %}
+                  <div class="post-image-container">
+                    <img src="{{ post.image.url }}" alt="{{ post.title }}" class="post-image">
+                  </div>
+                {% endif %}
+              </article>
+            {% empty %}
+              <p class="no-posts">No posts yet.</p>
+            {% endfor %}
+          </div>
+        {% endfor %}
+      </section>
     {% endif %}
 
     {% if posts %}
-      <ul class="post-list">
-        {% for post in posts %}
-          <li class="post-item">
-            <h2>
-              <a href="{% url 'authors:post_detail' post_id=post.id %}">{{ post.title }}</a>
-            </h2>
-
-            <p class="meta">
-              by <a href="{% url 'authors:author_profile' author_id=post.author.id %}">{{ post.author.displayName }}</a>
-              • published {{ post.published|naturaltime }}
-              {% if post.updated and post.updated != post.published %}
-                • updated {{ post.updated|naturaltime }}
-              {% endif %}
-            </p>
-
-            {% if post.image %}
-              <div class="post-image">
-                <a href="{% url 'authors:post_detail' post_id=post.id %}">
-                  <img src="{{ post.image.url }}" alt="image for {{ post.title }}" style="max-width:300px;">
-                </a>
+      <section class="all-posts-section">
+        {% if followed_data %}
+          <hr class="section-divider">
+        {% endif %}
+        
+        <h2 class="section-title">All Public Posts</h2>
+        
+        <div class="posts-grid">
+          {% for post in posts %}
+            <article class="post-card">
+              <div class="post-header">
+                <div class="post-author">
+                  <a href="{% url 'authors:author_profile' author_id=post.author.id %}">
+                    {{ post.author.displayName }}
+                  </a>
+                </div>
+                <div class="post-meta">
+                  <span class="publish-date">Published {{ post.published|naturaltime }}</span>
+                  {% if post.updated and post.updated != post.published %}
+                    • <span class="update-date">Updated {{ post.updated|naturaltime }}</span>
+                  {% endif %}
+                </div>
               </div>
-            {% endif %}
-            
-            <!-- Show first 300 char of content -->
-            <div class="excerpt">
-              {% if post.contentType == "text/markdown" %}
-                {{ post.content|linebreaksbr|truncatechars:300 }}
-              {% else %}
-                {{ post.content|linebreaksbr|truncatechars:300 }}
+
+              <h3 class="post-title">
+                <a href="{% url 'authors:post_detail' post_id=post.id %}">{{ post.title }}</a>
+              </h3>
+
+              {% if post.image %}
+                <div class="post-image-container">
+                  <a href="{% url 'authors:post_detail' post_id=post.id %}">
+                    <img src="{{ post.image.url }}" alt="image for {{ post.title }}" class="post-image">
+                  </a>
+                </div>
               {% endif %}
-            </div>
+              
+              <div class="post-content">
+                {% if post.contentType == "text/markdown" %}
+                  {{ post.content|linebreaksbr|truncatechars:300 }}
+                {% else %}
+                  {{ post.content|linebreaksbr|truncatechars:300 }}
+                {% endif %}
+              </div>
 
-            <p>
-              <a href="{% url 'authors:post_detail' post_id=post.id %}">Read more</a>
-            </p>
-          </li>
-        {% endfor %}
-      </ul>
-
-      {% if is_paginated %}
-        <div class="pagination">
-          {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}">previous</a>
-          {% endif %}
-          <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-          {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}">next</a>
-          {% endif %}
+              <div class="post-actions">
+                <a href="{% url 'authors:post_detail' post_id=post.id %}" class="btn btn-primary">Read More</a>
+              </div>
+            </article>
+          {% endfor %}
         </div>
-      {% endif %}
+
+        {% if is_paginated %}
+          <div class="pagination">
+            {% if page_obj.has_previous %}
+              <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-secondary">Previous</a>
+            {% endif %}
+            <span class="page-info">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+              <a href="?page={{ page_obj.next_page_number }}" class="btn btn-secondary">Next</a>
+            {% endif %}
+          </div>
+        {% endif %}
+      </section>
 
     {% else %}
-      <p>No public posts available yet.</p>
+      <div class="empty-state">
+        <h3>No posts available yet</h3>
+        <p>There are no public posts in the network yet.</p>
+      </div>
     {% endif %}
   </div>
 {% endblock %}
