@@ -1,69 +1,102 @@
-{% extends 'authors/profile_base.html' %}
+{% extends 'base.html' %}
 
-{% block edit_button %}
-  {% if user.id == author.id %}
-    <a href="{% url 'authors:edit_profile' author.id %}">Edit Profile</a>
-  {% endif %}
-{% endblock %}
+{% block title %}{{ author.displayName }} - Profile{% endblock %}
 
 {% block content %}
-  {{ block.super }}
-
-  {% if user.is_authenticated and user.id != author.id %}
-    {% if is_following %}
-      <form action="{% url 'authors:unfollow_author' author.id %}" method="post" style="display:inline;">
-        {% csrf_token %}
-        <button type="submit">Unfollow</button>
-      </form>
-    {% elif has_pending_request %}
-      <button type="button" disabled>Follow request pending</button>
-    {% else %}
-      <form action="{% url 'authors:follow_author' author.id %}" method="post" style="display:inline;">
-        {% csrf_token %}
-        <button type="submit">Follow</button>
-      </form>
-    {% endif %}
-
-  {% endif %}
-  
-  <!-- Show posts section -->
-  <section>
-    <h2>Posts</h2>
-    {% if user.id == author.id %}
-      <a href="{% url 'authors:create_post' %}">Create New Post</a>
-    {% endif %}
-    
-    <a href="{% url 'authors:author_posts' author.id %}">View All Posts</a>
-    
-    <!-- Show recent posts -->
-    {% for post in author.posts.all|slice:":5" %}
-      <div>
-        <h3><a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a></h3>
-        {% if post.description %}
-          <p>{{ post.description }}</p>
-        {% endif %}
-        
-        {% if post.contentType|slice:":6" == "image/" %}
-          <!-- If the post is an image post, display a thumbnail -->
-          {% if post.image %}
-            <div class="post-image-preview">
-              <a href="{% url 'authors:post_detail' post.id %}">
-                <img src="{{ post.image.url }}" alt="{{ post.title }}" style="max-width: 150px; height: auto; border: 1px solid #ccc;">
-              </a>
-            </div>
-          {% endif %}
+  <div class="profile-container">
+    <div class="profile-header">
+      <div class="profile-avatar">
+        {% if author.profileImage %}
+          <img src="{{ author.profileImage.url }}" alt="{{ author.displayName }}'s Profile Image" class="profile-img-large">
         {% else %}
-          <!-- For text posts, display a preview of the content -->
-          <p>{{ post.content|truncatechars:150 }}</p>
+          <div class="profile-placeholder-large">👤</div>
+        {% endif %}
+      </div>
+      
+      <div class="profile-info">
+        <h1 class="profile-display-name">{{ author.displayName }}</h1>
+        
+        {% if author.github %}
+          <div class="profile-links">
+            <a href="{{ author.github }}" target="_blank" class="github-link">
+              <i class="fab fa-github"></i> GitHub Profile
+            </a>
+          </div>
         {% endif %}
         
-        <p>Published: {{ post.published }}</p>
+        {% if author.description %}
+          <div class="profile-description">
+            <p>{{ author.description }}</p>
+          </div>
+        {% endif %}
       </div>
-    {% empty %}
-      <p>No posts yet.</p>
-    {% endfor %}
-  </section>
+      
+      <div class="profile-actions">
+        {% if user.is_authenticated and user.id != author.id %}
+          {% if is_following %}
+            <form action="{% url 'authors:unfollow_author' author.id %}" method="post" class="follow-form">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-secondary">Unfollow</button>
+            </form>
+          {% elif has_pending_request %}
+            <button type="button" class="btn btn-disabled" disabled>Follow request pending</button>
+          {% else %}
+            <form action="{% url 'authors:follow_author' author.id %}" method="post" class="follow-form">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-primary">Follow</button>
+            </form>
+          {% endif %}
+        {% elif user.id == author.id %}
+          <a href="{% url 'authors:edit_profile' author.id %}" class="btn btn-secondary">Edit Profile</a>
+        {% endif %}
+      </div>
+    </div>
+    
+    <div class="profile-content">
+      <div class="profile-posts-section">
+        <div class="posts-header">
+          <h2>Posts</h2>
+          <div class="posts-actions">
+            {% if user.id == author.id %}
+              <a href="{% url 'authors:create_post' %}" class="btn btn-primary">Create New Post</a>
+            {% endif %}
+            <a href="{% url 'authors:author_posts' author.id %}" class="btn btn-secondary">View All Posts</a>
+          </div>
+        </div>
+        
+        <div class="posts-grid">
+          {% for post in author.posts.all|slice:":6" %}
+            <div class="post-card">
+              <h3><a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a></h3>
+              {% if post.description %}
+                <p class="post-description">{{ post.description }}</p>
+              {% endif %}
+              
+              {% if post.contentType|slice:":6" == "image/" %}
+                <!-- If the post is an image post, display a thumbnail -->
+                {% if post.image %}
+                  <div class="post-image-preview">
+                    <a href="{% url 'authors:post_detail' post.id %}">
+                      <img src="{{ post.image.url }}" alt="{{ post.title }}" class="post-thumbnail">
+                    </a>
+                  </div>
+                {% endif %}
+              {% else %}
+                <!-- For text posts, display a preview of the content -->
+                <p class="post-content">{{ post.content|truncatechars:150 }}</p>
+              {% endif %}
+              
+              <div class="post-meta">
+                <p>Published: {{ post.published|date:"M d, Y" }}</p>
+              </div>
+            </div>
+          {% empty %}
+            <div class="no-posts">
+              <p>No posts yet.</p>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
 {% endblock %}
-
-{% with editable=False %}
-{% endwith %}
