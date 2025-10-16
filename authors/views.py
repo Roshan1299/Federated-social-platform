@@ -14,6 +14,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
 from django.contrib import messages
+from django.shortcuts import redirect
 from django.views.decorators.http import require_POST
 
 
@@ -27,6 +28,13 @@ class CustomLoginView(LoginView):
             return reverse('authors:author_stream', kwargs={'author_id': self.request.user.id})
         # Fallback if user is somehow not authenticated
         return reverse('authors:redirect_profile')  # redirect to profile as fallback
+    
+    def get(self, request, *args, **kwargs):
+        """If user is already authenticated, redirect to their stream"""
+        if request.user.is_authenticated:
+            from django.urls import reverse
+            return redirect(reverse('authors:author_stream', kwargs={'author_id': request.user.id}))
+        return super().get(request, *args, **kwargs)
 
 
 class SignUpView(CreateView):
