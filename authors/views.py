@@ -44,8 +44,7 @@ class SignUpView(CreateView):
 
     def form_valid(self, form):
         user = form.save(commit=False)
-        # For now, make users active so they can log in immediately
-        user.is_active = True
+        user.is_active = False
 
         host = self.request.scheme + "://" + self.request.get_host()
         user.host = host
