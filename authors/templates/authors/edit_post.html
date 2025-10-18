@@ -1,15 +1,56 @@
 {% extends 'base.html' %}
-
-{% block title %}
-  Edit Post
-{% endblock %}
-
 {% block content %}
-  <h2>Edit Post: {{ form.instance.title }}</h2>
-  <form method="post" enctype="multipart/form-data">
+<div class="post-form-container">
+  <div class="post-form-header">
+    <h1>Edit Post</h1>
+    <p>Update your post content and visibility settings</p>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="post-form">
     {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Save Changes</button>
+    
+    <div class="post-form-row">
+      <div class="form-group">
+        <label for="{{ form.title.id_for_label }}">Title</label>
+        {{ form.title }}
+      </div>
+      <div class="form-group">
+        <label for="{{ form.visibility.id_for_label }}">Visibility</label>
+        {{ form.visibility }}
+      </div>
+    </div>
+
+    <div class="post-form-row">
+      <div class="form-group">
+        <label for="{{ form.description.id_for_label }}">Description (Optional)</label>
+        {{ form.description }}
+      </div>
+      <div class="form-group">
+        <label for="{{ form.contentType.id_for_label }}">Content Type</label>
+        {{ form.contentType }}
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="{{ form.content.id_for_label }}">Content</label>
+      {{ form.content }}
+    </div>
+
+    <div class="post-form-row">
+      <div class="form-group">
+        <label for="{{ form.image.id_for_label }}">Image (Optional)</label>
+        {{ form.image }}
+      </div>
+      <div class="form-group">
+        <label for="{{ form.unlisted.id_for_label }}">Unlisted</label>
+        {{ form.unlisted }}
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <a href="{% url 'authors:author_profile' user.id %}" class="btn btn-secondary">Cancel</a>
+      <button type="submit" class="btn btn-primary">Save Changes</button>
+    </div>
   </form>
-  <a href="{% url 'authors:post_detail' form.instance.id %}">Cancel</a>
+</div>
 {% endblock %}
