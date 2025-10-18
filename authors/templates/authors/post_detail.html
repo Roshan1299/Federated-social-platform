@@ -43,8 +43,6 @@
           {% endif %}
           <a href="{% url 'authors:post_likes_page' post_id=post.id %}" class="link-view-likes">View Likes</a>
         </div>
-
-        <!-- Copy button on right under image -->
         {% if post.visibility != VISIBILITY_PRIVATE %}
           <button class="btn-copy" data-link="{{ absolute_url }}">📋 Copy Link</button>
         {% endif %}
