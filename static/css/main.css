@@ -1003,13 +1003,21 @@ nav button:hover {
 .post-detail-container {
   max-width: 900px;
   margin: 30px auto;
-  background: white;
+  background: #fff;
   border-radius: 12px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
   padding: 40px;
 }
 
-.post-detail-header h1 {
+/* --- Header --- */
+.post-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.post-detail-header h1,
+.post-title-group h1 {
   font-size: 34px;
   margin-bottom: 10px;
   color: #222;
@@ -1030,9 +1038,11 @@ nav button:hover {
   text-decoration: underline;
 }
 
+/* --- Image --- */
 .post-detail-image-container {
-  margin: 25px 0;
-  text-align: center;
+  position: relative;
+  margin: 20px 0 60px 0;
+  text-align: left;
 }
 
 .post-detail-image {
@@ -1043,31 +1053,32 @@ nav button:hover {
   box-shadow: 0 4px 15px rgba(0,0,0,0.1);
 }
 
-.post-detail-content {
-  font-size: 17px;
-  color: #333;
-  line-height: 1.8;
-  margin-bottom: 25px;
-}
-
-.post-actions-bar {
+/* Like button, count, and link on left under image */
+.image-actions {
+  position: absolute;
+  bottom: -40px; /* under image */
+  left: 0;       /* left corner */
   display: flex;
   align-items: center;
-  gap: 15px;
-  margin-bottom: 15px;
+  gap: 8px;      /* spacing between button and count */
 }
 
 .btn-like {
   background: #3a7bd5;
   color: white;
   border: none;
-  padding: 8px 14px;
-  border-radius: 8px;
+  padding: 6px 12px;
+  border-radius: 6px;
   cursor: pointer;
   transition: background 0.2s ease;
 }
 .btn-like:hover {
   background: #2d66b1;
+}
+
+.like-count {
+  font-weight: 500;
+  color: #555;
 }
 
 .link-view-likes {
@@ -1079,24 +1090,49 @@ nav button:hover {
   text-decoration: underline;
 }
 
+/* Copy button on right under image */
+.btn-copy {
+  position: absolute;
+  bottom: -40px;
+  right: 0;
+  background: #eef2ff;
+  color: #3a7bd5;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+.btn-copy:hover {
+  background: #dce4ff;
+}
+
+.post-actions-bar {
+  display: none;
+}
+
+/* --- Divider --- */
 .divider {
   border: 0;
   border-top: 1px solid #ddd;
   margin: 20px 0;
 }
 
+/* --- Footer Buttons --- */
 .post-footer-actions {
   display: flex;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 10px;
-  justify-content: flex-end;
-  margin-bottom: 25px;
+  margin-top: 25px;
+  border-top: 1px solid #eee;
+  padding-top: 20px;
 }
 
 .btn-primary,
 .btn-secondary,
-.btn-danger,
-.btn-copy {
+.btn-danger {
   padding: 8px 14px;
   border-radius: 8px;
   text-decoration: none;
@@ -1110,22 +1146,27 @@ nav button:hover {
   background: #3a7bd5;
   color: white;
 }
+.btn-primary:hover {
+  background: #2e63b8;
+}
+
 .btn-secondary {
   background: #f0f0f0;
   color: #333;
 }
+.btn-secondary:hover {
+  background: #ddd;
+}
+
 .btn-danger {
   background: #e74c3c;
   color: white;
 }
-.btn-copy {
-  background: #e0e7ff;
-  color: #3a7bd5;
+.btn-danger:hover {
+  background: #c0392b;
 }
-.btn-primary:hover { background: #2e63b8; }
-.btn-danger:hover { background: #c0392b; }
-.btn-secondary:hover { background: #ddd; }
 
+/* --- Comments --- */
 .comment-section h3 {
   color: #333;
   border-bottom: 2px solid #3a7bd5;
@@ -1158,7 +1199,7 @@ nav button:hover {
   border-radius: 10px;
   padding: 15px 20px;
   margin-bottom: 15px;
-  box-shadow: 0 3px 8px rgba(0,0,0,0.05);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
 }
 
 .comment-author {
@@ -1198,6 +1239,27 @@ nav button:hover {
   margin-top: 20px;
   font-style: italic;
 }
+
+/* --- Responsive --- */
+@media (max-width: 600px) {
+  .post-detail-container {
+    padding: 20px;
+  }
+  .btn-copy {
+    position: static;
+    margin-top: 10px;
+  }
+  .post-actions-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .post-footer-actions {
+    justify-content: center;
+  }
+}
+
+
 
 /* ---- Delete Post Confirmation ---- */
 .delete-confirm {
