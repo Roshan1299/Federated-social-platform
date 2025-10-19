@@ -152,6 +152,9 @@ class CreatePostView(CreateView):
     def get_success_url(self):
         return reverse('authors:author_profile', kwargs={'author_id': self.request.user.id})
 
+'''
+Allows editing a post.
+url: "authors/<uuid:author_id>/posts/<uuid:post_id>/edit"'''
 class EditPostView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     model = Post
     form_class = PostForm
@@ -166,6 +169,11 @@ class EditPostView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     def get_success_url(self):
         return reverse("authors:post_detail", kwargs={"post_id": self.object.id})
 
+
+'''
+Allows deleting a post.
+url: "authors/<uuid:author_id>/posts/<uuid:post_id>/delete"
+'''
 class DeletePostView(LoginRequiredMixin, UserPassesTestMixin, View):
     def test_func(self):
         post = get_object_or_404(Post, id=self.kwargs['post_id'])
@@ -309,34 +317,6 @@ class PostAPIView(View):
         
         return JsonResponse(data)
 
-'''
-class AuthorStreamView(ListView):
-    """
-    HTML stream page for an author.
-    Shows public, non-unlisted posts, ordered by most recent 'updated' timestamp.
-    Only the author can view their personal stream page
-    """
-    model = Post
-    template_name = "authors/author_stream.html"
-    context_object_name = "posts"
-    paginate_by = 20  # paginate the stream
-
-    def get_queryset(self):
-        # Oosts the node knows about, exclude deleted (removed from DB)
-        # Order by -updated (for most recently edited/created entries)
-        return (
-            Post.objects
-            .filter(visibility='PUBLIC', unlisted=False)
-            .order_by('-updated')
-        )
-    
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        # extra context (author info)
-        context['author_id'] = self.kwargs['author_id']
-        return context
-'''
-
 class AuthorStreamView(ListView):
     model = Post
     template_name = "authors/author_stream.html"
@@ -388,24 +368,30 @@ class StreamRedirectView(TemplateView):
             # If not authenticated, redirect to login
             return redirect('login')
 
+'''
+View to list incoming follow requests for the logged-in user.
+'''
 class FollowRequestsView(LoginRequiredMixin, ListView):
     model = FollowRequest
     template_name = "authors/follow_requests.html"
     context_object_name = "requests"
 
-    def get_queryset(self):
+    def get_queryset(self):  # filter requests for the logged-in user
         return FollowRequest.objects.filter(receiver=self.request.user, status='PENDING').select_related('sender')
 
 
 @login_required
 def follow_author(request, author_id):
+    '''
+     Send a follow request to another author.
+     '''
     author_to_follow = get_object_or_404(Author, id=author_id)
-    if author_to_follow == request.user:
+    if author_to_follow == request.user:  # Prevent following oneself
         messages.error(request, "You cannot follow yourself.")
         return redirect('authors:author_profile', author_id=author_id)
 
     existing_follow = Follow.objects.filter(follower=request.user, following=author_to_follow).exists()
-    if existing_follow:
+    if existing_follow:  # Already following
         messages.info(request, f"You are already following {author_to_follow.displayName}.")
         return redirect('authors:author_profile', author_id=author_id)
 
@@ -413,7 +399,7 @@ def follow_author(request, author_id):
     existing_request = FollowRequest.objects.filter(sender=request.user, receiver=author_to_follow, status='PENDING').exists()
     if existing_request:
         messages.info(request, f"Follow request already sent to {author_to_follow.displayName}.")
-    else:
+    else:  # Create new follow request
         FollowRequest.objects.create(sender=request.user, receiver=author_to_follow)
         messages.success(request, f"Follow request sent to {author_to_follow.displayName}!")
 
@@ -422,15 +408,21 @@ def follow_author(request, author_id):
 
 @login_required
 def unfollow_author(request, author_id):
+    '''
+    Unfollow an author.
+    '''
     author_to_unfollow = get_object_or_404(Author, id=author_id)
-    Follow.objects.filter(follower=request.user, following=author_to_unfollow).delete()
+    Follow.objects.filter(follower=request.user, following=author_to_unfollow).delete()  # Remove follow relationship
     messages.success(request, f"You have unfollowed {author_to_unfollow.displayName}.")
     return redirect('authors:author_profile', author_id=author_id)
 
 @login_required
 def approve_follow_request(request, request_id):
-    follow_request = get_object_or_404(FollowRequest, id=request_id, receiver=request.user)
-    Follow.objects.get_or_create(follower=follow_request.sender, following=request.user)
+    '''
+    Approve a follow request.
+    '''
+    follow_request = get_object_or_404(FollowRequest, id=request_id, receiver=request.user)  # Ensure the request is for the logged-in user
+    Follow.objects.get_or_create(follower=follow_request.sender, following=request.user)  # Create follow relationship
     follow_request.status = 'APPROVED'
     follow_request.save()
     messages.success(request, f"You approved {follow_request.sender.displayName}'s follow request.")
@@ -439,6 +431,9 @@ def approve_follow_request(request, request_id):
 
 @login_required
 def deny_follow_request(request, request_id):
+    '''
+    Deny a follow request.
+    '''
     follow_request = get_object_or_404(FollowRequest, id=request_id, receiver=request.user)
     follow_request.status = 'DENIED'
     follow_request.save()
