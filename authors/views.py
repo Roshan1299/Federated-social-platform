@@ -457,6 +457,7 @@ def redirect_to_profile(request):
 @login_required
 @require_POST
 def toggle_like(request, post_id):
+    # Get the post by ID, or show 404 if not found
     post = get_object_or_404(Post, id=post_id)
     can_like = (post.visibility == 'PUBLIC') or (request.user == post.author)
     if not can_like:
@@ -464,10 +465,12 @@ def toggle_like(request, post_id):
 
     like, created = Like.objects.get_or_create(author=request.user, post=post)
     if not created:
+        # User already liked -> unlike
         like.delete()
         liked = False
         messages.info(request, "Unliked.")
     else:
+        # New like
         liked = True
         messages.success(request, "Liked!")
     if request.headers.get('HX-Request') or request.headers.get('x-requested-with') == 'XMLHttpRequest':
@@ -486,12 +489,13 @@ class PostLikesView(LoginRequiredMixin, TemplateView):
 
         # Permission check
         is_owner = self.request.user == post.author
+        # Allow viewing likes only if post is public or owned by current user
         if post.visibility != 'PUBLIC' and not is_owner:
             ctx["error"] = "You don’t have permission to view likes for this post."
             return ctx
 
         likes = post.likes.select_related("author").order_by("-created_at")
-
+        # Compute display username for each liker
         def compute_username_display(author):
             uname = (getattr(author, "username", "") or "").strip()
             if uname:
@@ -525,9 +529,10 @@ def add_comment(request, post_id):
     # allow commenting only if post is PUBLIC or owned by current user
     if post.visibility != 'PUBLIC' and post.author != request.user:
         return HttpResponse("Forbidden", status=403)
-
+    # Process submitted comment form
     form = CommentForm(request.POST)
     if form.is_valid():
+        # Create and save comment
         Comment.objects.create(
             post=post,
             author=request.user,
@@ -551,6 +556,7 @@ def toggle_comment_like(request, comment_id):
 
     like, created = CommentLike.objects.get_or_create(author=request.user, comment=comment)
     if not created:
+        # Already liked -> unlike
         like.delete()
         messages.info(request, "Unliked comment.")
     else:
