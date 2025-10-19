@@ -154,7 +154,8 @@ class CreatePostView(CreateView):
 
 '''
 Allows editing a post.
-url: "authors/<uuid:author_id>/posts/<uuid:post_id>/edit"'''
+url: "authors/<uuid:author_id>/posts/<uuid:post_id>/edit"
+'''
 class EditPostView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     model = Post
     form_class = PostForm
