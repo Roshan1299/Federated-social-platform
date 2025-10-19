@@ -67,6 +67,16 @@ class AuthorProfileView(DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['editable'] = False
+        if (self.get_object() == self.request.user):
+            # If viewing own profile, show all posts
+            context["posts"] = self.object.posts.all().order_by("-published")
+        elif (self.request.user.is_authenticated and Follow.objects.filter(follower=self.request.user, following=self.get_object()).exists()):
+            # If viewing an author that you follow, show their public and unlisted posts.
+            context["posts"] = self.object.posts.filter(visibility="PUBLIC").order_by("-published")
+        else:
+            # If viewing another author's profile, show only public, non-unlisted posts
+            context["posts"] = self.object.posts.filter(visibility="PUBLIC", unlisted=False).order_by("-published")
+
         
         # Determine if the current user follows this author
         user = self.request.user
