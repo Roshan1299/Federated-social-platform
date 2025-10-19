@@ -309,8 +309,7 @@ class PostAPIView(View):
         
         return JsonResponse(data)
 
-'''
-class AuthorStreamView(ListView):
+class AuthorStreamView(LoginRequiredMixin, ListView):
     """
     HTML stream page for an author.
     Shows public, non-unlisted posts, ordered by most recent 'updated' timestamp.
@@ -319,32 +318,10 @@ class AuthorStreamView(ListView):
     model = Post
     template_name = "authors/author_stream.html"
     context_object_name = "posts"
-    paginate_by = 20  # paginate the stream
-
-    def get_queryset(self):
-        # Oosts the node knows about, exclude deleted (removed from DB)
-        # Order by -updated (for most recently edited/created entries)
-        return (
-            Post.objects
-            .filter(visibility='PUBLIC', unlisted=False)
-            .order_by('-updated')
-        )
-    
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        # extra context (author info)
-        context['author_id'] = self.kwargs['author_id']
-        return context
-'''
-
-class AuthorStreamView(ListView):
-    model = Post
-    template_name = "authors/author_stream.html"
-    context_object_name = "posts"
     paginate_by = 20
 
     def get_queryset(self):
-        # Keep existing logic: show all public, non-unlisted posts ordered by latest
+        # show all public, non-unlisted posts ordered by latest
         return (
             Post.objects
             .filter(visibility='PUBLIC', unlisted=False)
@@ -352,30 +329,29 @@ class AuthorStreamView(ListView):
         )
 
     def get_context_data(self, **kwargs):
+        # Get the existing context
         context = super().get_context_data(**kwargs)
         user = self.request.user
 
-        if user.is_authenticated:
-            followed_authors = Follow.objects.filter(follower=user).select_related("following")
-            followed_data = []
-            for follow in followed_authors:
-                author = follow.following
-                posts = Post.objects.filter(
-                    author=author,
-                    visibility='PUBLIC',
-                    unlisted=False
-                ).order_by('-updated')[:5]  # show latest 5 per author
-                if posts.exists():
-                    followed_data.append({
-                        "author": author,
-                        "posts": posts
-                    })
-            context["followed_data"] = followed_data
-        else:
-            context["followed_data"] = []
+        # Fetch followed authors and their recent posts
+        followed_authors = Follow.objects.filter(follower=user).select_related("following")
+        followed_data = []
+        for follow in followed_authors:
+            author = follow.following
+            posts = Post.objects.filter(
+                author=author,
+                visibility='PUBLIC',
+                unlisted=False
+            ).order_by('-updated')[:5]  # show latest 5 per author
+            if posts.exists():
+                followed_data.append({
+                    "author": author,
+                    "posts": posts
+                })
+        context["followed_data"] = followed_data
 
         # Pass the authenticated user's ID, not from URL kwargs
-        context["author_id"] = user.id if user.is_authenticated else None
+        context["author_id"] = user.id
         return context
 
 
