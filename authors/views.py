@@ -81,8 +81,9 @@ class AuthorProfileView(DetailView):
 '''
 Allows editing author profile.
 url: "authors/<uuid:author_id>/edit"
+Extends LoginRequiredMixin and UserPassesTestMixin to ensure only the profile owner can edit.
 '''
-class AuthorEditView(UpdateView):
+class AuthorEditView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     form_class = AuthorProfileForm
     model = Author
     template_name = "authors/edit_profile.html"
@@ -93,6 +94,11 @@ class AuthorEditView(UpdateView):
         context = super().get_context_data(**kwargs)
         context['editable'] = True
         return context
+
+    def test_func(self):
+        # Ensure only the profile owner can edit it
+        author = self.get_object()
+        return self.request.user == author
     
     def form_valid(self, form) -> HttpResponse:
         user = form.save(commit=False)
