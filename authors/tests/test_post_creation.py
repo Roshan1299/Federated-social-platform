@@ -1,10 +1,11 @@
 """
-Tests for User Stories 8, 9, 10, 11, 14:
+Tests for User Stories 8, 9, 10, 11, 14, 16:
 8. As an author, I want to make entries, so I can share my thoughts and pictures with other local authors.
 9. As an author, I want to be able to make my entries 'public', so that everyone can see them.
 10. As an author, entries I make can be in simple plain text, because I don't always want all the formatting features of CommonMark.
 11. As an author, entries I make can be in CommonMark, so I can give my entries some basic formatting.
 14. As an author, I want to be able to use my web-browser to manage/author my entries, so I don't have to use a clunky API.
+16. As a reader, I can get a link to a public or unlisted entry, so I can send it to my friends over email, discord, slack, etc.
 """
 from django.test import TestCase, Client
 from django.contrib.auth import get_user_model
@@ -248,3 +249,48 @@ class PostCreationTests(TestCase):
                 self.assertEqual(post.contentType, content_type)
                 self.assertEqual(post.content, content)
                 self.assertEqual(post.visibility, 'PUBLIC')
+
+    """
+    User story 16: As a reader, I can get a link to a public or unlisted entry, so I can send it to my friends over email, discord, slack, etc.
+    """
+    def test_access_post_via_link(self):
+        """Test that a user can access a public post via a direct link."""
+        post = Post.objects.create(
+            title='Public Post',
+            content='This is a public post.',
+            contentType='text/plain',
+            visibility='PUBLIC',
+            author=self.user
+        )
+
+        response = self.client.get(reverse('authors:post_detail', kwargs={'post_id': post.id}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Public Post')
+    
+    def test_access_unlisted_post_via_link(self):
+        """Test that a user can access an unlisted post via a direct link."""
+        post = Post.objects.create(
+            title='Unlisted Post',
+            content='This is an unlisted post.',
+            contentType='text/plain',
+            visibility='PUBLIC',
+            unlisted=True,
+            author=self.user
+        )
+
+        response = self.client.get(reverse('authors:post_detail', kwargs={'post_id': post.id}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Unlisted Post')
+    
+    def test_cannot_access_private_post_via_link(self):
+        """Test that a user cannot access a private post via a direct link."""
+        post = Post.objects.create(
+            title='Private Post',
+            content='This is a private post.',
+            contentType='text/plain',
+            visibility='PRIVATE',
+            author=self.user
+        )
+
+        response = self.client.get(reverse('authors:post_detail', kwargs={'post_id': post.id}))
+        self.assertEqual(response.status_code, 403)  # Forbidden

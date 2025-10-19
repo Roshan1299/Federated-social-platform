@@ -205,6 +205,13 @@ class PostDetailView(DetailView):
     template_name = "authors/post_detail.html"
     pk_url_kwarg = "post_id"
     
+    def get(self, request, *args, **kwargs):
+        post = self.get_object()
+        # Only allow if post is PUBLIC or user is the author
+        if (post.visibility =="PRIVATE" and request.user != post.author):
+            return HttpResponse("Forbidden", status=403)
+        return super().get(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         post = context['object']
