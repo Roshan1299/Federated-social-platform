@@ -396,3 +396,130 @@ curl -X PATCH http://127.0.0.1:8000/api/follow-requests/xxxxxxxx-xxxx-xxxx-xxxx-
     "receiver": "http://127.0.0.1:8000/api/authors/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/",
     "status": "APPROVED"
 }
+```
+### Like or Unlike a Post
+Toggles a like on a post by the authenticated user.
+
+*   **URL:** `/api/posts/{POST_ID}/like/`
+*   **Method:** `POST`
+*   **Authorization:** Required (user must be logged in)
+*   **URL Params:**
+    *   `POST_ID` (required): The UUID of the post to like or unlike.
+
+#### Example Request:
+```bash
+curl -X POST http://127.0.0.1:8000/posts/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/like/ \
+  -H "Authorization: Bearer <token>"
+```
+#### Example Response:
+*  **Code:** 200 OK
+*  **Content:**
+```json
+{
+  "liked": true,
+  "count": 5
+}
+```
+
+### View Post Likes
+
+Returns a list of authors who liked a given post.
+
+* **URL:** `/api/posts/{POST_ID}/likes/`
+* **Method:** `GET`
+* **Authorization:** Required (only post author can view likes on private posts)
+* **URL Params:**
+  * `POST_ID` (required): The UUID of the post to retrieve likes for.
+
+#### Example Request:
+```bash
+curl http://127.0.0.1:8000/api/posts/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/likes/ \
+  -H "Authorization: Bearer <token>"
+```
+#### Example Response:
+*  **Code:** 200 OK
+*  **Content:**
+```json
+{
+  "type": "likes",
+  "post": "http://127.0.0.1:8000/api/posts/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/",
+  "total_likes": 2,
+  "items": [
+    {
+      "type": "like",
+      "author": "http://127.0.0.1:8000/api/authors/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/",
+      "displayName": "DarkBlue",
+      "created_at": "2025-10-18T01:30:00Z"
+    },
+    {
+      "type": "like",
+      "author": "http://127.0.0.1:8000/api/authors/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/",
+      "displayName": "DarkBlue2",
+      "created_at": "2025-10-18T01:32:00Z"
+    }
+  ]
+}
+
+```
+
+### Add a Comment to a Post
+
+Creates a comment on a specific post.
+
+* **URL:** `/api/posts/{POST_ID}/comments/add/`  
+* **Method:** `POST`  
+* **Authorization:** Required (user must be logged in)  
+* **URL Params:**  
+  * `POST_ID` (required): The UUID of the post to comment on.  
+* **Form Data:**  
+  * `content` (string, required): Text of the comment.
+
+#### Example Request:
+```bash
+curl -X POST http://127.0.0.1:8000/posts/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/comments/add/ \
+  -H "Authorization: Bearer <token>" \
+  -F "content=Nice post! 👏"
+```
+#### Example Response:
+*  **Code:** 302 Found
+*  **Content:**
+```json
+{
+  "type": "comment",
+  "id": "http://127.0.0.1:8000/api/comments/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/",
+  "author": "http://127.0.0.1:8000/api/authors/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/",
+  "post": "http://127.0.0.1:8000/api/posts/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/",
+  "content": "Nice post! 👏",
+  "created_at": "2025-10-18T03:25:00Z",
+  "like_count": 0
+}
+```
+
+### Like or Unlike a Comment
+
+Toggles a like on a specific comment.
+
+* **URL:** `/api/comments/{COMMENT_ID}/like/`  
+* **Method:** `POST`  
+* **Authorization:** Required (user must be logged in)  
+* **URL Params:**  
+  * `COMMENT_ID` (required): The UUID of the comment to like or unlike.
+
+#### Example Request:
+```bash
+curl -X POST http://127.0.0.1:8000/comments/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/like/ \
+  -H "Authorization: Bearer <token>"
+```
+#### Example Response:
+*  **Code:** 302 Found
+*  **Content:**
+```json
+{
+  "type": "commentLike",
+  "author": "http://127.0.0.1:8000/api/authors/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/",
+  "comment": "http://127.0.0.1:8000/api/comments/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/",
+  "liked": true,
+  "like_count": 3,
+  "created_at": "2025-10-18T03:40:00Z"
+}
+```
