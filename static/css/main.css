@@ -848,6 +848,577 @@ nav button:hover {
   background: #f8f9fa;
 }
 
+/* ---- Create/Edit/Delete Post ---- */
+.post-form-container {
+  max-width: 900px;
+  margin: 40px auto;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+  padding: 40px;
+}
+
+.post-form-header {
+  text-align: center;
+  margin-bottom: 25px;
+}
+
+.post-form-header h1 {
+  font-size: 30px;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.post-form-header p {
+  color: #666;
+  font-size: 16px;
+  margin: 0;
+}
+
+.post-form {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.post-form-row {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.post-form .form-group {
+  flex: 1;
+  min-width: 280px;
+  margin-bottom: 20px;
+}
+
+.post-form .form-group label {
+  font-weight: 600;
+  color: #555;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.post-form .form-group input,
+.post-form .form-group textarea,
+.post-form .form-group select {
+  width: 100%;
+  padding: 12px 15px;
+  border: 2px solid #e1e5e9;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: border-color 0.3s ease;
+  box-sizing: border-box;
+}
+
+.post-form .form-group input:focus,
+.post-form .form-group textarea:focus,
+.post-form .form-group select:focus {
+  border-color: #3a7bd5;
+  box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.2);
+  outline: none;
+}
+
+.post-form .form-group textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.post-form .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 15px;
+  margin-top: 30px;
+  border-top: 1px solid #eee;
+  padding-top: 20px;
+}
+
+.btn {
+  padding: 10px 20px;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: #3a7bd5;
+  color: white;
+  border: none;
+}
+
+.btn-primary:hover {
+  background: #316ac9;
+}
+
+.btn-secondary {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.btn-secondary:hover {
+  background: #e0e0e0;
+}
+
+/* ---- Delete Post ---- */
+.delete-post-container {
+  max-width: 700px;
+  margin: 60px auto;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+  padding: 40px;
+  text-align: center;
+}
+
+.delete-post-container h1 {
+  font-size: 28px;
+  color: #333;
+  margin-bottom: 15px;
+}
+
+.delete-post-container p {
+  color: #555;
+  margin-bottom: 25px;
+}
+
+.delete-post-container .form-actions {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+}
+
+.btn-danger {
+  background: #d9534f;
+  color: white;
+  border: none;
+}
+
+.btn-danger:hover {
+  background: #c9302c;
+}
+
+/* --- Enhanced Post Detail Page --- */
+.post-detail-container {
+  max-width: 900px;
+  margin: 30px auto;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  padding: 40px;
+}
+
+/* --- Header --- */
+.post-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.post-detail-header h1,
+.post-title-group h1 {
+  font-size: 34px;
+  margin-bottom: 10px;
+  color: #222;
+}
+
+.post-detail-meta {
+  font-size: 15px;
+  color: #666;
+  line-height: 1.6;
+}
+
+.post-author-link {
+  color: #3a7bd5;
+  text-decoration: none;
+  font-weight: 600;
+}
+.post-author-link:hover {
+  text-decoration: underline;
+}
+
+/* --- Image --- */
+.post-detail-image-container {
+  position: relative;
+  margin: 20px 0 60px 0;
+  text-align: left;
+}
+
+.post-detail-image {
+  width: 100%;
+  max-height: 450px;
+  object-fit: cover;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+/* Like button, count, and link on left under image */
+.image-actions {
+  position: absolute;
+  bottom: -40px; /* under image */
+  left: 0;       /* left corner */
+  display: flex;
+  align-items: center;
+  gap: 8px;      /* spacing between button and count */
+}
+
+.btn-like {
+  background: #3a7bd5;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.btn-like:hover {
+  background: #2d66b1;
+}
+
+.like-count {
+  font-weight: 500;
+  color: #555;
+}
+
+.link-view-likes {
+  color: #3270c6;
+  text-decoration: none;
+  font-weight: 500;
+}
+.link-view-likes:hover {
+  text-decoration: underline;
+}
+
+/* Copy button on right under image */
+.btn-copy {
+  position: absolute;
+  bottom: -40px;
+  right: 0;
+  background: #eef2ff;
+  color: #3a7bd5;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+.btn-copy:hover {
+  background: #dce4ff;
+}
+
+.post-actions-bar {
+  display: none;
+}
+
+/* --- Divider --- */
+.divider {
+  border: 0;
+  border-top: 1px solid #ddd;
+  margin: 20px 0;
+}
+
+/* --- Footer Buttons --- */
+.post-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 25px;
+  border-top: 1px solid #eee;
+  padding-top: 20px;
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-danger {
+  padding: 8px 14px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+}
+
+.btn-primary {
+  background: #3a7bd5;
+  color: white;
+}
+.btn-primary:hover {
+  background: #2e63b8;
+}
+
+.btn-secondary {
+  background: #f0f0f0;
+  color: #333;
+}
+.btn-secondary:hover {
+  background: #ddd;
+}
+
+.btn-danger {
+  background: #e74c3c;
+  color: white;
+}
+.btn-danger:hover {
+  background: #c0392b;
+}
+
+/* --- Comments --- */
+.comment-section h3 {
+  color: #333;
+  border-bottom: 2px solid #3a7bd5;
+  padding-bottom: 8px;
+  margin-bottom: 20px;
+}
+
+.comment-form textarea {
+  width: 100%;
+  border: 2px solid #e1e5e9;
+  border-radius: 8px;
+  padding: 10px 15px;
+  font-size: 15px;
+  min-height: 100px;
+  margin-bottom: 10px;
+  box-sizing: border-box;
+}
+.comment-form textarea:focus {
+  border-color: #3a7bd5;
+  box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.2);
+  outline: none;
+}
+
+.comments-list {
+  margin-top: 15px;
+}
+
+.comment-card {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 15px 20px;
+  margin-bottom: 15px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
+}
+
+.comment-author {
+  font-weight: 600;
+  color: #3a7bd5;
+  margin-bottom: 5px;
+}
+
+.comment-content {
+  color: #444;
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+
+.comment-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  color: #777;
+}
+
+.btn-comment-like {
+  background: none;
+  border: none;
+  color: #e25555;
+  cursor: pointer;
+  font-size: 15px;
+}
+.btn-comment-like:hover {
+  opacity: 0.8;
+}
+
+.no-comments {
+  color: #777;
+  text-align: center;
+  margin-top: 20px;
+  font-style: italic;
+}
+
+/* --- Responsive --- */
+@media (max-width: 600px) {
+  .post-detail-container {
+    padding: 20px;
+  }
+  .btn-copy {
+    position: static;
+    margin-top: 10px;
+  }
+  .post-actions-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .post-footer-actions {
+    justify-content: center;
+  }
+}
+
+
+
+/* ---- Delete Post Confirmation ---- */
+.delete-confirm {
+  max-width: 600px;
+  margin: 80px auto;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  padding: 40px;
+  text-align: center;
+}
+
+.delete-confirm h2 {
+  color: #c33;
+  font-size: 26px;
+  margin-bottom: 20px;
+}
+
+.delete-confirm p {
+  color: #555;
+  margin-bottom: 30px;
+}
+
+.delete-confirm .form-actions {
+  justify-content: center;
+}
+
+/* ---- Author Posts Page ---- */
+.author-posts-container {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.author-posts-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.author-posts-header h1 {
+  font-size: 30px;
+  color: #333;
+}
+
+.author-posts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 20px;
+}
+
+.author-post-card {
+  background: white;
+  border-radius: 10px;
+  border: 1px solid #e1e5e9;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  padding: 20px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.author-post-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.author-post-card h3 {
+  margin: 0 0 10px 0;
+}
+
+.author-post-card p {
+  color: #666;
+  line-height: 1.5;
+}
+
+/* ---- Follow Requests ---- */
+.follow-requests-container {
+  max-width: 800px;
+  margin: 0 auto;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+  padding: 30px;
+}
+
+.follow-request-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #eee;
+  padding: 15px 0;
+}
+
+.follow-request-item:last-child {
+  border-bottom: none;
+}
+
+.follow-request-info {
+  color: #333;
+  font-weight: 500;
+}
+
+.follow-request-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* ---- Post Likes ---- */
+.likes-container {
+  max-width: 700px;
+  margin: 0 auto;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+  padding: 30px;
+}
+
+.likes-container h2 {
+  color: #333;
+  font-size: 26px;
+  margin-bottom: 20px;
+}
+
+.likes-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.likes-list li {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.likes-list li:last-child {
+  border-bottom: none;
+}
+
+.like-avatar {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.like-info {
+  color: #555;
+}
+
+.like-info strong {
+  color: #333;
+}
+
+.error-message {
+  color: #c33;
+  text-align: center;
+  font-weight: 500;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   nav {

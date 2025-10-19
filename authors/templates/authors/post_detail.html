@@ -5,136 +5,118 @@
 {% endblock %}
 
 {% block content %}
-  <article>
-    <header>
+<div class="post-detail-container">
+  <header class="post-detail-header">
+    <div class="post-title-group">
       <h1>{{ post.title }}</h1>
-      <p>
+      <p class="post-detail-meta">
         By 
-        <a href="{% url 'authors:author_profile' post.author.id %}">
+        <a href="{% url 'authors:author_profile' post.author.id %}" class="post-author-link">
           {{ post.author.displayName }}
-        </a>
+        </a><br>
+        Published: {{ post.published }}<br>
+        Visibility: {{ post.get_visibility_display }}
       </p>
-      <p>Published: {{ post.published }}</p>
-      <p>Visibility: {{ post.get_visibility_display }}</p>
-
-      <div style="margin: 8px 0;">
-      <span>{{ like_count }} like{{ like_count|pluralize }}</span>
-      {% if can_like %}
-        <form method="post" action="{% url 'authors:toggle_like' post_id=post.id %}" style="display:inline-block; margin-left:10px;">
-          {% csrf_token %}
-          <button type="submit">{% if liked_by_me %}💔 Unlike{% else %}👍 Like{% endif %}</button>
-        </form>
-      {% endif %}
-      <a href="{% url 'authors:post_likes_page' post_id=post.id %}" style="margin-left:10px;">View likes</a>
     </div>
-    </header>
-    
-    <section>
-      {% if post.description %}
-        <p><strong>Description:</strong> {{ post.description }}</p>
-      {% endif %}
-      
-      {% if post.contentType|slice:":6" == "image/" %}
-        <!-- If the post is an image post, display the image -->
-        {% if post.image %}
-          <div class="post-image">
-            <img src="{{ post.image.url }}" alt="{{ post.title }}" style="max-width: 100%; height: auto;">
-          </div>
-        {% endif %}
-        {% if post.content %}
-          <div class="post-content">
-            {{ content_html|safe }}
-          </div>
-        {% endif %}
-      {% else %}
-        <!-- For text posts, display the content -->
-        <div class="post-content">
-          {{ content_html|safe }}
+  </header>
+
+  <section class="post-detail-body">
+    {% if post.description %}
+      <p class="post-description"><strong>Description:</strong> {{ post.description }}</p>
+    {% endif %}
+
+    {% if post.contentType|slice:":6" == "image/" %}
+      {% if post.image %}
+      <div class="post-detail-image-container">
+        <img src="{{ post.image.url }}" alt="{{ post.title }}" class="post-detail-image">
+
+        <!-- Like button, count, view likes on left under image -->
+        <div class="image-actions">
+          <span class="like-count">{{ like_count }} like{{ like_count|pluralize }}</span>
+          {% if can_like %}
+            <form method="post" action="{% url 'authors:toggle_like' post_id=post.id %}" class="inline-form">
+              {% csrf_token %}
+              <button type="submit" class="btn-like">
+                {% if liked_by_me %}💔 Unlike{% else %}👍 Like{% endif %}
+              </button>
+            </form>
+          {% endif %}
+          <a href="{% url 'authors:post_likes_page' post_id=post.id %}" class="link-view-likes">View Likes</a>
         </div>
+        {% if post.visibility != VISIBILITY_PRIVATE %}
+          <button class="btn-copy" data-link="{{ absolute_url }}">📋 Copy Link</button>
+        {% endif %}
+      </div>
       {% endif %}
-      {% if post.visibility != VISIBILITY_PRIVATE %}
-        <!-- Store value of URI so JS can copy to clipboard -->
-        <button class="copy-btn" data-link="{{ absolute_url }}">
-          Copy Link
-        </button>
-      {% endif %}
-    </section>
-  </article>
+    {% endif %}
 
-  {% if user.is_authenticated and user.id == post.author.id %}
-    <a href="{% url 'authors:edit_post' post.id %}">Edit Post</a> |
-    <a href="{% url 'authors:delete_post' post.id %}">Delete Post</a>
-  {% endif %}
+    {% if post.content and post.contentType|slice:":6" != "image/" %}
+      <div class="post-detail-content">{{ content_html|safe }}</div>
+    {% endif %}
+  </section>
 
-  <a href="{% url 'authors:author_profile' post.author.id %}">Back to Author Profile</a>
-  
-  <hr>
+  <div class="post-footer-actions">
+    {% if user.is_authenticated and user.id == post.author.id %}
+      <a href="{% url 'authors:edit_post' post.id %}" class="btn-secondary">✏️ Edit</a>
+      <a href="{% url 'authors:delete_post' post.id %}" class="btn-danger">🗑️ Delete</a>
+    {% endif %}
+    <a href="{% url 'authors:author_profile' post.author.id %}" class="btn-primary">⬅️ Back to Profile</a>
+  </div>
 
-  <section>
+  <hr class="divider">
+
+  <section class="comment-section">
     <h3>Comments ({{ comments|length }})</h3>
 
     {% if user.is_authenticated and post.visibility == 'PUBLIC' or user.id == post.author.id %}
-      <form method="post" action="{% url 'authors:add_comment' post_id=post.id %}" style="margin-bottom:1rem;">
+      <form method="post" action="{% url 'authors:add_comment' post_id=post.id %}" class="comment-form">
         {% csrf_token %}
         {{ comment_form.content }}
-        <div><button type="submit">Comment</button></div>
+        <button type="submit" class="btn-primary">💬 Comment</button>
       </form>
     {% else %}
       <p><em>Log in to comment.</em></p>
     {% endif %}
 
     {% if comments %}
-      <ul style="list-style:none;padding-left:0;">
-        {% for c in comments %}
-          <li style="margin-bottom:1rem;border-bottom:1px solid #eee;padding-bottom:0.75rem;">
-            <div>
-              <strong>
-                <a href="{% url 'authors:author_profile' c.author.id %}">{{ c.author.displayName }}</a>
-              </strong>
-              {% if c.username_display %}
-                <span style="color:#888;">(@{{ c.username_display }})</span>
-              {% endif %}
-                <span style="color:#666;"> — {{ c.created_at|date:"Y-m-d H:i" }}</span>
-
-            </div>
-
-            <div style="margin:0.4rem 0 0.6rem 0;">
-              {{ c.content|linebreaksbr }}
-            </div>
-
-            <div>
-              <span>{{ c.likes.count }} like{{ c.likes.count|pluralize }}</span>
-              {% if user.is_authenticated and post.visibility == 'PUBLIC' or user.id == post.author.id %}
-                <form method="post" action="{% url 'authors:toggle_comment_like' comment_id=c.id %}" style="display:inline;margin-left:8px;">
-                  {% csrf_token %}
-                  {% if c.liked_by_me %}
-                    <button type="submit">💔 Unlike</button>
-                  {% else %}
-                    <button type="submit">👍 Like</button>
-                  {% endif %}
-
-                </form>
-              {% endif %}
-            </div>
-          </li>
-        {% endfor %}
-      </ul>
+      {% for c in comments %}
+        <div class="comment-card">
+          <div class="comment-header">
+            <a href="{% url 'authors:author_profile' c.author.id %}" class="comment-author">{{ c.author.displayName }}</a>
+            <span class="comment-date">{{ c.created_at|date:"Y-m-d H:i" }}</span>
+          </div>
+          <div class="comment-content">{{ c.content|linebreaksbr }}</div>
+          <div class="comment-actions">
+            <span>{{ c.likes.count }} like{{ c.likes.count|pluralize }}</span>
+            {% if user.is_authenticated and post.visibility == 'PUBLIC' or user.id == post.author.id %}
+              <form method="post" action="{% url 'authors:toggle_comment_like' comment_id=c.id %}" class="inline-form">
+                {% csrf_token %}
+                {% if c.liked_by_me %}
+                  <button type="submit" class="btn-secondary">💔 Unlike</button>
+                {% else %}
+                  <button type="submit" class="btn-primary">👍 Like</button>
+                {% endif %}
+              </form>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
     {% else %}
-      <p>No comments yet.</p>
+      <p class="no-comments">No comments yet.</p>
     {% endif %}
   </section>
-  
+</div>
+
 <script>
-// Handle copy link button by changing text and disabling briefly
 document.addEventListener('DOMContentLoaded', function() {
-  document.querySelectorAll('.copy-btn').forEach(btn => {
+  document.querySelectorAll('.btn-copy').forEach(btn => {
     btn.addEventListener('click', function() {
       const link = btn.getAttribute('data-link');
       navigator.clipboard.writeText(link);
-      btn.textContent = "Copied!";
+      btn.textContent = "✅ Copied!";
       btn.disabled = true;
       setTimeout(() => {
-        btn.textContent = "Copy Link";
+        btn.textContent = "📋 Copy Link";
         btn.disabled = false;
       }, 1500);
     });

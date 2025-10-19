@@ -287,6 +287,11 @@ class AuthorPostsView(ListView):
         author_id = self.kwargs['author_id']
         return Post.objects.filter(author_id=author_id, visibility='PUBLIC').order_by('-published')
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['author'] = get_object_or_404(Author, id=self.kwargs['author_id'])
+        return context
+
 
 class PostAPIView(View):
     def get(self, request, post_id):

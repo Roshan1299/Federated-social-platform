@@ -1,11 +1,13 @@
 {% extends 'base.html' %}
 
 {% block title %}
-  Posts by {{ posts.0.author.displayName }}
+    Posts by {{ author.displayName }}
 {% endblock %}
 
 {% block content %}
-  <h2>Posts by {{ posts.0.author.displayName }}</h2>
+  <h2>
+      Posts by {{ author.displayName }}
+  </h2>
   
   {% if posts %}
     {% for post in posts %}
@@ -16,7 +18,6 @@
         {% endif %}
         
         {% if post.contentType|slice:":6" == "image/" %}
-          <!-- If the post is an image post, display a thumbnail -->
           {% if post.image %}
             <div class="post-image-preview">
               <a href="{% url 'authors:post_detail' post.id %}">
@@ -38,9 +39,9 @@
     <p>No posts yet.</p>
   {% endif %}
   
-  {% if user.is_authenticated and user.id == posts.0.author.id %}
+  {% if user.is_authenticated and user.id == author.id %}
     <a href="{% url 'authors:create_post' %}">Create New Post</a>
   {% endif %}
   
-  <a href="{% url 'authors:author_profile' posts.0.author.id %}">Back to Profile</a>
+  <a href="{% url 'authors:author_profile' author.id %}">Back to Profile</a>
 {% endblock %}

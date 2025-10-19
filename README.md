@@ -7,6 +7,7 @@ Bhuvan | bhuvanac | bhuvanac@ualberta.ca
 Byungkook | byungkoo | byungkoo@ualberta.ca
 Liam | lhouston | lhouston@ualberta.ca
 Tanmay | tlad | tlad@ualberta.ca
+Uday | udaymeht | udaymeht@ualberta.ca
 
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/etkNZkSE)
 CMPUT404-project-socialdistribution
@@ -120,48 +121,6 @@ curl http://127.0.0.1:8000/api/authors/
 
 *   **Code:** `200 OK`
 *   **Content:**
-
-```json
-{
-    "type": "post",
-    "id": "http://127.0.0.1:8000/api/posts/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/",
-    "author": {
-        "type": "author",
-        "id": "http://127.0.0.1:8000/api/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/",
-        "host": "http://127.0.0.1:8000",
-        "displayName": "Roshan123",
-        "url": "http://127.0.0.1:8000/api/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/",
-        "github": "http://github.com/Roshan2",
-        "profileImage": "https://example.com/path/to/image.png"
-    },
-    "title": "My Post",
-    "description": "A short description",
-    "content": "Hello world!",
-    "contentType": "text/plain",
-    "visibility": "PUBLIC",
-    "published": "2023-01-01T00:00:00Z",
-    "updated": "2023-01-01T00:00:00Z"
-}
-```
-
-#### Post Response Fields:
-
-| Field          | Type   | Description                                                                 | Example                                                              |
-|----------------|--------|-----------------------------------------------------------------------------|----------------------------------------------------------------------|
-| `type`         | string | The type of the object. Always "post".                                     | `"post"`                                                             |
-| `id`           | URL    | The fully qualified API URL for this post. This is the unique identifier.    | `"http://127.0.0.1:8000/api/posts/..."`                             |
-| `author`       | object | The author object containing information about the post creator.            | See author response format above                                     |
-| `title`        | string | The title of the post.                                                      | `"My New Post"`                                                      |
-| `description`  | string | A short description or summary of the post. Can be null.                    | `"A short description"`                                              |
-| `content`      | string | The actual content of the post.                                             | `"Hello world!"`                                                     |
-| `contentType`  | string | The content type of the post.                                               | `"text/plain"`, `"text/markdown"`, `"image/png"`, etc.              |
-| `visibility`   | string | The visibility setting of the post.                                         | `"PUBLIC"`, `"PRIVATE"`                                              |
-| `published`    | datetime | When the post was published (ISO 8601 format).                              | `"2023-01-01T00:00:00Z"`                                            |
-| `updated`      | datetime | When the post was last updated (ISO 8601 format).                           | `"2023-01-01T00:00:00Z"`                                            |
-| `image`        | URL    | URL to the post image (if applicable). Can be null.                         | `"http://127.0.0.1:8000/media/post_images/post_image.png"`          |
-
-#### Response Example:
-
 ```json
 [
   {
@@ -268,3 +227,172 @@ Retrieves the details of a single post by its ID.
 *   **Method:** `GET`
 *   **URL Params:**
     *   `POST_ID` (required): The UUID of the post to retrieve.
+
+#### Example Response: 
+*   **Code:** `200 OK`
+*   **Content:**
+```json
+{
+    "type": "post",
+    "id": "http://127.0.0.1:8000/api/posts/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/",
+    "author": {
+        "type": "author",
+        "id": "http://127.0.0.1:8000/api/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/",
+        "host": "http://127.0.0.1:8000",
+        "displayName": "Roshan123",
+        "url": "http://127.0.0.1:8000/api/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/",
+        "github": "http://github.com/Roshan2",
+        "profileImage": "https://example.com/path/to/image.png"
+    },
+    "title": "My Post",
+    "description": "A short description",
+    "content": "Hello world!",
+    "contentType": "text/plain",
+    "visibility": "PUBLIC",
+    "published": "2023-01-01T00:00:00Z",
+    "updated": "2023-01-01T00:00:00Z"
+}
+```
+
+#### Post Response Fields:
+
+| Field          | Type   | Description                                                                 | Example                                                              |
+|----------------|--------|-----------------------------------------------------------------------------|----------------------------------------------------------------------|
+| `type`         | string | The type of the object. Always "post".                                     | `"post"`                                                             |
+| `id`           | URL    | The fully qualified API URL for this post. This is the unique identifier.    | `"http://127.0.0.1:8000/api/posts/..."`                             |
+| `author`       | object | The author object containing information about the post creator.            | See author response format above                                     |
+| `title`        | string | The title of the post.                                                      | `"My New Post"`                                                      |
+| `description`  | string | A short description or summary of the post. Can be null.                    | `"A short description"`                                              |
+| `content`      | string | The actual content of the post.                                             | `"Hello world!"`                                                     |
+| `contentType`  | string | The content type of the post.                                               | `"text/plain"`, `"text/markdown"`, `"image/png"`, etc.              |
+| `visibility`   | string | The visibility setting of the post.                                         | `"PUBLIC"`, `"PRIVATE"`                                              |
+| `published`    | datetime | When the post was published (ISO 8601 format).                              | `"2023-01-01T00:00:00Z"`                                            |
+| `updated`      | datetime | When the post was last updated (ISO 8601 format).                           | `"2023-01-01T00:00:00Z"`                                            |
+| `image`        | URL    | URL to the post image (if applicable). Can be null.                         | `"http://127.0.0.1:8000/media/post_images/post_image.png"`          |
+
+### Edit a Post
+
+Allows an authenticated author to edit their own post.
+
+*   **URL:** `/api/posts/{POST_ID}/edit/`
+*   **Method:** `PUT` or `PATCH`
+*   **Authorization:** Required (user must be logged in and be the post author)
+*   **Content-Type:** `application/json`
+*   **URL Params:**
+    *   `POST_ID` (required): The UUID of the post to edit.
+
+#### Example Request:
+
+```bash
+curl -X PUT http://127.0.0.1:8000/api/posts/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/edit/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "title": "Updated Title",
+    "description": "Updated Description",
+    "content": "Updated post content",
+    "contentType": "text/plain",
+    "visibility": "PRIVATE"
+  }'
+```
+
+
+#### Example Response:
+
+*   **Code:** `201 Created`
+*   **Content:**
+```json
+{
+    "type": "post",
+    "id": "http://127.0.0.1:8000/api/posts/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/",
+    "title": "Updated Title",
+    "description": "Updated Description",
+    "content": "Updated post content",
+    "contentType": "text/plain",
+    "visibility": "PRIVATE",
+    "updated": "2025-10-17T00:00:00Z"
+}
+```
+
+
+### Delete a Post
+
+Deletes an existing post. Only the post's author can delete it.
+
+*   **URL:** `/api/posts/{POST_ID}/delete/`
+*   **Method:** `POST`
+*   **Authorization:** Required (user must be logged in as the author of the post
+*   **URL Params:** UUId of post required
+
+#### Example Rquest:
+```bash
+curl -X DELETE http://127.0.0.1:8000/api/posts/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/delete/ \
+  -H "Authorization: Bearer <token>"
+```
+
+#### Example Response:
+*  **Code:** 204 No Content
+
+
+### Follow Request
+Sends a follow request from one author to another (must be approve/denied by follow receiver - NEXT SECTION)
+
+*   **URL:** `/api/authors/{AUTHOR_ID}/follow/`
+*   **Method:** `POST`
+*   **Authorization:** Required (user must be logged in)
+*   **URL Params:** AUTHOR_ID (UUID of author required)
+
+#### Example Rquest:
+```bash
+curl -X POST http://127.0.0.1:8000/api/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/follow/ \
+  -H "Authorization: Bearer <token>"
+```
+
+#### Example Response:
+*  **Code:** 201 Created
+*  **Content:**
+```json
+{
+    "type": "followRequest",
+    "sender": "http://127.0.0.1:8000/api/authors/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/",
+    "receiver": "http://127.0.0.1:8000/api/authors/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/",
+    "status": "PENDING"
+}
+```
+
+
+### Approve/Deny a Follow Request
+Allows an author to approve or deny a pending follow request.
+
+*   **URL:** `/api/follow-requests/{REQUEST_ID}/`
+*   **Method:** `PATCH`
+*   **Authorization:** Required (receiver must be logged in)
+*   **Content-Type:** application/json
+*   **URL Params:** REQUEST_ID (UUID of the follow request required)
+
+#### APPROVE Example Rquest:
+```bash
+curl -X PATCH http://127.0.0.1:8000/api/follow-requests/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{ "status": "APPROVED" }'
+```
+
+#### DENY Example Rquest:
+```bash
+curl -X PATCH http://127.0.0.1:8000/api/follow-requests/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{ "status": "DENIED" }'
+```
+
+#### Example Response:
+*  **Code:** 200 OK
+*  **Content:**
+```json
+{
+    "type": "followRequest",
+    "sender": "http://127.0.0.1:8000/api/authors/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/",
+    "receiver": "http://127.0.0.1:8000/api/authors/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/",
+    "status": "APPROVED"
+}
