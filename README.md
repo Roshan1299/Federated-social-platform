@@ -45,6 +45,16 @@ Follow these steps to set up and run the development server. It is recommended t
     ```
     The server will be running at `http://127.0.0.1:8000/`.
 
+## Running Tests
+
+To run the project tests, use the following command:
+
+```bash
+python3 manage.py test authors.tests
+```
+
+This will execute all tests within the authors application.
+
 ## License
 
 * Choose an OSI approved license, name it here, and copy the license text to a file called `LICENSE`.
