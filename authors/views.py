@@ -321,12 +321,23 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        # show all public, non-unlisted posts ordered by latest
-        return (
-            Post.objects
-            .filter(visibility='PUBLIC', unlisted=False)
-            .order_by('-updated')
-        )
+        """
+        Returns posts for the stream:
+        - All PUBLIC, unlisted=False posts (public feed)
+        - All PUBLIC, unlisted=True posts from authors the user follows (unlisted posts from followed authors)
+        - All posts (regardless of unlisted) by the user themselves
+        """
+        user = self.request.user
+        followed_authors = user.following.values_list('following', flat=True)
+        # Public, not unlisted (for everyone)
+        public_posts = Post.objects.filter(visibility='PUBLIC', unlisted=False)
+        # Unlisted public posts from followed authors
+        unlisted_followed = Post.objects.filter(visibility='PUBLIC', unlisted=True, author__in=followed_authors)
+       # All posts by the user themselves
+        my_posts = Post.objects.filter(author=user)
+        # Union and remove duplicates
+        queryset = (public_posts | unlisted_followed | my_posts).distinct().order_by('-updated')
+        return queryset
 
     def get_context_data(self, **kwargs):
         # Get the existing context
@@ -353,7 +364,6 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
         # Pass the authenticated user's ID, not from URL kwargs
         context["author_id"] = user.id
         return context
-
 
 class StreamRedirectView(TemplateView):
     """Redirect view to send user to their personalized stream"""
