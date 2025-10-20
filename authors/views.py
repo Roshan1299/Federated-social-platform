@@ -67,6 +67,16 @@ class AuthorProfileView(DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['editable'] = False
+        if (self.get_object() == self.request.user):
+            # If viewing own profile, show all posts
+            context["posts"] = self.object.posts.all().order_by("-published")
+        elif (self.request.user.is_authenticated and Follow.objects.filter(follower=self.request.user, following=self.get_object()).exists()):
+            # If viewing an author that you follow, show their public and unlisted posts.
+            context["posts"] = self.object.posts.filter(visibility="PUBLIC").order_by("-published")
+        else:
+            # If viewing another author's profile, show only public, non-unlisted posts
+            context["posts"] = self.object.posts.filter(visibility="PUBLIC", unlisted=False).order_by("-published")
+
         
         # Determine if the current user follows this author
         user = self.request.user
@@ -81,8 +91,9 @@ class AuthorProfileView(DetailView):
 '''
 Allows editing author profile.
 url: "authors/<uuid:author_id>/edit"
+Extends LoginRequiredMixin and UserPassesTestMixin to ensure only the profile owner can edit.
 '''
-class AuthorEditView(UpdateView):
+class AuthorEditView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     form_class = AuthorProfileForm
     model = Author
     template_name = "authors/edit_profile.html"
@@ -93,6 +104,11 @@ class AuthorEditView(UpdateView):
         context = super().get_context_data(**kwargs)
         context['editable'] = True
         return context
+
+    def test_func(self):
+        # Ensure only the profile owner can edit it
+        author = self.get_object()
+        return self.request.user == author
     
     def form_valid(self, form) -> HttpResponse:
         user = form.save(commit=False)
@@ -189,6 +205,13 @@ class PostDetailView(DetailView):
     template_name = "authors/post_detail.html"
     pk_url_kwarg = "post_id"
     
+    def get(self, request, *args, **kwargs):
+        post = self.get_object()
+        # Only allow if post is PUBLIC or user is the author
+        if (post.visibility =="PRIVATE" and request.user != post.author):
+            return HttpResponse("Forbidden", status=403)
+        return super().get(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         post = context['object']
@@ -277,6 +300,11 @@ class AuthorPostsView(ListView):
     def get_queryset(self):
         author_id = self.kwargs['author_id']
         return Post.objects.filter(author_id=author_id, visibility='PUBLIC').order_by('-published')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['author'] = get_object_or_404(Author, id=self.kwargs['author_id'])
+        return context
 
 
 class PostAPIView(View):
@@ -438,6 +466,7 @@ def redirect_to_profile(request):
 @login_required
 @require_POST
 def toggle_like(request, post_id):
+    # Get the post by ID, or show 404 if not found
     post = get_object_or_404(Post, id=post_id)
     can_like = (post.visibility == 'PUBLIC') or (request.user == post.author)
     if not can_like:
@@ -445,10 +474,12 @@ def toggle_like(request, post_id):
 
     like, created = Like.objects.get_or_create(author=request.user, post=post)
     if not created:
+        # User already liked -> unlike
         like.delete()
         liked = False
         messages.info(request, "Unliked.")
     else:
+        # New like
         liked = True
         messages.success(request, "Liked!")
     if request.headers.get('HX-Request') or request.headers.get('x-requested-with') == 'XMLHttpRequest':
@@ -467,12 +498,13 @@ class PostLikesView(LoginRequiredMixin, TemplateView):
 
         # Permission check
         is_owner = self.request.user == post.author
+        # Allow viewing likes only if post is public or owned by current user
         if post.visibility != 'PUBLIC' and not is_owner:
             ctx["error"] = "You don’t have permission to view likes for this post."
             return ctx
 
         likes = post.likes.select_related("author").order_by("-created_at")
-
+        # Compute display username for each liker
         def compute_username_display(author):
             uname = (getattr(author, "username", "") or "").strip()
             if uname:
@@ -506,9 +538,10 @@ def add_comment(request, post_id):
     # allow commenting only if post is PUBLIC or owned by current user
     if post.visibility != 'PUBLIC' and post.author != request.user:
         return HttpResponse("Forbidden", status=403)
-
+    # Process submitted comment form
     form = CommentForm(request.POST)
     if form.is_valid():
+        # Create and save comment
         Comment.objects.create(
             post=post,
             author=request.user,
@@ -532,6 +565,7 @@ def toggle_comment_like(request, comment_id):
 
     like, created = CommentLike.objects.get_or_create(author=request.user, comment=comment)
     if not created:
+        # Already liked -> unlike
         like.delete()
         messages.info(request, "Unliked comment.")
     else:
