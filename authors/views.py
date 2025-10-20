@@ -357,11 +357,10 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
         """
         user = self.request.user
         followed_authors = user.following.values_list('following', flat=True)
-        # Public, not unlisted (for everyone)
+        # Public
         public_posts = Post.objects.filter(visibility='PUBLIC', unlisted=False)
-        # Unlisted public posts from followed authors
+        # Unlisted public posts
         unlisted_followed = Post.objects.filter(visibility='PUBLIC', unlisted=True, author__in=followed_authors)
-       # All posts by the user themselves
         my_posts = Post.objects.filter(author=user)
         # Union and remove duplicates
         queryset = (public_posts | unlisted_followed | my_posts).distinct().order_by('-updated')
