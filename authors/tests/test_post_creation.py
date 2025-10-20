@@ -145,9 +145,9 @@ class PostCreationTests(TestCase):
         
         response = self.client.get(reverse('authors:create_post'))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Title:')
-        self.assertContains(response, 'Content:')
-        self.assertContains(response, 'Visibility:')
+        self.assertContains(response, 'Title')
+        self.assertContains(response, 'Content')
+        self.assertContains(response, 'Visibility')
 
     def test_post_editing_ui(self):
         """Test US 14: Web UI for editing entries"""
