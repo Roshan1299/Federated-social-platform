@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+
+{% block title %}Likes for {{ post.title }}{% endblock %}
+
+{% block content %}
+  {% if error %}
+    <p style="color:red;">{{ error }}</p>
+  {% else %}
+    <h2>Likes for: "{{ post.title }}"</h2>
+    <p><strong>Total Likes:</strong> {{ like_count }}</p>
+
+    {% if likes %}
+      <ul>
+        {% for like in likes %}
+          <li>
+            <strong>
+              <a href="{% url 'authors:author_profile' like.author.id %}">
+                {{ like.author.displayName }}
+              </a>
+            </strong>
+            {% if like.username_display %}
+              <span style="color:#888;">(@{{ like.username_display }})</span>
+            {% endif %}
+            — <span style="color:#666;">{{ like.created_at|date:"Y-m-d H:i:s" }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No likes yet.</p>
+    {% endif %}
+
+    <a href="{% url 'authors:post_detail' post_id=post.id %}">Back to Post</a>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,37 @@
+name: Django CI
+
+on:
+  push:
+    branches: [ "dev" ]
+  pull_request:
+    branches: [ "prod" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.11"
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    - name: Check if server runs
+      run: |
+        echo "Starting server..."
+        python manage.py runserver &
+        PID=$!
+        echo "Server process ID: $PID"
+        sleep 5
+        if ! ps -p $PID > /dev/null; then
+          echo "Server failed to start or crashed."
+          exit 1
+        else
+          echo "Server started successfully. Stopping server."
+          kill $PID
+        fi

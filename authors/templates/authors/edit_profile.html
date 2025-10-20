@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit Profile - {{ author.displayName }}{% endblock %}
+
+{% block content %}
+  <div class="edit-profile-container">
+    <div class="edit-profile-header">
+      <h1>Edit Profile</h1>
+      <p>Update your personal information and preferences</p>
+    </div>
+    
+    <div class="edit-profile-form-container">
+      <form method="post" enctype="multipart/form-data" class="edit-profile-form">
+        {% csrf_token %}
+        
+        {% if form.non_field_errors %}
+          <div class="form-errors">
+            {% for error in form.non_field_errors %}
+              <div class="alert alert-error">{{ error }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+        
+        <div class="profile-image-section">
+          <h3>Profile Picture</h3>
+          <div class="profile-image-preview">
+            {% if author.profileImage %}
+              <img src="{{ author.profileImage.url }}" alt="{{ author.displayName }}'s Profile Image" class="current-profile-img">
+            {% else %}
+              <div class="profile-placeholder">👤</div>
+            {% endif %}
+          </div>
+          
+          <div class="form-group">
+            <label for="{{ form.profileImage.id_for_label }}">Upload New Image:</label>
+            {{ form.profileImage }}
+            {% if form.profileImage.errors %}
+              <div class="form-error">{{ form.profileImage.errors }}</div>
+            {% endif %}
+            <small class="form-hint">Upload a JPG, PNG, or GIF image (max 5MB)</small>
+          </div>
+        </div>
+        
+        <div class="profile-info-section">
+          <h3>Profile Information</h3>
+          
+          <div class="form-group">
+            <label for="{{ form.displayName.id_for_label }}">Display Name *</label>
+            {{ form.displayName }}
+            {% if form.displayName.errors %}
+              <div class="form-error">{{ form.displayName.errors }}</div>
+            {% endif %}
+            <small class="form-hint">This will be shown to other users</small>
+          </div>
+          
+          <div class="form-group">
+            <label for="{{ form.github.id_for_label }}">GitHub Profile URL</label>
+            {{ form.github }}
+            {% if form.github.errors %}
+              <div class="form-error">{{ form.github.errors }}</div>
+            {% endif %}
+            <small class="form-hint">Link to your GitHub profile</small>
+          </div>
+          
+          <div class="form-group">
+            <label for="{{ form.description.id_for_label }}">Bio/Description</label>
+            {{ form.description }}
+            {% if form.description.errors %}
+              <div class="form-error">{{ form.description.errors }}</div>
+            {% endif %}
+            <small class="form-hint">Tell others about yourself (max 500 characters)</small>
+          </div>
+        </div>
+        
+        <div class="form-actions">
+          <a href="{% url 'authors:author_profile' author.id %}" class="btn btn-secondary">Cancel</a>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
