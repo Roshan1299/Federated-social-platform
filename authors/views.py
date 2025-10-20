@@ -67,6 +67,16 @@ class AuthorProfileView(DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['editable'] = False
+        if (self.get_object() == self.request.user):
+            # If viewing own profile, show all posts
+            context["posts"] = self.object.posts.all().order_by("-published")
+        elif (self.request.user.is_authenticated and Follow.objects.filter(follower=self.request.user, following=self.get_object()).exists()):
+            # If viewing an author that you follow, show their public and unlisted posts.
+            context["posts"] = self.object.posts.filter(visibility="PUBLIC").order_by("-published")
+        else:
+            # If viewing another author's profile, show only public, non-unlisted posts
+            context["posts"] = self.object.posts.filter(visibility="PUBLIC", unlisted=False).order_by("-published")
+
         
         # Determine if the current user follows this author
         user = self.request.user
@@ -81,8 +91,9 @@ class AuthorProfileView(DetailView):
 '''
 Allows editing author profile.
 url: "authors/<uuid:author_id>/edit"
+Extends LoginRequiredMixin and UserPassesTestMixin to ensure only the profile owner can edit.
 '''
-class AuthorEditView(UpdateView):
+class AuthorEditView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     form_class = AuthorProfileForm
     model = Author
     template_name = "authors/edit_profile.html"
@@ -93,6 +104,11 @@ class AuthorEditView(UpdateView):
         context = super().get_context_data(**kwargs)
         context['editable'] = True
         return context
+
+    def test_func(self):
+        # Ensure only the profile owner can edit it
+        author = self.get_object()
+        return self.request.user == author
     
     def form_valid(self, form) -> HttpResponse:
         user = form.save(commit=False)
@@ -189,6 +205,13 @@ class PostDetailView(DetailView):
     template_name = "authors/post_detail.html"
     pk_url_kwarg = "post_id"
     
+    def get(self, request, *args, **kwargs):
+        post = self.get_object()
+        # Only allow if post is PUBLIC or user is the author
+        if (post.visibility =="PRIVATE" and request.user != post.author):
+            return HttpResponse("Forbidden", status=403)
+        return super().get(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         post = context['object']
@@ -314,8 +337,7 @@ class PostAPIView(View):
         
         return JsonResponse(data)
 
-'''
-class AuthorStreamView(ListView):
+class AuthorStreamView(LoginRequiredMixin, ListView):
     """
     HTML stream page for an author.
     Shows public, non-unlisted posts, ordered by most recent 'updated' timestamp.
@@ -324,65 +346,51 @@ class AuthorStreamView(ListView):
     model = Post
     template_name = "authors/author_stream.html"
     context_object_name = "posts"
-    paginate_by = 20  # paginate the stream
-
-    def get_queryset(self):
-        # Oosts the node knows about, exclude deleted (removed from DB)
-        # Order by -updated (for most recently edited/created entries)
-        return (
-            Post.objects
-            .filter(visibility='PUBLIC', unlisted=False)
-            .order_by('-updated')
-        )
-    
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        # extra context (author info)
-        context['author_id'] = self.kwargs['author_id']
-        return context
-'''
-
-class AuthorStreamView(ListView):
-    model = Post
-    template_name = "authors/author_stream.html"
-    context_object_name = "posts"
     paginate_by = 20
 
     def get_queryset(self):
-        # Keep existing logic: show all public, non-unlisted posts ordered by latest
-        return (
-            Post.objects
-            .filter(visibility='PUBLIC', unlisted=False)
-            .order_by('-updated')
-        )
+        """
+        Returns posts for the stream:
+        - All PUBLIC, unlisted=False posts (public feed)
+        - All PUBLIC, unlisted=True posts from authors the user follows (unlisted posts from followed authors)
+        - All posts (regardless of unlisted) by the user themselves
+        """
+        user = self.request.user
+        followed_authors = user.following.values_list('following', flat=True)
+        # Public
+        public_posts = Post.objects.filter(visibility='PUBLIC', unlisted=False)
+        # Unlisted public posts
+        unlisted_followed = Post.objects.filter(visibility='PUBLIC', unlisted=True, author__in=followed_authors)
+        my_posts = Post.objects.filter(author=user)
+        # Union and remove duplicates
+        queryset = (public_posts | unlisted_followed | my_posts).distinct().order_by('-updated')
+        return queryset
 
     def get_context_data(self, **kwargs):
+        # Get the existing context
         context = super().get_context_data(**kwargs)
         user = self.request.user
 
-        if user.is_authenticated:
-            followed_authors = Follow.objects.filter(follower=user).select_related("following")
-            followed_data = []
-            for follow in followed_authors:
-                author = follow.following
-                posts = Post.objects.filter(
-                    author=author,
-                    visibility='PUBLIC',
-                    unlisted=False
-                ).order_by('-updated')[:5]  # show latest 5 per author
-                if posts.exists():
-                    followed_data.append({
-                        "author": author,
-                        "posts": posts
-                    })
-            context["followed_data"] = followed_data
-        else:
-            context["followed_data"] = []
+        # Fetch followed authors and their recent posts
+        followed_authors = Follow.objects.filter(follower=user).select_related("following")
+        followed_data = []
+        for follow in followed_authors:
+            author = follow.following
+            posts = Post.objects.filter(
+                author=author,
+                visibility='PUBLIC',
+                unlisted=False
+            ).order_by('-updated')[:5]  # show latest 5 per author
+            if posts.exists():
+                followed_data.append({
+                    "author": author,
+                    "posts": posts
+                })
+        context["followed_data"] = followed_data
 
         # Pass the authenticated user's ID, not from URL kwargs
-        context["author_id"] = user.id if user.is_authenticated else None
+        context["author_id"] = user.id
         return context
-
 
 class StreamRedirectView(TemplateView):
     """Redirect view to send user to their personalized stream"""
