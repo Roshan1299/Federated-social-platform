@@ -65,7 +65,7 @@
         </div>
         
         <div class="posts-grid">
-          {% for post in author.posts.all|slice:":6" %}
+          {% for post in posts|slice:":6" %}
             <div class="post-card">
               <h3><a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a></h3>
               {% if post.description %}
