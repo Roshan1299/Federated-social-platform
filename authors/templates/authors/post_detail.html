@@ -25,34 +25,33 @@
       <p class="post-description"><strong>Description:</strong> {{ post.description }}</p>
     {% endif %}
 
-    {% if post.contentType|slice:":6" == "image/" %}
-      {% if post.image %}
+    <!-- show image if post has one -->
+    {% if post.image %}
       <div class="post-detail-image-container">
         <img src="{{ post.image.url }}" alt="{{ post.title }}" class="post-detail-image">
-
-        <!-- Like button, count, view likes on left under image -->
-        <div class="image-actions">
-          <span class="like-count">{{ like_count }} like{{ like_count|pluralize }}</span>
-          {% if can_like %}
-            <form method="post" action="{% url 'authors:toggle_like' post_id=post.id %}" class="inline-form">
-              {% csrf_token %}
-              <button type="submit" class="btn-like">
-                {% if liked_by_me %}💔 Unlike{% else %}👍 Like{% endif %}
-              </button>
-            </form>
-          {% endif %}
-          <a href="{% url 'authors:post_likes_page' post_id=post.id %}" class="link-view-likes">View Likes</a>
-        </div>
-        {% if post.visibility != VISIBILITY_PRIVATE %}
-          <button class="btn-copy" data-link="{{ absolute_url }}">📋 Copy Link</button>
-        {% endif %}
       </div>
-      {% endif %}
     {% endif %}
 
-    {% if post.content and post.contentType|slice:":6" != "image/" %}
+    {% if post.content %}
       <div class="post-detail-content">{{ content_html|safe }}</div>
     {% endif %}
+
+    <div class="post-actions">
+      <span class="like-count">{{ like_count }} like{{ like_count|pluralize }}</span>
+      {% if can_like %}
+        <form method="post" action="{% url 'authors:toggle_like' post_id=post.id %}" class="inline-form">
+          {% csrf_token %}
+          <button type="submit" class="btn-like">
+            {% if liked_by_me %}💔 Unlike{% else %}👍 Like{% endif %}
+          </button>
+        </form>
+      {% endif %}
+      <a href="{% url 'authors:post_likes_page' post_id=post.id %}" class="link-view-likes">View Likes</a>
+
+      {% if post.visibility != VISIBILITY_PRIVATE %}
+        <button class="btn-copy" data-link="{{ absolute_url }}">📋 Copy Link</button>
+      {% endif %}
+    </div>
   </section>
 
   <div class="post-footer-actions">
