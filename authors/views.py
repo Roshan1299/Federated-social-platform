@@ -468,6 +468,7 @@ class FollowRequestsView(LoginRequiredMixin, ListView):
 
 
 @login_required
+@require_POST
 def follow_author(request, author_id):
     '''
      Send a follow request to another author.
@@ -482,18 +483,49 @@ def follow_author(request, author_id):
         messages.info(request, f"You are already following {author_to_follow.displayName}.")
         return redirect('authors:author_profile', author_id=author_id)
 
-    # Check if request already sent
-    existing_request = FollowRequest.objects.filter(sender=request.user, receiver=author_to_follow, status='PENDING').exists()
-    if existing_request:
-        messages.info(request, f"Follow request already sent to {author_to_follow.displayName}.")
-    else:  # Create new follow request
-        FollowRequest.objects.create(sender=request.user, receiver=author_to_follow)
+    # Either create or update the existing follow request
+    follow_request, created = FollowRequest.objects.get_or_create(
+        sender=request.user,
+        receiver=author_to_follow,
+        defaults={'status': 'PENDING'}
+    )
+
+    if not created:
+        # If it exists and was denied or approved before, reset to pending
+        # Chose this method rather than because delete and recreate to preserve history
+        if follow_request.status != 'PENDING':
+            follow_request.status = 'PENDING'
+            follow_request.save()
+            messages.info(request, f"Follow request re-sent to {author_to_follow.displayName}.")
+        else:
+            messages.info(request, f"Follow request already pending.")
+    else:
         messages.success(request, f"Follow request sent to {author_to_follow.displayName}!")
 
     return redirect('authors:author_profile', author_id=author_id)
 
+@login_required
+def cancel_follow_request(request, author_id):
+    """
+    Cancel a pending follow request sent by the logged-in user.
+    """
+    author_to_cancel = get_object_or_404(Author, id=author_id)
+    follow_request = FollowRequest.objects.filter(
+        sender=request.user,
+        receiver=author_to_cancel,
+        status='PENDING'
+    ).first()
+
+    if follow_request:
+        follow_request.delete()
+        messages.info(request, f"Follow request to {author_to_cancel.displayName} has been cancelled.")
+    else:
+        messages.warning(request, "No pending follow request to cancel.")
+
+    return redirect('authors:author_profile', author_id=author_id)
 
 @login_required
+@require_POST
 def unfollow_author(request, author_id):
     '''
     Unfollow an author.

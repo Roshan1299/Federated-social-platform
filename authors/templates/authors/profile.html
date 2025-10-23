@@ -34,18 +34,27 @@
       <div class="profile-actions">
         {% if user.is_authenticated and user.id != author.id %}
           {% if is_following %}
+            <!-- Unfollow -->
             <form action="{% url 'authors:unfollow_author' author.id %}" method="post" class="follow-form">
               {% csrf_token %}
               <button type="submit" class="btn btn-secondary">Unfollow</button>
             </form>
+
           {% elif has_pending_request %}
-            <button type="button" class="btn btn-disabled" disabled>Follow request pending</button>
+            <!-- Cancel follow -->
+            <form action="{% url 'authors:cancel_follow_request' author.id %}" method="post" class="follow-form">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-warning">Cancel Follow Request</button>
+            </form>
+
           {% else %}
+            <!-- Follow -->
             <form action="{% url 'authors:follow_author' author.id %}" method="post" class="follow-form">
               {% csrf_token %}
               <button type="submit" class="btn btn-primary">Follow</button>
             </form>
           {% endif %}
+
         {% elif user.id == author.id %}
           <a href="{% url 'authors:edit_profile' author.id %}" class="btn btn-secondary">Edit Profile</a>
         {% endif %}
@@ -73,7 +82,7 @@
               {% endif %}
               
               {% if post.contentType|slice:":6" == "image/" %}
-                <!-- If the post is an image post, display a thumbnail -->
+                <!-- display a thumbnail -->
                 {% if post.image %}
                   <div class="post-image-preview">
                     <a href="{% url 'authors:post_detail' post.id %}">
