@@ -28,3 +28,14 @@ Should see something like DATABASE_URL=postgres://...
 
 ```heroku git:remote -a dark-blue```
 Link your local git repository to the Heroku app you just created.
+
+## Prepare Your Application for Deployment
+```heroku run "which python"```
+Check which Python version is being used on Heroku. (Should be something like /app/.heroku/python/bin/python)
+
+```heroku run "python manage.py migrate" --app dark-blue```
+Run database migrations on your Heroku app to set up the database schema.
+
+```heroku run "python manage.py createsuperuser" --app dark-blue```
+Create a superuser account for your Django application on Heroku.
+
