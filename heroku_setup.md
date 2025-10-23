@@ -39,3 +39,12 @@ Run database migrations on your Heroku app to set up the database schema.
 ```heroku run "python manage.py createsuperuser" --app dark-blue```
 Create a superuser account for your Django application on Heroku.
 
+## Push Your Code to Heroku
+```git add .```
+Stage all your changes for commit.
+
+```git commit -m "Initial commit for Heroku deployment"```
+Commit your changes with a descriptive message.
+
+```git push heroku dev:main```
+Push your code to the Heroku remote repository on the main branch.
