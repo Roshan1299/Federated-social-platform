@@ -39,7 +39,7 @@ class LikesAPITests(TestCase):
             description="Private desc",
             content="Secret",
             contentType="text/plain",
-            visibility="PRIVATE",
+            visibility="FRIENDS",
             published=timezone.now(),
             updated=timezone.now(),
         )
@@ -51,7 +51,7 @@ class LikesAPITests(TestCase):
             description="Alice only",
             content="Alice secret",
             contentType="text/plain",
-            visibility="PRIVATE",
+            visibility="FRIENDS",
             published=timezone.now(),
             updated=timezone.now(),
         )

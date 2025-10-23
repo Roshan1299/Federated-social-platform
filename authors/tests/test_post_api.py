@@ -116,7 +116,7 @@ class PostAPITests(TestCase):
             title='Private API Post',
             content='Private content',
             contentType='text/plain',
-            visibility='PRIVATE',
+            visibility='FRIENDS',
             author=self.user
         )
         
@@ -129,7 +129,7 @@ class PostAPITests(TestCase):
         data = json.loads(response.content)
         self.assertEqual(data['title'], 'Private API Post')
         self.assertEqual(data['content'], 'Private content')
-        self.assertEqual(data['visibility'], 'PRIVATE')
+        self.assertEqual(data['visibility'], 'FRIENDS')
 
     def test_post_content_types_api(self):
         """Test that different content types work through API (US 10, 11)"""

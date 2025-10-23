@@ -78,14 +78,14 @@ class VisibilityCombinationsTestCase(TestCase):
         Follow.objects.create(follower=self.author, following=self.friend)
 
     def test_public_not_unlisted_visible_to_everyone(self):
-        """Public + unlisted=False: Should appear in everyone's stream"""
+        """Public + : Should appear in everyone's stream"""
         post = Post.objects.create(
             author=self.author,
             title='Public Listed Post',
             content='Everyone should see this',
             contentType='text/plain',
             visibility='PUBLIC',
-            unlisted=False
+            
         )
         
         # Test stranger's stream (doesn't follow author)
@@ -107,14 +107,14 @@ class VisibilityCombinationsTestCase(TestCase):
         self.assertContains(response, 'Public Listed Post')
 
     def test_public_unlisted_not_in_non_follower_stream(self):
-        """Public + unlisted=True: Should NOT appear in non-followers' streams"""
+        """Public + : Should NOT appear in non-followers' streams"""
         post = Post.objects.create(
             author=self.author,
             title='Public Unlisted Post',
             content='Only followers see this in stream',
             contentType='text/plain',
-            visibility='PUBLIC',
-            unlisted=True
+            visibility='PUBLIC_UNLISTED',
+            
         )
         
         # Stranger (doesn't follow) should NOT see it in stream
@@ -124,14 +124,14 @@ class VisibilityCombinationsTestCase(TestCase):
         self.assertNotContains(response, 'Public Unlisted Post')
 
     def test_public_unlisted_visible_to_followers(self):
-        """Public + unlisted=True: Should appear in followers' streams"""
+        """Public + : Should appear in followers' streams"""
         post = Post.objects.create(
             author=self.author,
             title='Public Unlisted Post',
             content='Followers see this',
             contentType='text/plain',
-            visibility='PUBLIC',
-            unlisted=True
+            visibility='PUBLIC_UNLISTED',
+            
         )
         
         # Follower should see it
@@ -147,14 +147,14 @@ class VisibilityCombinationsTestCase(TestCase):
         self.assertContains(response, 'Public Unlisted Post')
 
     def test_public_unlisted_accessible_by_link_to_everyone(self):
-        """Public + unlisted=True: Anyone with link can access it"""
+        """Public + : Anyone with link can access it"""
         post = Post.objects.create(
             author=self.author,
             title='Public Unlisted Post',
             content='Link accessible to all',
             contentType='text/plain',
-            visibility='PUBLIC',
-            unlisted=True
+            visibility='PUBLIC_UNLISTED',
+            
         )
         
         # Stranger can access via direct link
@@ -165,14 +165,14 @@ class VisibilityCombinationsTestCase(TestCase):
         self.assertContains(response, 'Public Unlisted Post')
 
     # def test_friends_only_not_unlisted_visible_to_friends_only(self):
-    #     """Friends-only + unlisted=False: Only friends see in stream"""
+    #     """Friends-only + : Only friends see in stream"""
     #     post = Post.objects.create(
     #         author=self.author,
     #         title='Friends Only Post',
     #         content='Only friends',
     #         contentType='text/plain',
     #         visibility='FRIENDS',
-    #         unlisted=False
+    #         
     #     )
         
     #     # Friend should see it
@@ -194,14 +194,14 @@ class VisibilityCombinationsTestCase(TestCase):
     #     self.assertNotContains(response, 'Friends Only Post')
 
     # def test_friends_only_unlisted_still_friends_only(self):
-    #     """Friends-only + unlisted=True: Still only friends (unlisted doesn't matter)"""
+    #     """Friends-only + : Still only friends (unlisted doesn't matter)"""
     #     post = Post.objects.create(
     #         author=self.author,
     #         title='Friends Only Unlisted',
     #         content='Still friends only',
     #         contentType='text/plain',
     #         visibility='FRIENDS',
-    #         unlisted=True
+    #         
     #     )
         
     #     # Friend should see it
@@ -224,7 +224,7 @@ class VisibilityCombinationsTestCase(TestCase):
     #         content='Secret content',
     #         contentType='text/plain',
     #         visibility='FRIENDS',
-    #         unlisted=False
+    #         
     #     )
         
     #     # Friend can access
@@ -249,8 +249,8 @@ class VisibilityCombinationsTestCase(TestCase):
             title='My Public Post',
             content='Public',
             contentType='text/plain',
-            visibility='PUBLIC',
-            unlisted=False
+            visibility='PUBLIC_UNLISTED',
+            
         )
         
         unlisted_post = Post.objects.create(
@@ -258,8 +258,8 @@ class VisibilityCombinationsTestCase(TestCase):
             title='My Unlisted Post',
             content='Unlisted',
             contentType='text/plain',
-            visibility='PUBLIC',
-            unlisted=True
+            visibility='PUBLIC_UNLISTED',
+            
         )
         
         # friends_post = Post.objects.create(
@@ -268,7 +268,7 @@ class VisibilityCombinationsTestCase(TestCase):
         #     content='Friends',
         #     contentType='text/plain',
         #     visibility='FRIENDS',
-        #     unlisted=False
+        #     
         # )
         
         private_post = Post.objects.create(
@@ -276,8 +276,8 @@ class VisibilityCombinationsTestCase(TestCase):
             title='My Private Post',
             content='Private',
             contentType='text/plain',
-            visibility='PRIVATE',
-            unlisted=False
+            visibility='FRIENDS',
+            
         )
         
         # Author should see all their posts
@@ -297,8 +297,8 @@ class VisibilityCombinationsTestCase(TestCase):
             title='Private Post',
             content='Totally private',
             contentType='text/plain',
-            visibility='PRIVATE',
-            unlisted=False
+            visibility='FRIENDS',
+            
         )
         
         # Friend cannot see it
@@ -367,8 +367,8 @@ class StreamVisibilityMatrixTestCase(TestCase):
             author=self.author,
             title='Public Post',
             content='Public content',
-            visibility='PUBLIC',
-            unlisted=False
+            visibility='PUBLIC_UNLISTED',
+            
         )
         
         # Friend sees in stream
@@ -395,8 +395,8 @@ class StreamVisibilityMatrixTestCase(TestCase):
             author=self.author,
             title='Unlisted Post',
             content='Unlisted content',
-            visibility='PUBLIC',
-            unlisted=True
+            visibility='PUBLIC_UNLISTED',
+            
         )
         
         # Friend sees in stream
@@ -429,7 +429,7 @@ class StreamVisibilityMatrixTestCase(TestCase):
     #         title='Friends Only Post',
     #         content='Friends content',
     #         visibility='FRIENDS',
-    #         unlisted=False
+    #         
     #     )
         
     #     # Friend sees it
@@ -457,16 +457,16 @@ class StreamVisibilityMatrixTestCase(TestCase):
     #         author=self.author,
     #         title='Public',
     #         content='Public',
-    #         visibility='PUBLIC',
-    #         unlisted=False
+    #         visibility='PUBLIC_UNLISTED',
+    #         
     #     )
         
     #     unlisted = Post.objects.create(
     #         author=self.author,
     #         title='Unlisted',
     #         content='Unlisted',
-    #         visibility='PUBLIC',
-    #         unlisted=True
+    #         visibility='PUBLIC_UNLISTED',
+    #         
     #     )
         
     #     friends = Post.objects.create(
@@ -474,7 +474,7 @@ class StreamVisibilityMatrixTestCase(TestCase):
     #         title='Friends',
     #         content='Friends',
     #         visibility='FRIENDS',
-    #         unlisted=False
+    #         
     #     )
         
     #     # Friend should see all three

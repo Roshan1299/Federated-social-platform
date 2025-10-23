@@ -181,8 +181,8 @@ Creates a new post for an authenticated author.
     *   `description` (optional): Short description or summary of the post
     *   `content` (required): The actual content of the post
     *   `contentType` (required): The type of content ('text/plain', 'text/markdown', 'image/png', etc.)
-    *   `visibility` (required): The visibility of the post ('PUBLIC', 'PRIVATE')
-    *   `unlisted` (optional): Whether the post is unlisted (default: false)
+    *   `visibility` (required): The visibility of the post ('PUBLIC', 'PUBLIC_UNLISTED', 'FRIENDS')
+    
     *   `image` (optional): URL to an image if the post includes one
 
 #### Example Request:
@@ -197,7 +197,7 @@ curl -X POST http://127.0.0.1:8000/api/posts/ \
     "content": "Hello world!",
     "contentType": "text/plain",
     "visibility": "PUBLIC",
-    "unlisted": false
+    
   }'
 ```
 
@@ -275,7 +275,7 @@ Retrieves the details of a single post by its ID.
 | `description`  | string | A short description or summary of the post. Can be null.                    | `"A short description"`                                              |
 | `content`      | string | The actual content of the post.                                             | `"Hello world!"`                                                     |
 | `contentType`  | string | The content type of the post.                                               | `"text/plain"`, `"text/markdown"`, `"image/png"`, etc.              |
-| `visibility`   | string | The visibility setting of the post.                                         | `"PUBLIC"`, `"PRIVATE"`                                              |
+| `visibility`   | string | The visibility setting of the post.                                         | `"PUBLIC"`, `"PUBLIC_UNLISTED"`, `"FRIENDS"`                         |
 | `published`    | datetime | When the post was published (ISO 8601 format).                              | `"2023-01-01T00:00:00Z"`                                            |
 | `updated`      | datetime | When the post was last updated (ISO 8601 format).                           | `"2023-01-01T00:00:00Z"`                                            |
 | `image`        | URL    | URL to the post image (if applicable). Can be null.                         | `"http://127.0.0.1:8000/media/post_images/post_image.png"`          |
@@ -302,7 +302,7 @@ curl -X PUT http://127.0.0.1:8000/api/posts/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
     "description": "Updated Description",
     "content": "Updated post content",
     "contentType": "text/plain",
-    "visibility": "PRIVATE"
+    "visibility": "FRIENDS"
   }'
 ```
 
@@ -319,7 +319,7 @@ curl -X PUT http://127.0.0.1:8000/api/posts/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
     "description": "Updated Description",
     "content": "Updated post content",
     "contentType": "text/plain",
-    "visibility": "PRIVATE",
+    "visibility": "FRIENDS",
     "updated": "2025-10-17T00:00:00Z"
 }
 ```
@@ -437,7 +437,7 @@ Returns a list of authors who liked a given post.
 
 * **URL:** `/api/posts/{POST_ID}/likes/`
 * **Method:** `GET`
-* **Authorization:** Required (only post author can view likes on private posts)
+* **Authorization:** Required (only post author and followers can view likes on friends-only posts)
 * **URL Params:**
   * `POST_ID` (required): The UUID of the post to retrieve likes for.
 

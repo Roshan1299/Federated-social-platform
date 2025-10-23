@@ -17,17 +17,13 @@ class Post(models.Model):
     CONTENT_TYPE_CHOICES = [
         ('text/plain', 'Plain Text'),
         ('text/markdown', 'Markdown/ CommonMark'),
-        ('image/png', 'PNG Image'),
-        ('image/jpeg', 'JPEG Image'),
-        ('image/gif', 'GIF Image'),
-        ('image/bmp', 'BMP Image'),
-        ('image/webp', 'WebP Image'),
     ]
     
     VISIBILITY_CHOICES = [
         ('PUBLIC', 'Public'),
-        ('PRIVATE', 'Private'),
-        # Future: FRIENDS, SERVER_ONLY, etc.
+        ('PUBLIC_UNLISTED', 'Public Unlisted'),
+        ('FRIENDS', 'Friends Only'),
+        # Future: SERVER_ONLY, etc.
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -37,7 +33,6 @@ class Post(models.Model):
     content = models.TextField()  # The actual post content
     contentType = models.CharField(max_length=20, choices=CONTENT_TYPE_CHOICES, default='text/plain')
     visibility = models.CharField(max_length=20, choices=VISIBILITY_CHOICES, default='PUBLIC')
-    unlisted = models.BooleanField(default=False)  # If True, post is public but not shown in public feeds
     published = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
     
@@ -46,6 +41,8 @@ class Post(models.Model):
     origin = models.URLField(blank=True, null=True)  # Original source URL
     # Image field for image posts
     image = models.ImageField(upload_to="post_images/", blank=True, null=True)
+    # Track if the post is deleted
+    deleted = models.BooleanField(default=False)
     
     def __str__(self):
         return f"{self.title} by {self.author.displayName}"

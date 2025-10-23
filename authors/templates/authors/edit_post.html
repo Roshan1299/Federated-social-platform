@@ -36,20 +36,14 @@
       {{ form.content }}
     </div>
 
-    <div class="post-form-row">
-      <div class="form-group">
+    <div class="form-group">
         <label for="{{ form.image.id_for_label }}">Image (Optional)</label>
         {{ form.image }}
-      </div>
-      <div class="form-group">
-        <label for="{{ form.unlisted.id_for_label }}">Unlisted</label>
-        {{ form.unlisted }}
-      </div>
     </div>
 
     <div class="form-actions">
       <a href="{% url 'authors:author_profile' user.id %}" class="btn btn-secondary">Cancel</a>
-      <button type="submit" class="btn btn-primary">Save Changes</button>
+      <button type=\"submit\" class=\"btn btn-primary\">Save Changes</button>
     </div>
   </form>
 </div>

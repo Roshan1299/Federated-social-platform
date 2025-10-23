@@ -125,20 +125,20 @@ class AuthorProfileTests(TestCase):
             author=self.other_user,
             title='Public Post',
             content='This is a public post.',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
         )
         private_post = Post.objects.create(
             author=self.other_user,
             title='Private Post',
             content='This is a private post.',
-            visibility='PRIVATE',
+            visibility='FRIENDS',
         )
         unlisted_post = Post.objects.create(
             author=self.other_user,
             title='Unlisted Post',
             content='This is an unlisted post.',
-            visibility='PUBLIC',
-            unlisted=True
+            visibility='PUBLIC_UNLISTED',
+            
         )
 
         self.client.login(username='testuser', password='testpass123')
@@ -156,20 +156,20 @@ class AuthorProfileTests(TestCase):
             author=self.user,
             title='Public Post',
             content='This is a public post.',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
         )
         private_post = Post.objects.create(
             author=self.user,
             title='Private Post',
             content='This is a private post.',
-            visibility='PRIVATE',
+            visibility='FRIENDS',
         )
         unlisted_post = Post.objects.create(
             author=self.user,
             title='Unlisted Post',
             content='This is an unlisted post.',
-            visibility='PUBLIC',
-            unlisted=True
+            visibility='PUBLIC_UNLISTED',
+            
         )
 
         self.client.login(username='testuser', password='testpass123')
@@ -187,20 +187,20 @@ class AuthorProfileTests(TestCase):
             author=self.other_user,
             title='Public Post',
             content='This is a public post.',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
         )
         private_post = Post.objects.create(
             author=self.other_user,
             title='Private Post',
             content='This is a private post.',
-            visibility='PRIVATE',
+            visibility='FRIENDS',
         )
         unlisted_post = Post.objects.create(
             author=self.other_user,
             title='Unlisted Post',
             content='This is an unlisted post.',
-            visibility='PUBLIC',
-            unlisted=True
+            visibility='PUBLIC_UNLISTED',
+            
         )
 
         # Make testuser follow otheruser

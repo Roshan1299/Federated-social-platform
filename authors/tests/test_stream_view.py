@@ -80,7 +80,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Public Post',
             content='This is public',
             contentType='text/plain',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             unlisted=False
         )
         
@@ -90,7 +90,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Private Post',
             content='This is private',
             contentType='text/plain',
-            visibility='PRIVATE',
+            visibility='FRIENDS',
             unlisted=False
         )
         
@@ -111,7 +111,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Listed Post',
             content='This is listed',
             contentType='text/plain',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             unlisted=False
         )
         
@@ -121,8 +121,8 @@ class AuthorStreamViewTestCase(TestCase):
             title='Unlisted Post',
             content='This is unlisted',
             contentType='text/plain',
-            visibility='PUBLIC',
-            unlisted=True
+            visibility='PUBLIC_UNLISTED',
+            
         )
         
         url = reverse('authors:author_stream', kwargs={'author_id': self.author1.id})
@@ -144,7 +144,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Oldest Post',
             content='Created first',
             contentType='text/plain',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             unlisted=False
         )
         post1.updated = now - timedelta(days=3)
@@ -155,7 +155,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Middle Post',
             content='Created second',
             contentType='text/plain',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             unlisted=False
         )
         post2.updated = now - timedelta(days=1)
@@ -166,7 +166,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Newest Post',
             content='Created third',
             contentType='text/plain',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             unlisted=False
         )
         post3.updated = now
@@ -194,7 +194,7 @@ class AuthorStreamViewTestCase(TestCase):
                 title=f'Post {i}',
                 content=f'Content {i}',
                 contentType='text/plain',
-                visibility='PUBLIC',
+                visibility='PUBLIC_UNLISTED',
                 unlisted=False
             )
         
@@ -219,7 +219,7 @@ class AuthorStreamViewTestCase(TestCase):
                 title=f'Post {i}',
                 content=f'Content {i}',
                 contentType='text/plain',
-                visibility='PUBLIC',
+                visibility='PUBLIC_UNLISTED',
                 unlisted=False
             )
         
@@ -242,7 +242,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Post from followed author',
             content='Should appear in followed section',
             contentType='text/plain',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             unlisted=False
         )
         
@@ -268,7 +268,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Followed Post',
             content='Content',
             contentType='text/plain',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             unlisted=False
         )
         
@@ -303,7 +303,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Markdown Post',
             content='# Heading\n\n**Bold text**',
             contentType='text/markdown',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             unlisted=False
         )
         
@@ -321,7 +321,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Image Post',
             content='Check out this image',
             contentType='text/plain',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             unlisted=False
         )
         
@@ -349,7 +349,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Test Post',
             content='Content',
             contentType='text/plain',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             unlisted=False
         )
         
@@ -370,12 +370,12 @@ class AuthorStreamViewTestCase(TestCase):
             title='To be deleted',
             content='This will be deleted',
             contentType='text/plain',
-            visibility='PUBLIC',
-            unlisted=False
+            visibility='PUBLIC_UNLISTED'
         )
         
         post_id = deleted_post.id
-        deleted_post.delete()
+        deleted_post.deleted = True
+        deleted_post.save()
         
         url = reverse('authors:author_stream', kwargs={'author_id': self.author1.id})
         response = self.client.get(url)
@@ -393,7 +393,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Plain Text',
             content='Plain text content',
             contentType='text/plain',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             unlisted=False
         )
         
@@ -402,7 +402,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Markdown',
             content='# Markdown content',
             contentType='text/markdown',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             unlisted=False
         )
         
@@ -432,7 +432,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Test Post',
             content='Content',
             contentType='text/plain',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             unlisted=False
         )
         
@@ -502,7 +502,7 @@ class StreamViewFollowIntegrationTestCase(TestCase):
             title='Friend Post',
             content='Friend content',
             contentType='text/markdown',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             unlisted=False
         )
         
@@ -512,7 +512,7 @@ class StreamViewFollowIntegrationTestCase(TestCase):
             title='Stranger Post',
             content='Stranger content',
             contentType='text/plain',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             unlisted=False
         )
         
@@ -522,7 +522,7 @@ class StreamViewFollowIntegrationTestCase(TestCase):
             title='Private Post',
             content='Private content',
             contentType='text/plain',
-            visibility='PRIVATE',
+            visibility='FRIENDS',
             unlisted=False
         )
         
@@ -551,7 +551,7 @@ class StreamViewFollowIntegrationTestCase(TestCase):
                 title=f'Friend Post {i}',
                 content=f'Content {i}',
                 contentType='text/plain',
-                visibility='PUBLIC',
+                visibility='PUBLIC_UNLISTED',
                 unlisted=False
             )
         
@@ -580,7 +580,7 @@ class StreamViewFollowIntegrationTestCase(TestCase):
             title='Friend1 Post',
             content='Content from friend 1',
             contentType='text/plain',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             unlisted=False
         )
         
@@ -589,7 +589,7 @@ class StreamViewFollowIntegrationTestCase(TestCase):
             title='Friend2 Post',
             content='Content from friend 2',
             contentType='text/plain',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             unlisted=False
         )
         
@@ -615,7 +615,7 @@ class StreamViewFollowIntegrationTestCase(TestCase):
             title='Some Post',
             content='Content',
             contentType='text/plain',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             unlisted=False
         )
         
@@ -655,7 +655,7 @@ class StreamViewPaginationTestCase(TestCase):
                 title=f'Post {i}',
                 content=f'Content {i}',
                 contentType='text/plain',
-                visibility='PUBLIC',
+                visibility='PUBLIC_UNLISTED',
                 unlisted=False
             )
         
@@ -678,7 +678,7 @@ class StreamViewPaginationTestCase(TestCase):
                 title=f'Post {i}',
                 content=f'Content {i}',
                 contentType='text/plain',
-                visibility='PUBLIC',
+                visibility='PUBLIC_UNLISTED',
                 unlisted=False
             )
         
@@ -704,7 +704,7 @@ class StreamViewPaginationTestCase(TestCase):
                 title=f'Post {i}',
                 content=f'Content {i}',
                 contentType='text/plain',
-                visibility='PUBLIC',
+                visibility='PUBLIC_UNLISTED',
                 unlisted=False
             )
         

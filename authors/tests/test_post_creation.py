@@ -156,7 +156,7 @@ class PostCreationTests(TestCase):
             title='Original Title',
             content='Original content',
             contentType='text/plain',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             author=self.user
         )
         
@@ -188,7 +188,7 @@ class PostCreationTests(TestCase):
             title='Post to Delete',
             content='Content to delete',
             contentType='text/plain',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             author=self.user
         )
         
@@ -203,8 +203,9 @@ class PostCreationTests(TestCase):
         response = self.client.post(reverse('authors:delete_post', kwargs={'post_id': post.id}))
         self.assertEqual(response.status_code, 302)
         
-        # Verify post was deleted
-        self.assertFalse(Post.objects.filter(id=post.id).exists())
+        # Verify post was soft deleted
+        post.refresh_from_db()
+        self.assertTrue(post.deleted)
 
     def test_content_type_choices(self):
         """Test that all required content types are available (US 10, 11)"""
@@ -259,7 +260,7 @@ class PostCreationTests(TestCase):
             title='Public Post',
             content='This is a public post.',
             contentType='text/plain',
-            visibility='PUBLIC',
+            visibility='PUBLIC_UNLISTED',
             author=self.user
         )
 
@@ -273,8 +274,7 @@ class PostCreationTests(TestCase):
             title='Unlisted Post',
             content='This is an unlisted post.',
             contentType='text/plain',
-            visibility='PUBLIC',
-            unlisted=True,
+            visibility='PUBLIC_UNLISTED',
             author=self.user
         )
 
@@ -288,7 +288,7 @@ class PostCreationTests(TestCase):
             title='Private Post',
             content='This is a private post.',
             contentType='text/plain',
-            visibility='PRIVATE',
+            visibility='FRIENDS',
             author=self.user
         )
 

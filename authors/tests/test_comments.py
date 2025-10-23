@@ -37,7 +37,7 @@ class CommentsAPITests(TestCase):
             description="Private post",
             content="Secret",
             contentType="text/plain",
-            visibility="PRIVATE",
+            visibility="FRIENDS",
             published=timezone.now(),
             updated=timezone.now(),
         )
@@ -47,7 +47,7 @@ class CommentsAPITests(TestCase):
             description="Private post",
             content="Alice Secret",
             contentType="text/plain",
-            visibility="PRIVATE",
+            visibility="FRIENDS",
             published=timezone.now(),
             updated=timezone.now(),
         )
