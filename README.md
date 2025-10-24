@@ -290,6 +290,7 @@ Allows an authenticated author to edit their own post.
 *   **Content-Type:** `application/json`
 *   **URL Params:**
     *   `POST_ID` (required): The UUID of the post to edit.
+    *   `AUTHOR_ID` (Required): UUID of author required)
 
 #### Example Request:
 
