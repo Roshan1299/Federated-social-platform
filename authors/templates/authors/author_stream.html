@@ -41,16 +41,22 @@
                     Published {{ post.published|naturaltime }}
                   </p>
                 </div>
-                
-                {% if post.description %}
-                  <p class="post-description">{{ post.description }}</p>
-                {% endif %}
-                
+
                 {% if post.image %}
                   <div class="post-image-container">
                     <img src="{{ post.image.url }}" alt="{{ post.title }}" class="post-image">
                   </div>
                 {% endif %}
+
+                {% if post.rendered_content %}
+                  <div class="post-content">
+                    {{ post.rendered_content|truncatechars_html:300|safe }}
+                  </div>
+                {% endif %}
+
+                <div class="post-actions">
+                  <a href="{% url 'authors:post_detail' post.id %}" class="btn btn-primary">Read More</a>
+                </div>
               </article>
             {% empty %}
               <p class="no-posts">No posts yet.</p>
@@ -98,11 +104,7 @@
               {% endif %}
               
               <div class="post-content">
-                {% if post.contentType == "text/markdown" %}
-                  {{ post.content|linebreaksbr|truncatechars:300 }}
-                {% else %}
-                  {{ post.content|linebreaksbr|truncatechars:300 }}
-                {% endif %}
+                {{ post.rendered_content|truncatechars_html:300|safe }}
               </div>
 
               <div class="post-actions">

@@ -29,7 +29,7 @@ class Post(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     author = models.ForeignKey(Author, on_delete=models.CASCADE, related_name='posts')
     title = models.CharField(max_length=255)
-    description = models.CharField(max_length=500, blank=True, null=True)  # Short description or summary
+
     content = models.TextField()  # The actual post content
     contentType = models.CharField(max_length=20, choices=CONTENT_TYPE_CHOICES, default='text/plain')
     visibility = models.CharField(max_length=20, choices=VISIBILITY_CHOICES, default='PUBLIC')

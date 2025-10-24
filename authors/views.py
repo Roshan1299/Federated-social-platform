@@ -19,6 +19,13 @@ from django.shortcuts import redirect
 from django.views.decorators.http import require_POST
 
 
+def render_post_content(post):
+    ''' Rendered HTML for markdown/plain posts. '''
+    if getattr(post, "contentType", "text/plain") == "text/markdown":
+        return markdown.markdown(post.content or "")
+    else:
+        return (post.content or "").replace("\n", "<br>")
+
 class CustomLoginView(LoginView):
     """Custom login view that redirects to the user's stream page after login"""
     def get_success_url(self):
@@ -81,6 +88,9 @@ class AuthorProfileView(DetailView):
             # If viewing another author's profile, show only public, non-unlisted posts
             context["posts"] = self.object.posts.filter(visibility="PUBLIC", deleted=False).order_by("-published")
 
+        # Render post content for each post - ddcheck
+        for p in context.get("posts", []):
+            p.rendered_content = render_post_content(p)
         
         # Determine if the current user follows this author
         user = self.request.user
@@ -236,7 +246,11 @@ class PostDetailView(DetailView):
             # Convert markdown content to HTML
             context['content_html'] = markdown.markdown(post.content)
         else:
-            context['content_html'] = post.content.replace('\n', '<br>')  # Basic line breaks for plain text
+            if getattr(post, "contentType", "text/plain") == "text/markdown":
+                context['content_html'] = markdown.markdown(post.content or "")
+            else:
+                context['content_html'] = (post.content or "").replace('\n', '<br>')
+
         
         # Add image context if image exists
         context['has_image'] = post.image and post.image.url
@@ -435,12 +449,17 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
                 visibility__in=['PUBLIC', 'PUBLIC_UNLISTED', 'FRIENDS'],
                 deleted=False
             ).order_by('-updated')[:5]  # show latest 5 per author
+            for p in posts:
+                p.rendered_content = render_post_content(p)
             if posts.exists():
                 followed_data.append({
                     "author": author,
                     "posts": posts
                 })
         context["followed_data"] = followed_data
+
+        for p in context["posts"]:
+            p.rendered_content = render_post_content(p)
 
         # Pass the authenticated user's ID, not from URL kwargs
         context["author_id"] = user.id
