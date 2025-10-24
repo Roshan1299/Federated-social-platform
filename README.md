@@ -333,7 +333,9 @@ Deletes an existing post. Only the post's author can delete it.
 *   **URL:** `/api/posts/{POST_ID}/delete/`
 *   **Method:** `POST`
 *   **Authorization:** Required (user must be logged in as the author of the post
-*   **URL Params:** UUId of post required
+*   **URL Params:** 
+    * `POST_ID` (required): The UUID of the post to edit.
+    * `AUTHOR_ID` (Required): UUID of author required)
 
 #### Example Rquest:
 ```bash
