@@ -11,6 +11,7 @@ class Author(AbstractUser):
     github = models.URLField(blank=True, null=True)
     description = models.CharField(max_length=500, blank=True, null=True)
     profileImage = models.ImageField(blank=True, null=True, upload_to="user_images/") # Store images in media/user_images/
+    last_github_event_id = models.CharField(max_length=255, blank=True, null=True)
 
 
 class Post(models.Model):
@@ -118,4 +119,3 @@ class CommentLike(models.Model):
 
     def __str__(self):
         return f"{self.author.displayName} likes a comment on {self.comment.post.title}"
-
