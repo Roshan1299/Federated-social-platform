@@ -536,3 +536,42 @@ curl -X POST http://127.0.0.1:8000/comments/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
   "created_at": "2025-10-18T03:40:00Z"
 }
 ```
+
+## GitHub Activity Integration
+
+This application supports automatically fetching and converting public GitHub activity to posts.
+
+### Fetch GitHub Activity
+
+To manually fetch GitHub activity for all authors with GitHub profiles, run:
+
+```bash
+python manage.py fetch_github_activity
+```
+
+This command will:
+- Fetch public GitHub events for all authors who have a GitHub URL set in their profile
+- Convert new GitHub activities to public posts
+- Track the last processed event to avoid duplicates
+- Only create posts for new activity since the last command run
+
+### Automatic GitHub Activity Fetching
+
+For automatic fetching, you can set up a scheduled task (cron job) to run the command periodically:
+
+```bash
+# Run every 10 minutes
+*/10 * * * * cd /path/to/project && /path/to/venv/bin/python manage.py fetch_github_activity
+```
+
+### Supported GitHub Event Types
+
+The system currently supports conversion of these GitHub event types to posts:
+- PushEvent (commits pushed to repositories)
+- PullRequestEvent (pull requests opened, closed, merged)
+- IssuesEvent (issues opened, closed, etc.)
+- WatchEvent (starring repositories)
+- ForkEvent (forking repositories)
+- CreateEvent (creating repositories, branches, tags)
+- DeleteEvent (deleting branches, tags)
+- Other event types (with generic handling)
