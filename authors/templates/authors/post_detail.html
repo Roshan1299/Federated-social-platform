@@ -42,7 +42,7 @@
         <form method="post" action="{% url 'authors:toggle_like' post_id=post.id %}" class="inline-form">
           {% csrf_token %}
           <button type="submit" class="btn-like">
-            {% if liked_by_me %}💔 Unlike{% else %}👍 Like{% endif %}
+            {% if liked_by_me %}👎 Unlike {% else %}👍 Like {% endif %}
           </button>
         </form>
       {% endif %}
@@ -91,7 +91,7 @@
               <form method="post" action="{% url 'authors:toggle_comment_like' comment_id=c.id %}" class="inline-form">
                 {% csrf_token %}
                 {% if c.liked_by_me %}
-                  <button type="submit" class="btn-secondary">💔 Unlike</button>
+                  <button type="submit" class="btn-secondary">👎 Unlike</button>
                 {% else %}
                   <button type="submit" class="btn-primary">👍 Like</button>
                 {% endif %}

@@ -47,4 +47,4 @@ Stage all your changes for commit.
 Commit your changes with a descriptive message.
 
 ```git push heroku dev:main```
-Push your code to the Heroku remote repository on the main branch.
+Push your code to the Heroku remote repository from your local dev branch to the main branch on Heroku.
