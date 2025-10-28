@@ -78,12 +78,25 @@ class AuthorProfileView(DetailView):
         if (self.get_object() == self.request.user):
             # If viewing own profile, show all posts that aren't deleted
             context["posts"] = self.object.posts.filter(deleted=False).order_by("-published")
-        elif (self.request.user.is_authenticated and Follow.objects.filter(follower=self.request.user, following=self.get_object()).exists()):
-            # If viewing an author that you follow, show their public (including unlisted), friends-only posts.
+        
+        # If viewing an author you follow, show public and friends-only posts (NOT unlisted)
+        elif self.request.user.is_authenticated and Follow.objects.filter(follower=self.request.user, following=self.get_object()).exists():
+            author = self.get_object()
+            user = self.request.user
+            is_friend = (
+                Follow.objects.filter(follower=user, following=author).exists() and Follow.objects.filter(follower=author, following=user).exists()
+            )
+
+            if is_friend:
+                visibilities = ["PUBLIC", "PUBLIC_UNLISTED", "FRIENDS"]
+            else:
+                visibilities = ["PUBLIC", "PUBLIC_UNLISTED"]
+
             context["posts"] = self.object.posts.filter(
-                Q(visibility__in=["PUBLIC", "PUBLIC_UNLISTED", "FRIENDS"]),
+                visibility__in=visibilities,
                 deleted=False
             ).order_by("-published")
+
         else:
             # If viewing another author's profile, show only public, non-unlisted posts
             context["posts"] = self.object.posts.filter(visibility="PUBLIC", deleted=False).order_by("-published")
@@ -98,9 +111,15 @@ class AuthorProfileView(DetailView):
         if user.is_authenticated and user != author:
             context['is_following'] = Follow.objects.filter(follower=user, following=author).exists()
             context['has_pending_request'] = FollowRequest.objects.filter(sender=user, receiver=author, status='PENDING').exists()
+            context['is_friends'] = (
+                Follow.objects.filter(follower=user, following=author).exists() and
+                Follow.objects.filter(follower=author, following=user).exists()
+            )
         else:
             context['is_following'] = False
             context['has_pending_request'] = False
+            context['is_friends'] = False
+
         return context
 '''
 Allows editing author profile.
@@ -234,9 +253,17 @@ class PostDetailView(DetailView):
         # Don't allow access if post is deleted
         if post.deleted:
             return HttpResponse("Not Found", status=404)
+        
         # Only allow if post is PUBLIC/PUBLIC_UNLISTED, user is the author, or user is following the author (for Friends Only)
-        if post.visibility == "FRIENDS" and request.user != post.author and not Follow.objects.filter(follower=request.user, following=post.author).exists():
-            return HttpResponse("Forbidden", status=403)
+        if post.visibility == "FRIENDS" and request.user != post.author:
+            is_friend = (
+                Follow.objects.filter(follower=request.user, following=post.author).exists() and Follow.objects.filter(follower=post.author, following=request.user).exists()
+            )
+            if not is_friend:
+                return HttpResponse("Forbidden", status=403)
+
+        # PUBLIC_UNLISTED posts are always viewable by link
+
         return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
@@ -340,11 +367,12 @@ class AuthorPostsView(ListView):
         # If user is viewing their own profile, show all posts that aren't deleted
         if current_user.is_authenticated and current_user == author:
             return Post.objects.filter(author_id=author_id, deleted=False).order_by('-published')
-        # If user is following the author, show public and friends-only posts that aren't deleted
+
+        # If viewing an author you follow, show public and friends-only posts (NOT unlisted)
         elif current_user.is_authenticated and Follow.objects.filter(follower=current_user, following=author).exists():
             return Post.objects.filter(
                 author_id=author_id,
-                visibility__in=['PUBLIC', 'PUBLIC_UNLISTED', 'FRIENDS'],
+                visibility__in=["PUBLIC", "FRIENDS"],
                 deleted=False
             ).order_by('-published')
         # Otherwise, show only public posts that aren't deleted
@@ -405,33 +433,29 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
     redirect_field_name = 'next'  # Standard Django behavior
 
     def get_queryset(self):
-        """
-        Returns posts for the stream:
-        - All PUBLIC posts (not unlisted) (public feed)
-        - All PUBLIC_UNLISTED posts from authors the user follows (unlisted posts from followed authors)
-        - All FRIENDS posts from authors the user follows
-        - All posts (regardless of unlisted) by the user themselves
-        - Exclude any deleted posts
-        """
+        '''
+        Returns posts for the author's stream:
+        - Public posts from all authors
+        - Friends-only posts from mutual friends
+        - All posts from the author themselves
+        '''
         user = self.request.user
-        followed_authors = user.following.values_list('following', flat=True)
-        # Public (not unlisted)
+
+        # Get all mutual friends (both follow each other)
+        mutual_friends = Follow.objects.filter(
+            follower=user,
+            following__in=Follow.objects.filter(follower__in=[user]).values_list('follower', flat=True)
+        ).values_list('following', flat=True)
+
         public_posts = Post.objects.filter(visibility='PUBLIC', deleted=False)
-        # Unlisted public posts from followed authors
-        unlisted_followed = Post.objects.filter(
-            visibility='PUBLIC_UNLISTED',
-            author__in=followed_authors,
-            deleted=False
-        )
-        # Friends-only posts from followed authors
         friends_posts = Post.objects.filter(
             visibility='FRIENDS',
-            author__in=followed_authors,
+            author__in=mutual_friends,
             deleted=False
         )
         my_posts = Post.objects.filter(author=user, deleted=False)
-        # Union and remove duplicates
-        queryset = (public_posts | unlisted_followed | friends_posts | my_posts).distinct().order_by('-updated')
+
+        queryset = (public_posts | friends_posts | my_posts).distinct().order_by('-updated')
         return queryset
 
     def get_context_data(self, **kwargs):
@@ -444,11 +468,19 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
         followed_data = []
         for follow in followed_authors:
             author = follow.following
+            is_friend = (
+                Follow.objects.filter(follower=user, following=author).exists() and Follow.objects.filter(follower=author, following=user).exists()
+            )
+            visible_visibilities = ['PUBLIC']
+            if is_friend:
+                visible_visibilities.append('FRIENDS')
+
             posts = Post.objects.filter(
                 author=author,
-                visibility__in=['PUBLIC', 'PUBLIC_UNLISTED', 'FRIENDS'],
+                visibility__in=visible_visibilities,
                 deleted=False
-            ).order_by('-updated')[:5]  # show latest 5 per author
+            ).order_by('-updated')[:5]  # Get recent 5 posts
+
             for p in posts:
                 p.rendered_content = render_post_content(p)
             if posts.exists():
