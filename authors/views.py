@@ -75,39 +75,45 @@ class AuthorProfileView(DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['editable'] = False
-        if (self.get_object() == self.request.user):
-            # If viewing own profile, show all posts that aren't deleted
-            context["posts"] = self.object.posts.filter(deleted=False).order_by("-published")
-        
-        # If viewing an author you follow, show public and friends-only posts (NOT unlisted)
-        elif self.request.user.is_authenticated and Follow.objects.filter(follower=self.request.user, following=self.get_object()).exists():
-            author = self.get_object()
-            user = self.request.user
+
+        author = self.get_object()
+        user = self.request.user
+
+        # If viewing own profile → show all (including unlisted)
+        if author == user:
+            context["posts"] = author.posts.filter(deleted=False).order_by("-published")
+
+        # If viewing another author you follow
+        elif user.is_authenticated and Follow.objects.filter(follower=user, following=author).exists():
             is_friend = (
-                Follow.objects.filter(follower=user, following=author).exists() and Follow.objects.filter(follower=author, following=user).exists()
+                Follow.objects.filter(follower=user, following=author).exists() and
+                Follow.objects.filter(follower=author, following=user).exists()
             )
 
             if is_friend:
-                visibilities = ["PUBLIC", "PUBLIC_UNLISTED", "FRIENDS"]
+                # Friends see both PUBLIC + FRIENDS (but NOT unlisted)
+                visibilities = ["PUBLIC", "FRIENDS"]
             else:
-                visibilities = ["PUBLIC", "PUBLIC_UNLISTED"]
+                # One-way followers only see PUBLIC posts
+                visibilities = ["PUBLIC"]
 
-            context["posts"] = self.object.posts.filter(
+            context["posts"] = author.posts.filter(
                 visibility__in=visibilities,
                 deleted=False
             ).order_by("-published")
 
+        # If not following → only PUBLIC
         else:
-            # If viewing another author's profile, show only public, non-unlisted posts
-            context["posts"] = self.object.posts.filter(visibility="PUBLIC", deleted=False).order_by("-published")
+            context["posts"] = author.posts.filter(
+                visibility="PUBLIC",
+                deleted=False
+            ).order_by("-published")
 
-        # Render post content for each post - ddcheck
+        # Render post content safely
         for p in context.get("posts", []):
             p.rendered_content = render_post_content(p)
-        
-        # Determine if the current user follows this author
-        user = self.request.user
-        author = self.get_object()
+
+        # Relationship flags
         if user.is_authenticated and user != author:
             context['is_following'] = Follow.objects.filter(follower=user, following=author).exists()
             context['has_pending_request'] = FollowRequest.objects.filter(sender=user, receiver=author, status='PENDING').exists()
@@ -121,6 +127,7 @@ class AuthorProfileView(DetailView):
             context['is_friends'] = False
 
         return context
+
 '''
 Allows editing author profile.
 url: "authors/<uuid:author_id>/edit"
