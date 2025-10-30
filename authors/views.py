@@ -524,6 +524,27 @@ class FollowRequestsView(LoginRequiredMixin, ListView):
     def get_queryset(self):  # filter requests for the logged-in user
         return FollowRequest.objects.filter(receiver=self.request.user, status='PENDING').select_related('sender')
 
+'''
+View to list followers of a given author.
+'''
+class FollowersListView(LoginRequiredMixin, ListView):
+    model = Follow
+    template_name = "authors/followers_list.html"
+    context_object_name = "followers"
+
+    def get_queryset(self):
+        """Get all followers of the given author."""
+        author = get_object_or_404(Author, id=self.kwargs["author_id"])
+        return Follow.objects.filter(following=author).select_related("follower")
+
+    def get_context_data(self, **kwargs):
+        """Add author info and follower count."""
+        context = super().get_context_data(**kwargs)
+        author = get_object_or_404(Author, id=self.kwargs["author_id"])
+        context["author"] = author
+        context["follower_count"] = Follow.objects.filter(following=author).count()
+        return context
+
 
 @login_required
 @require_POST
