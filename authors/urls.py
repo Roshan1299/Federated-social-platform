@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import SignUpView, redirect_to_profile, StreamRedirectView, AuthorProfileView, AuthorsListAPIView, AuthorAPIView, AuthorEditView, CreatePostView, PostDetailView, EditPostView, DeletePostView, AuthorPostsView, PostAPIView, AuthorStreamView, follow_author, cancel_follow_request, unfollow_author, FollowRequest, FollowRequestsView, approve_follow_request, deny_follow_request, toggle_like, PostLikesView, add_comment, toggle_comment_like, FollowersListView
+from .views import SignUpView, redirect_to_profile, StreamRedirectView, AuthorProfileView, AuthorsListAPIView, AuthorAPIView, AuthorEditView, CreatePostView, PostDetailView, EditPostView, DeletePostView, AuthorPostsView, PostAPIView, AuthorStreamView, follow_author, cancel_follow_request, unfollow_author, FollowRequest, FollowRequestsView, approve_follow_request, deny_follow_request, toggle_like, PostLikesView, add_comment, toggle_comment_like, FollowersListView, FollowingListView
 
 app_name = "authors"
 urlpatterns = [
@@ -15,6 +15,7 @@ urlpatterns = [
     path("authors/follow_requests/", FollowRequestsView.as_view(), name="follow_requests"),
     path("authors/<uuid:author_id>/cancel_follow_request/", cancel_follow_request, name="cancel_follow_request"),
     path("authors/<uuid:author_id>/followers/", FollowersListView.as_view(), name="followers_list"),
+    path("authors/<uuid:author_id>/following/", FollowingListView.as_view(), name="following_list"),
 
     path("authors/follow_request/<int:request_id>/approve/", approve_follow_request, name="approve_follow_request"),
     path("authors/follow_request/<int:request_id>/deny/", deny_follow_request, name="deny_follow_request"),

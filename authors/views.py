@@ -545,6 +545,27 @@ class FollowersListView(LoginRequiredMixin, ListView):
         context["follower_count"] = Follow.objects.filter(following=author).count()
         return context
 
+'''
+List view to show users that I'm following.
+'''
+class FollowingListView(LoginRequiredMixin, ListView):
+    model = Follow
+    template_name = "authors/following_list.html"
+    context_object_name = "following"
+
+    def get_queryset(self):
+        """Get all authors this user is following."""
+        author = get_object_or_404(Author, id=self.kwargs["author_id"])
+        return Follow.objects.filter(follower=author).select_related("following")
+
+    def get_context_data(self, **kwargs):
+        """Add author info and following count."""
+        context = super().get_context_data(**kwargs)
+        author = get_object_or_404(Author, id=self.kwargs["author_id"])
+        context["author"] = author
+        context["following_count"] = Follow.objects.filter(follower=author).count()
+        return context
+
 
 @login_required
 @require_POST

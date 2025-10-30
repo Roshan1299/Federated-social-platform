@@ -76,6 +76,12 @@
           <a href="{% url 'authors:followers_list' author.id %}" class="btn btn-info">
             Followers ({{ author.followers.count }})
           </a>
+          
+          <!-- Following List -->
+          <a href="{% url 'authors:following_list' author.id %}" class="btn btn-info">
+            Following ({{ author.following.count }})
+          </a>
+
         {% endif %}
 
       </div>
