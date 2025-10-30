@@ -1090,20 +1090,22 @@ nav button:hover {
   text-decoration: underline;
 }
 
-/* Copy button on right under image */
+/* Copy button on right under image */ 
 .btn-copy {
-  position: absolute;
-  bottom: -40px;
-  right: 0;
+  display: flex;
+  margin-left: auto;
   background: #eef2ff;
   color: #3a7bd5;
   border: none;
   padding: 6px 12px;
+  margin-top: 6px;
+  margin-bottom: 6px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 14px;
   transition: all 0.2s ease;
 }
+
 .btn-copy:hover {
   background: #dce4ff;
 }
