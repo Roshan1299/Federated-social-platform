@@ -423,14 +423,25 @@ class AuthorDeletedPostsAdminView(LoginRequiredMixin, UserPassesTestMixin, ListV
 class PostAPIView(View):
     def get(self, request, post_id):
         post = get_object_or_404(Post, id=post_id)
-        # Don't return deleted posts
-        if post.deleted:
-            return HttpResponse("Not Found", status=404)
         
-        # Check visibility permissions before returning the post
+        # Don't return deleted posts
         if post.deleted and not (request.user.is_authenticated and request.user.is_superuser):
             return HttpResponse("Not Found", status=404)
         
+        # Check visibility permissions before returning the post
+        # Only allow if post is PUBLIC/PUBLIC_UNLISTED, user is the author, or user is following the author (for Friends Only)
+        if post.visibility == "FRIENDS" and request.user != post.author:
+            # Check if user is authenticated first
+            if not request.user.is_authenticated:
+                return HttpResponse("Forbidden", status=403)
+            
+            is_friend = (
+                Follow.objects.filter(follower=request.user, following=post.author).exists() and
+                Follow.objects.filter(follower=post.author, following=request.user).exists()
+            )
+            if not is_friend:
+                return HttpResponse("Forbidden", status=403)
+
         data = {
             "type": "post",
             "id": request.build_absolute_uri(reverse('authors:post_detail', kwargs={'post_id': post.id})),
