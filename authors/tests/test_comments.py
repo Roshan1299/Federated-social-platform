@@ -24,7 +24,6 @@ class CommentsAPITests(TestCase):
         self.public_post = Post.objects.create(
             author=self.bob,
             title="Public Post",
-            description="Visible to all",
             content="Hello public",
             contentType="text/plain",
             visibility="PUBLIC",
@@ -34,7 +33,6 @@ class CommentsAPITests(TestCase):
         self.bobs_private_post = Post.objects.create(
             author=self.bob,
             title="Bob Private",
-            description="Private post",
             content="Secret",
             contentType="text/plain",
             visibility="FRIENDS",
@@ -44,7 +42,6 @@ class CommentsAPITests(TestCase):
         self.alices_private_post = Post.objects.create(
             author=self.alice,
             title="Alice Private",
-            description="Private post",
             content="Alice Secret",
             contentType="text/plain",
             visibility="FRIENDS",

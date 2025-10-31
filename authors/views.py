@@ -91,11 +91,11 @@ class AuthorProfileView(DetailView):
             )
 
             if is_friend:
-                # Friends see both PUBLIC + FRIENDS (but NOT unlisted)
-                visibilities = ["PUBLIC", "FRIENDS"]
+                # Friends see both PUBLIC + FRIENDS and PUBLIC_UNLISTED
+                visibilities = ["PUBLIC", "FRIENDS", "PUBLIC_UNLISTED"]
             else:
-                # One-way followers only see PUBLIC posts
-                visibilities = ["PUBLIC"]
+                # One-way followers only see PUBLIC and PUBLIC_UNLISTED posts
+                visibilities = ["PUBLIC", "PUBLIC_UNLISTED"]
 
             context["posts"] = author.posts.filter(
                 visibility__in=visibilities,
@@ -436,7 +436,7 @@ class PostAPIView(View):
             "id": request.build_absolute_uri(reverse('authors:post_detail', kwargs={'post_id': post.id})),
             "author": {
                 "type": "author",
-                "id": post.author.url,
+                "id": post.author.url, 
                 "host": post.author.host,
                 "displayName": post.author.displayName,
                 "url": post.author.url,
@@ -444,15 +444,12 @@ class PostAPIView(View):
                 "profileImage": post.author.profileImage.name if post.author.profileImage else None,
             },
             "title": post.title,
-            "description": post.description,
             "contentType": post.contentType,
             "content": post.content,
             "visibility": post.visibility,
             "published": post.published.isoformat(),
             "updated": post.updated.isoformat(),
         }
-        
-        # Include image URL if the post has an image
         if post.image:
             data["image"] = request.build_absolute_uri(post.image.url)
         
@@ -470,27 +467,46 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         '''
         Returns posts for the author's stream:
-        - Public posts from all authors
+        - Public posts from all authors (anyone can see in stream)
         - Friends-only posts from mutual friends
         - All posts from the author themselves
+        - Public unlisted posts from followed authors (only in stream for followers)
         '''
         user = self.request.user
 
         # Get all mutual friends (both follow each other)
-        mutual_friends = Follow.objects.filter(
-            follower=user,
-            following__in=Follow.objects.filter(follower__in=[user]).values_list('follower', flat=True)
-        ).values_list('following', flat=True)
+        followed_by_user = Follow.objects.filter(follower=user).values_list('following', flat=True)
+        follows_user = Follow.objects.filter(following=user).values_list('follower', flat=True)
+        mutual_friends = followed_by_user.intersection(follows_user)
 
+        followed_authors = Follow.objects.filter(follower=user).values_list('following', flat=True)
+
+        # All public posts should appear in everyone's stream
         public_posts = Post.objects.filter(visibility='PUBLIC', deleted=False)
-        friends_posts = Post.objects.filter(
+
+        # Friends-only posts from mutual friends and the user's own friends-only posts
+        friends_posts_mutual = Post.objects.filter(
             visibility='FRIENDS',
             author__in=mutual_friends,
             deleted=False
         )
+        friends_posts_author = Post.objects.filter(
+            visibility='FRIENDS',
+            author=user,
+            deleted=False
+        )
+
+        # All posts from the author themselves (they should see their own posts regardless of visibility)
         my_posts = Post.objects.filter(author=user, deleted=False)
 
-        queryset = (public_posts | friends_posts | my_posts).distinct().order_by('-updated')
+        # Public unlisted posts from followed authors (excluding own posts to avoid duplication)
+        unlisted_posts_followed = Post.objects.filter(
+            visibility='PUBLIC_UNLISTED',
+            author__in=followed_authors,
+        ).exclude(author=user).filter(deleted=False)
+
+        # Combine all posts
+        queryset = (public_posts | friends_posts_mutual | friends_posts_author | my_posts | unlisted_posts_followed).distinct().order_by('-updated')
         return queryset
 
     def get_context_data(self, **kwargs):

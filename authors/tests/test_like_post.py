@@ -24,7 +24,6 @@ class LikesAPITests(TestCase):
         self.public_post = Post.objects.create(
             author=self.bob,
             title="Public Post",
-            description="Public desc",
             content="Hello world",
             contentType="text/plain",
             visibility="PUBLIC",
@@ -36,7 +35,6 @@ class LikesAPITests(TestCase):
         self.private_post = Post.objects.create(
             author=self.bob,
             title="Private Post",
-            description="Private desc",
             content="Secret",
             contentType="text/plain",
             visibility="FRIENDS",
@@ -48,7 +46,6 @@ class LikesAPITests(TestCase):
         self.alice_private_post = Post.objects.create(
             author=self.alice,
             title="Alice Private",
-            description="Alice only",
             content="Alice secret",
             contentType="text/plain",
             visibility="FRIENDS",
