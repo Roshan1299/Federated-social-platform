@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.utils.translation import gettext_lazy as _
-from .models import Author, Post, Follow
+from .models import Author, Post, Follow, Comment, Like, FollowRequest, CommentLike
 
 class AuthorAdmin(UserAdmin):
     model = Author
@@ -36,3 +36,7 @@ class PostAdmin(admin.ModelAdmin):
 admin.site.register(Author, AuthorAdmin)
 admin.site.register(Post, PostAdmin)
 admin.site.register(Follow)
+admin.site.register(Comment)
+admin.site.register(Like)
+admin.site.register(FollowRequest)
+admin.site.register(CommentLike)
