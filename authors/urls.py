@@ -12,7 +12,8 @@ from .views import (
 # Import new API views
 from .api_views import (
     InboxAPIView, FollowersAPIView, SingleFollowerAPIView, EntriesAPIView,
-    SingleEntryAPIView, CommentsAPIView, LikesAPIView, LikedAPIView, ImageEntryAPIView
+    SingleEntryAPIView, CommentsAPIView, LikesAPIView, LikedAPIView, ImageEntryAPIView,
+    CommentLikesAPIView
 )
 
 app_name = "authors"
@@ -71,9 +72,18 @@ urlpatterns = [
     # Comments API
     path("api/authors/<uuid:author_id>/entries/<uuid:entry_id>/comments", CommentsAPIView.as_view(), name="comments_api"),
     
+    # Single Comment by SERIAL (UUID)
+    path("api/authors/<uuid:author_id>/commented/<uuid:comment_id>", CommentsAPIView.as_view(), name="single_comment_api"),
+    
+    # Comment Likes API
+    path("api/authors/<uuid:author_id>/entries/<uuid:entry_id>/comments/<uuid:comment_id>/likes", CommentLikesAPIView.as_view(), name="comment_likes_api"),
+    
     # Likes API
     path("api/authors/<uuid:author_id>/entries/<uuid:entry_id>/likes", LikesAPIView.as_view(), name="entry_likes_api"),
     path("api/authors/<uuid:author_id>/liked", LikedAPIView.as_view(), name="liked_api"),
+    
+    # Single Like by SERIAL (UUID)
+    path("api/authors/<uuid:author_id>/liked/<uuid:like_id>", LikedAPIView.as_view(), name="single_like_api"),
     
     # ========== FQID Routes (for cross-node federation) ==========
     # Accept percent-encoded full URLs as parameters
@@ -88,6 +98,10 @@ urlpatterns = [
     # Comment with FQID in path
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comment/(?P<comment_fqid>.+)$', 
             CommentsAPIView.as_view(), name="remote_comment_api"),
+    
+    # Comment Likes with FQID
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments/(?P<comment_fqid>.+)/likes$', 
+            CommentLikesAPIView.as_view(), name="comment_fqid_likes_api"),
     
     # Commented API with FQID
     re_path(r'^api/authors/(?P<author_fqid>.+)/commented$', CommentsAPIView.as_view(), name="author_fqid_commented_api"),
