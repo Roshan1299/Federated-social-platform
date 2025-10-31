@@ -75,6 +75,31 @@ urlpatterns = [
     path("api/authors/<uuid:author_id>/entries/<uuid:entry_id>/likes", LikesAPIView.as_view(), name="entry_likes_api"),
     path("api/authors/<uuid:author_id>/liked", LikedAPIView.as_view(), name="liked_api"),
     
+    # ========== FQID Routes (for cross-node federation) ==========
+    # Accept percent-encoded full URLs as parameters
+    # NOTE: After UUID-based routes to avoid conflicts
+    
+    # Entries API with FQID
+    re_path(r'^api/entries/(?P<entry_fqid>.+)/image$', ImageEntryAPIView.as_view(), name="entry_fqid_image_api"),
+    re_path(r'^api/entries/(?P<entry_fqid>.+)/comments$', CommentsAPIView.as_view(), name="entry_fqid_comments_api"),
+    re_path(r'^api/entries/(?P<entry_fqid>.+)/likes$', LikesAPIView.as_view(), name="entry_fqid_likes_api"),
+    re_path(r'^api/entries/(?P<entry_fqid>.+)$', SingleEntryAPIView.as_view(), name="entry_fqid_api"),
+    
+    # Comment with FQID in path
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comment/(?P<comment_fqid>.+)$', 
+            CommentsAPIView.as_view(), name="remote_comment_api"),
+    
+    # Commented API with FQID
+    re_path(r'^api/authors/(?P<author_fqid>.+)/commented$', CommentsAPIView.as_view(), name="author_fqid_commented_api"),
+    re_path(r'^api/commented/(?P<comment_fqid>.+)$', CommentsAPIView.as_view(), name="comment_fqid_api"),
+    
+    # Liked API with FQID
+    re_path(r'^api/authors/(?P<author_fqid>.+)/liked$', LikedAPIView.as_view(), name="author_fqid_liked_api"),
+    re_path(r'^api/liked/(?P<like_fqid>.+)$', LikedAPIView.as_view(), name="like_fqid_api"),
+    
+    # Single Author API with FQID (remote nodes can query by full URL) - MUST BE LAST
+    re_path(r'^api/authors/(?P<author_fqid>.+)/$', AuthorAPIView.as_view(), name="author_fqid_api"),
+    
     # ========== Legacy API Routes (kept for backwards compatibility) ==========
     path("api/posts/<uuid:post_id>/", PostAPIView.as_view(), name="post_api"),
 ]
