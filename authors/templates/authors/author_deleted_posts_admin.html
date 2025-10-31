@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}
+Deleted posts by {{ author.displayName }}
+{% endblock %}
+
+{% block content %}
+<div class="admin-deleted-posts-page" style="max-width:900px; margin: 0 auto;">
+  
+  <h1 style="display:flex; align-items:center; gap:0.5rem; font-size:1.5rem; font-weight:600;">
+    🗑️ Deleted Posts
+    <span style="font-size:0.9rem; font-weight:400; color:#a00;">
+      (Admin view only)
+    </span>
+  </h1>
+
+  <p style="color:#555; margin-top:0.25rem; font-size:0.95rem;">
+    Author: <strong>{{ author.displayName }}</strong><br>
+    Author ID: <code style="font-size:0.8rem; background:#eee; padding:2px 4px; border-radius:4px;">{{ author.id }}</code>
+  </p>
+
+  <div style="margin-top:1rem;">
+    <a href="{% url 'authors:author_profile' author.id %}"
+       style="display:inline-block; background:#444; color:white; padding:6px 10px; border-radius:6px; text-decoration:none; font-size:0.9rem;">
+      ← Back to profile
+    </a>
+  </div>
+
+  <hr style="margin:1.5rem 0; border:0; border-top:1px solid #ccc;" />
+
+  {% if posts %}
+    <ul style="list-style:none; padding:0; margin:0;">
+      {% for post in posts %}
+        <li style="
+          border:1px solid #ccc;
+          border-radius:10px;
+          padding:1rem 1rem 0.75rem;
+          margin-bottom:1rem;
+          background:#fff8f8;
+        ">
+          <div style="display:flex; justify-content:space-between; flex-wrap:wrap; align-items:flex-start;">
+            <div style="max-width:75%;">
+              <h2 style="margin:0 0 .5rem 0; font-size:1.1rem; font-weight:600; color:#900;">
+                {{ post.title|default:"(no title)" }}
+              </h2>
+
+              <p style="margin:0 0 .5rem 0; font-size:0.9rem; color:#444;">
+                <strong>Visibility:</strong> {{ post.visibility }}<br>
+                <strong>Originally published:</strong>
+                  {{ post.published|date:"Y-m-d H:i" }} UTC<br>
+                <strong>Last updated:</strong>
+                  {{ post.updated|date:"Y-m-d H:i" }} UTC
+              </p>
+
+              {% if post.contentType == "text/markdown" %}
+                <div style="font-size:0.9rem; color:#222; background:#fff; border:1px solid #ddd; border-radius:6px; padding:0.75rem; max-height:200px; overflow:auto;">
+                  {{ post.content|linebreaksbr }}
+                </div>
+              {% else %}
+                <div style="font-size:0.9rem; color:#222; background:#fff; border:1px solid #ddd; border-radius:6px; padding:0.75rem; max-height:200px; overflow:auto;">
+                  {{ post.content|linebreaksbr }}
+                </div>
+              {% endif %}
+            </div>
+
+            <div style="text-align:right; font-size:0.8rem; color:#a00; font-weight:600;">
+              <div>DELETED</div>
+            </div>
+          </div>
+
+          {% if post.image %}
+            <div style="margin-top:0.75rem;">
+              <div style="font-size:0.8rem; color:#555; margin-bottom:0.25rem;">Attached image:</div>
+              <img src="{{ post.image.url }}"
+                   alt="post image"
+                   style="max-width:200px; max-height:200px; border:1px solid #aaa; border-radius:6px; object-fit:cover; background:#fff;" />
+            </div>
+          {% endif %}
+
+          <div style="margin-top:0.75rem; font-size:0.8rem; color:#666;">
+            Post ID:
+            <code style="background:#eee; padding:2px 4px; border-radius:4px;">{{ post.id }}</code>
+          </div>
+
+          <div style="margin-top:0.75rem; font-size:0.8rem;">
+            <a href="{% url 'authors:post_detail' post.id %}"
+               style="text-decoration:none; background:#900; color:white; padding:4px 8px; border-radius:6px; font-weight:600; display:inline-block;">
+              View full post detail
+            </a>
+            <div style="color:#a00; margin-top:0.5rem;">
+            </div>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div style="
+      background:#f5f5f5;
+      border:1px solid #ccc;
+      border-radius:8px;
+      padding:1rem;
+      text-align:center;
+      color:#555;
+      font-size:0.95rem;
+    ">
+      This author has no deleted posts.
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

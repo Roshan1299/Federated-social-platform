@@ -126,6 +126,8 @@ class AuthorProfileView(DetailView):
             context['has_pending_request'] = False
             context['is_friends'] = False
 
+        context["is_admin_viewing"] = user.is_authenticated and user.is_superuser
+
         return context
 
 '''
@@ -258,7 +260,7 @@ class PostDetailView(DetailView):
     def get(self, request, *args, **kwargs):
         post = self.get_object()
         # Don't allow access if post is deleted
-        if post.deleted:
+        if post.deleted and not (request.user.is_authenticated and request.user.is_superuser):
             return HttpResponse("Not Found", status=404)
         
         # Only allow if post is PUBLIC/PUBLIC_UNLISTED, user is the author, or user is following the author (for Friends Only)
@@ -304,9 +306,14 @@ class PostDetailView(DetailView):
         context['can_interact'] = user.is_authenticated and (
             post.visibility in ['PUBLIC', 'PUBLIC_UNLISTED'] or 
             (post.visibility == 'FRIENDS' and Follow.objects.filter(follower=user, following=post.author).exists()) or 
-            user == post.author
+            user == post.author or
+            user.is_superuser
         )
 
+        context["is_deleted_and_admin_viewing"] = (
+            post.deleted and user.is_authenticated and user.is_superuser
+        )
+        
         context["comment_form"] = CommentForm()
 
         comments = (
@@ -385,6 +392,27 @@ class AuthorPostsView(ListView):
         # Otherwise, show only public posts that aren't deleted
         else:
             return Post.objects.filter(author_id=author_id, visibility='PUBLIC', deleted=False).order_by('-published')
+        
+class AuthorDeletedPostsAdminView(LoginRequiredMixin, UserPassesTestMixin, ListView):
+    model = Post
+    template_name = "authors/author_deleted_posts_admin.html"
+    context_object_name = "posts"
+
+    def test_func(self):
+        # Only superusers (node admins) can access this page
+        return self.request.user.is_superuser
+
+    def get_queryset(self):
+        author_id = self.kwargs['author_id']
+        author = get_object_or_404(Author, id=author_id)
+        # show *only* deleted posts from that author
+        return Post.objects.filter(author=author, deleted=True).order_by('-updated')
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        # include which author we're inspecting
+        ctx["target_author"] = get_object_or_404(Author, id=self.kwargs['author_id'])
+        return ctx
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -400,8 +428,8 @@ class PostAPIView(View):
             return HttpResponse("Not Found", status=404)
         
         # Check visibility permissions before returning the post
-        if post.visibility == "FRIENDS" and request.user != post.author and not Follow.objects.filter(follower=request.user, following=post.author).exists():
-            return HttpResponse("Forbidden", status=403)
+        if post.deleted and not (request.user.is_authenticated and request.user.is_superuser):
+            return HttpResponse("Not Found", status=404)
         
         data = {
             "type": "post",

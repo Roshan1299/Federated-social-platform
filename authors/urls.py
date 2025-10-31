@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import SignUpView, redirect_to_profile, StreamRedirectView, AuthorProfileView, AuthorsListAPIView, AuthorAPIView, AuthorEditView, CreatePostView, PostDetailView, EditPostView, DeletePostView, AuthorPostsView, PostAPIView, AuthorStreamView, follow_author, cancel_follow_request, unfollow_author, FollowRequest, FollowRequestsView, approve_follow_request, deny_follow_request, toggle_like, PostLikesView, add_comment, toggle_comment_like, FollowersListView, FollowingListView
+from .views import SignUpView, redirect_to_profile, StreamRedirectView, AuthorProfileView, AuthorsListAPIView, AuthorAPIView, AuthorEditView, CreatePostView, PostDetailView, EditPostView, DeletePostView, AuthorPostsView, PostAPIView, AuthorStreamView, follow_author, cancel_follow_request, unfollow_author, FollowRequest, FollowRequestsView, approve_follow_request, deny_follow_request, toggle_like, PostLikesView, add_comment, toggle_comment_like, FollowersListView, FollowingListView, AuthorDeletedPostsAdminView
 
 app_name = "authors"
 urlpatterns = [
@@ -32,4 +32,6 @@ urlpatterns = [
     path("api/authors/<uuid:author_id>/", AuthorAPIView.as_view(), name="author_api"),
     path("api/authors/", AuthorsListAPIView.as_view(), name="authors_api"),
     path("api/posts/<uuid:post_id>/", PostAPIView.as_view(), name="post_api"),
+    path("authors/<uuid:author_id>/deleted_posts/",AuthorDeletedPostsAdminView.as_view(),name="author_deleted_posts_admin"
+    ),
 ]
