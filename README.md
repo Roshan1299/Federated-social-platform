@@ -19,6 +19,22 @@ See [the web page](https://uofa-cmput404.github.io/general/project.html) for a d
 
 Make a distributed social network!
 
+## Service URL
+
+**Production Node:** `https://dark-blue-t-6ce3d0bd82d3.herokuapp.com`
+
+### API Information
+- **Base API URL:** `https://dark-blue-t-6ce3d0bd82d3.herokuapp.com/api/`
+- **Authentication:** HTTP Basic Auth (username/password)
+- **API Documentation:** See [msc/API_ENDPOINTS.md](msc/API_ENDPOINTS.md) for complete API reference
+- **Implementation Summary:** See [msc/API_IMPLEMENTATION_SUMMARY.md](msc/API_IMPLEMENTATION_SUMMARY.md)
+
+### For Collaborators
+To connect with our node, you'll need:
+- Our service URL (above)
+- HTTP Basic Auth credentials (contact team for access)
+- Support for the inbox model (send objects to `/api/authors/{id}/inbox`)
+
 ## Running the Project Locally
 
 Follow these steps to set up and run the development server. It is recommended to run these commands within an activated virtual environment.
