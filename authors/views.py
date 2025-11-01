@@ -17,6 +17,8 @@ from django.contrib.auth.views import LoginView
 from django.contrib import messages
 from django.shortcuts import redirect
 from django.views.decorators.http import require_POST
+from django.utils.decorators import method_decorator
+from .authentication import http_basic_auth_or_session
 
 
 def render_post_content(post):
@@ -158,18 +160,32 @@ class AuthorEditView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
         success_url = reverse('authors:author_profile', kwargs={'author_id': user.id})
         return redirect(success_url)
     
+@method_decorator(http_basic_auth_or_session, name='dispatch')
 class AuthorAPIView(View):
-    def get(self, request, author_id):
-        author = Author.objects.get(id=author_id)
+    def get(self, request, author_id=None, author_fqid=None):
+        """Get author by UUID or FQID"""
+        identifier = author_fqid or author_id
+        
+        # Try UUID first
+        try:
+            author = Author.objects.get(id=identifier)
+        except (Author.DoesNotExist, ValueError, Exception):
+            # Fall back to FQID
+            try:
+                author = Author.objects.get(url=identifier)
+            except Author.DoesNotExist:
+                return JsonResponse({"error": "Author not found"}, status=404)
+        
         web_url = reverse('authors:author_profile', kwargs={'author_id': author.id})
+        author_id_url = author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/"
         data = {
             "type": "author",
-            "id": author.url, 
-            "host": author.host,
+            "id": author_id_url,
+            "host": author.host or f"{request.scheme}://{request.get_host()}",
             "displayName": author.displayName,
             "github": author.github,
-            "profileImage": author.profileImage.name,
-            "web": request.scheme + "://" + request.get_host() + web_url,
+            "profileImage": request.build_absolute_uri(author.profileImage.url) if author.profileImage else None,
+            "web": f"{request.scheme}://{request.get_host()}{web_url}",
         }
         return JsonResponse(data)
 
@@ -178,22 +194,25 @@ AuthorsListAPIView: returns a JSON list of all authors.
 Same format as AuthorAPIView but for multiple authors.
 GET requests only.
 '''
+@method_decorator(http_basic_auth_or_session, name='dispatch')
 class AuthorsListAPIView(View):
     def get(self, request):
         authors = Author.objects.all()
         authors_data = []
         for author in authors:
             web_url = reverse('authors:author_profile', kwargs={'author_id': author.id})
+            # Build full URL for id if not set
+            author_id_url = author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/"
             authors_data.append({
                 "type": "author",
-                "id": author.url,
-                "host": author.host,
+                "id": author_id_url,
+                "host": author.host or f"{request.scheme}://{request.get_host()}",
                 "displayName": author.displayName,
                 "github": author.github,
-                "profileImage": author.profileImage.name,
-                "web": request.scheme + "://" + request.get_host() + web_url,
+                "profileImage": request.build_absolute_uri(author.profileImage.url) if author.profileImage else None,
+                "web": f"{request.scheme}://{request.get_host()}{web_url}",
             })
-        return JsonResponse(authors_data, safe=False, json_dumps_params={'indent': 2}) # by default jsonresponse only accepts a dictionary
+        return JsonResponse(authors_data, safe=False, json_dumps_params={'indent': 2})
 
 
 class CreatePostView(CreateView):
