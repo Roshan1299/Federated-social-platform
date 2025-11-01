@@ -6,7 +6,7 @@ from .views import (
     AuthorStreamView, follow_author, cancel_follow_request, unfollow_author, 
     FollowRequest, FollowRequestsView, approve_follow_request, deny_follow_request, 
     toggle_like, PostLikesView, add_comment, toggle_comment_like, 
-    FollowersListView, FollowingListView
+    FollowersListView, FollowingListView, AuthorDeletedPostsAdminView
 )
 
 # Import new API views
@@ -33,6 +33,8 @@ urlpatterns = [
     path("authors/<uuid:author_id>/cancel_follow_request/", cancel_follow_request, name="cancel_follow_request"),
     path("authors/<uuid:author_id>/followers/", FollowersListView.as_view(), name="followers_list"),
     path("authors/<uuid:author_id>/following/", FollowingListView.as_view(), name="following_list"),
+    path("authors/<uuid:author_id>/deleted_posts/", AuthorDeletedPostsAdminView.as_view(), name="author_deleted_posts_admin"),
+
 
     path("authors/follow_request/<int:request_id>/approve/", approve_follow_request, name="approve_follow_request"),
     path("authors/follow_request/<int:request_id>/deny/", deny_follow_request, name="deny_follow_request"),
@@ -46,6 +48,7 @@ urlpatterns = [
     path("posts/<uuid:post_id>/comments/add/", add_comment, name="add_comment"),
     path("comments/<uuid:comment_id>/like/", toggle_comment_like, name="toggle_comment_like"),
     path("api/posts/<uuid:post_id>/likes/", PostLikesView.as_view(), name="post_likes_page"),
+    
 
     # ========== REST API Routes (JSON) ==========
     

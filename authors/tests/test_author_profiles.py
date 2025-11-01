@@ -69,7 +69,7 @@ class AuthorProfileTests(TestCase):
         self.client.login(username='testuser', password='testpass123')
         self.assertEqual(self.user.profileImage, None) # self.user shouldn't have a profile picture yet
 
-        with open('authors/tests/profile_image_tester.webp', 'rb') as img:
+        with open('/Users/bhuvan/CMPUT 404/project/f25-project-darkblue/authors/tests/profile_image_tester.webp', 'rb') as img:
             response = self.client.post(
                 reverse('authors:edit_profile', args=[self.user.id]),
                 {
@@ -125,7 +125,7 @@ class AuthorProfileTests(TestCase):
             author=self.other_user,
             title='Public Post',
             content='This is a public post.',
-            visibility='PUBLIC_UNLISTED',
+            visibility='PUBLIC',
         )
         private_post = Post.objects.create(
             author=self.other_user,
@@ -138,7 +138,6 @@ class AuthorProfileTests(TestCase):
             title='Unlisted Post',
             content='This is an unlisted post.',
             visibility='PUBLIC_UNLISTED',
-            
         )
 
         self.client.login(username='testuser', password='testpass123')
@@ -156,7 +155,7 @@ class AuthorProfileTests(TestCase):
             author=self.user,
             title='Public Post',
             content='This is a public post.',
-            visibility='PUBLIC_UNLISTED',
+            visibility='PUBLIC',
         )
         private_post = Post.objects.create(
             author=self.user,
@@ -169,7 +168,6 @@ class AuthorProfileTests(TestCase):
             title='Unlisted Post',
             content='This is an unlisted post.',
             visibility='PUBLIC_UNLISTED',
-            
         )
 
         self.client.login(username='testuser', password='testpass123')
@@ -187,7 +185,7 @@ class AuthorProfileTests(TestCase):
             author=self.other_user,
             title='Public Post',
             content='This is a public post.',
-            visibility='PUBLIC_UNLISTED',
+            visibility='PUBLIC',
         )
         private_post = Post.objects.create(
             author=self.other_user,
@@ -200,7 +198,6 @@ class AuthorProfileTests(TestCase):
             title='Unlisted Post',
             content='This is an unlisted post.',
             visibility='PUBLIC_UNLISTED',
-            
         )
 
         # Make testuser follow otheruser

@@ -29,7 +29,32 @@
             <p>{{ author.description }}</p>
           </div>
         {% endif %}
+
+        {% if is_admin_viewing %}
+          <div class="admin-tools" style="margin-top: 1rem;">
+            <a 
+              href="{% url 'authors:author_deleted_posts_admin' author_id=author.id %}" 
+              class="btn btn-danger admin-view-deleted-btn"
+              style="
+                background:#5c0000;
+                color:white;
+                font-weight:600;
+                border-radius:8px;
+                padding:8px 12px;
+                text-decoration:none;
+                display:inline-block;
+              "
+            >
+              🔒 Admin: View Deleted Posts
+            </a>
+            <p style="font-size:0.8rem; color:#a33; margin-top:6px;">
+              Only visible to admins. Shows posts this author deleted.
+            </p>
+          </div>
+        {% endif %}
       </div>
+
+      
       
       <div class="profile-actions">
           {% if user.is_authenticated and user.id != author.id %}

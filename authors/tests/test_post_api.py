@@ -39,7 +39,6 @@ class PostAPITests(TestCase):
         # Create a plain text post via POST request to create view
         response = self.client.post(reverse('authors:create_post'), {
             'title': 'API Test Post',
-            'description': 'Test post created via form',
             'content': 'This is content created via API-like request',
             'contentType': 'text/plain',
             'visibility': 'PUBLIC'
@@ -162,7 +161,6 @@ class PostAPITests(TestCase):
         # Create a post
         post = Post.objects.create(
             title='Structure Test Post',
-            description='Testing API structure',
             content='Test content',
             contentType='text/plain',
             visibility='PUBLIC',
@@ -175,7 +173,7 @@ class PostAPITests(TestCase):
         data = json.loads(response.content)
         
         # Verify all required fields from documentation are present
-        required_fields = ['type', 'id', 'author', 'title', 'description', 
+        required_fields = ['type', 'id', 'author', 'title', 
                           'content', 'contentType', 'visibility', 'published', 'updated']
         
         for field in required_fields:

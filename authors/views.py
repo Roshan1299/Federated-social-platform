@@ -93,11 +93,11 @@ class AuthorProfileView(DetailView):
             )
 
             if is_friend:
-                # Friends see both PUBLIC + FRIENDS (but NOT unlisted)
-                visibilities = ["PUBLIC", "FRIENDS"]
+                # Friends see both PUBLIC + FRIENDS and PUBLIC_UNLISTED
+                visibilities = ["PUBLIC", "FRIENDS", "PUBLIC_UNLISTED"]
             else:
-                # One-way followers only see PUBLIC posts
-                visibilities = ["PUBLIC"]
+                # One-way followers only see PUBLIC and PUBLIC_UNLISTED posts
+                visibilities = ["PUBLIC", "PUBLIC_UNLISTED"]
 
             context["posts"] = author.posts.filter(
                 visibility__in=visibilities,
@@ -127,6 +127,8 @@ class AuthorProfileView(DetailView):
             context['is_following'] = False
             context['has_pending_request'] = False
             context['is_friends'] = False
+
+        context["is_admin_viewing"] = user.is_authenticated and user.is_superuser
 
         return context
 
@@ -277,7 +279,7 @@ class PostDetailView(DetailView):
     def get(self, request, *args, **kwargs):
         post = self.get_object()
         # Don't allow access if post is deleted
-        if post.deleted:
+        if post.deleted and not (request.user.is_authenticated and request.user.is_superuser):
             return HttpResponse("Not Found", status=404)
         
         # Only allow if post is PUBLIC/PUBLIC_UNLISTED, user is the author, or user is following the author (for Friends Only)
@@ -311,22 +313,64 @@ class PostDetailView(DetailView):
         context['VISIBILITY_FRIENDS'] = "FRIENDS"
 
         user = self.request.user
+        author = post.author
+
+        # relationship checks
+        is_follower = user.is_authenticated and Follow.objects.filter(
+            follower=user, following=author
+        ).exists()
+        is_followed_back = user.is_authenticated and Follow.objects.filter(
+            follower=author, following=user
+        ).exists()
+        is_friend = is_follower and is_followed_back  # mutual follow
+
+        # who can like / interact (show buttons, form, etc)
+        can_interact = False
+        can_like = False
+
+        if user.is_authenticated:
+            if user == author or user.is_superuser:
+                can_interact = True
+                can_like = True
+            elif post.visibility == 'PUBLIC':
+                can_interact = True
+                can_like = True
+            elif post.visibility == 'PUBLIC_UNLISTED':
+                can_interact = True
+                can_like = True
+            elif post.visibility == 'FRIENDS':
+                if is_friend:
+                    can_interact = True
+                    can_like = True
+
+        context['can_like'] = can_like
         context['like_count'] = post.likes.count()
         context['liked_by_me'] = user.is_authenticated and post.likes.filter(author=user).exists()
-        context['can_like'] = user.is_authenticated and (
-            post.visibility in ['PUBLIC', 'PUBLIC_UNLISTED'] or 
-            (post.visibility == 'FRIENDS' and Follow.objects.filter(follower=user, following=post.author).exists()) or 
-            user == post.author
+        context['can_interact'] = can_interact
+
+        # expose if admin is viewing a deleted post
+        context["is_deleted_and_admin_viewing"] = (
+            post.deleted and user.is_authenticated and user.is_superuser
         )
 
-        user = self.request.user
-        context['can_interact'] = user.is_authenticated and (
-            post.visibility in ['PUBLIC', 'PUBLIC_UNLISTED'] or 
-            (post.visibility == 'FRIENDS' and Follow.objects.filter(follower=user, following=post.author).exists()) or 
-            user == post.author
-        )
+  
+        if user == author:
+            comments_qs = post.comments.all()
+        elif post.visibility == 'PUBLIC':
+            comments_qs = post.comments.all()
+        elif post.visibility == 'PUBLIC_UNLISTED':
+            if is_follower:
+                comments_qs = post.comments.all()
+            else:
+                comments_qs = post.comments.filter(author=user)
+        elif post.visibility == 'FRIENDS':
+            if is_friend:
+                comments_qs = post.comments.all()
+            else:
+                comments_qs = post.comments.filter(author=user)
+        else:
+            comments_qs = post.comments.filter(author=user)
 
-        context["comment_form"] = CommentForm()
 
         comments = (
             post.comments
@@ -404,6 +448,27 @@ class AuthorPostsView(ListView):
         # Otherwise, show only public posts that aren't deleted
         else:
             return Post.objects.filter(author_id=author_id, visibility='PUBLIC', deleted=False).order_by('-published')
+        
+class AuthorDeletedPostsAdminView(LoginRequiredMixin, UserPassesTestMixin, ListView):
+    model = Post
+    template_name = "authors/author_deleted_posts_admin.html"
+    context_object_name = "posts"
+
+    def test_func(self):
+        # Only superusers (node admins) can access this page
+        return self.request.user.is_superuser
+
+    def get_queryset(self):
+        author_id = self.kwargs['author_id']
+        author = get_object_or_404(Author, id=author_id)
+        # show *only* deleted posts from that author
+        return Post.objects.filter(author=author, deleted=True).order_by('-updated')
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        # include which author we're inspecting
+        ctx["target_author"] = get_object_or_404(Author, id=self.kwargs['author_id'])
+        return ctx
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -414,20 +479,31 @@ class AuthorPostsView(ListView):
 class PostAPIView(View):
     def get(self, request, post_id):
         post = get_object_or_404(Post, id=post_id)
+        
         # Don't return deleted posts
-        if post.deleted:
+        if post.deleted and not (request.user.is_authenticated and request.user.is_superuser):
             return HttpResponse("Not Found", status=404)
         
         # Check visibility permissions before returning the post
-        if post.visibility == "FRIENDS" and request.user != post.author and not Follow.objects.filter(follower=request.user, following=post.author).exists():
-            return HttpResponse("Forbidden", status=403)
-        
+        # Only allow if post is PUBLIC/PUBLIC_UNLISTED, user is the author, or user is following the author (for Friends Only)
+        if post.visibility == "FRIENDS" and request.user != post.author:
+            # Check if user is authenticated first
+            if not request.user.is_authenticated:
+                return HttpResponse("Forbidden", status=403)
+            
+            is_friend = (
+                Follow.objects.filter(follower=request.user, following=post.author).exists() and
+                Follow.objects.filter(follower=post.author, following=request.user).exists()
+            )
+            if not is_friend:
+                return HttpResponse("Forbidden", status=403)
+
         data = {
             "type": "post",
             "id": request.build_absolute_uri(reverse('authors:post_detail', kwargs={'post_id': post.id})),
             "author": {
                 "type": "author",
-                "id": post.author.url,
+                "id": post.author.url, 
                 "host": post.author.host,
                 "displayName": post.author.displayName,
                 "url": post.author.url,
@@ -435,15 +511,12 @@ class PostAPIView(View):
                 "profileImage": post.author.profileImage.name if post.author.profileImage else None,
             },
             "title": post.title,
-            "description": post.description,
             "contentType": post.contentType,
             "content": post.content,
             "visibility": post.visibility,
             "published": post.published.isoformat(),
             "updated": post.updated.isoformat(),
         }
-        
-        # Include image URL if the post has an image
         if post.image:
             data["image"] = request.build_absolute_uri(post.image.url)
         
@@ -461,27 +534,46 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         '''
         Returns posts for the author's stream:
-        - Public posts from all authors
+        - Public posts from all authors (anyone can see in stream)
         - Friends-only posts from mutual friends
         - All posts from the author themselves
+        - Public unlisted posts from followed authors (only in stream for followers)
         '''
         user = self.request.user
 
         # Get all mutual friends (both follow each other)
-        mutual_friends = Follow.objects.filter(
-            follower=user,
-            following__in=Follow.objects.filter(follower__in=[user]).values_list('follower', flat=True)
-        ).values_list('following', flat=True)
+        followed_by_user = Follow.objects.filter(follower=user).values_list('following', flat=True)
+        follows_user = Follow.objects.filter(following=user).values_list('follower', flat=True)
+        mutual_friends = followed_by_user.intersection(follows_user)
 
+        followed_authors = Follow.objects.filter(follower=user).values_list('following', flat=True)
+
+        # All public posts should appear in everyone's stream
         public_posts = Post.objects.filter(visibility='PUBLIC', deleted=False)
-        friends_posts = Post.objects.filter(
+
+        # Friends-only posts from mutual friends and the user's own friends-only posts
+        friends_posts_mutual = Post.objects.filter(
             visibility='FRIENDS',
             author__in=mutual_friends,
             deleted=False
         )
+        friends_posts_author = Post.objects.filter(
+            visibility='FRIENDS',
+            author=user,
+            deleted=False
+        )
+
+        # All posts from the author themselves (they should see their own posts regardless of visibility)
         my_posts = Post.objects.filter(author=user, deleted=False)
 
-        queryset = (public_posts | friends_posts | my_posts).distinct().order_by('-updated')
+        # Public unlisted posts from followed authors (excluding own posts to avoid duplication)
+        unlisted_posts_followed = Post.objects.filter(
+            visibility='PUBLIC_UNLISTED',
+            author__in=followed_authors,
+        ).exclude(author=user).filter(deleted=False)
+
+        # Combine all posts
+        queryset = (public_posts | friends_posts_mutual | friends_posts_author | my_posts | unlisted_posts_followed).distinct().order_by('-updated')
         return queryset
 
     def get_context_data(self, **kwargs):
@@ -759,21 +851,49 @@ class PostLikesView(LoginRequiredMixin, TemplateView):
 def add_comment(request, post_id):
     post = get_object_or_404(Post, id=post_id)
 
-    # allow commenting only if post is PUBLIC/PUBLIC_UNLISTED (anyone can comment), or is friends-only and user follows author/owns post
-    if post.visibility == 'FRIENDS' and post.author != request.user and not Follow.objects.filter(follower=request.user, following=post.author).exists():
+    viewer = request.user
+    author = post.author
+
+    # relationship checks
+    is_follower = Follow.objects.filter(follower=viewer, following=author).exists()
+    is_followed_back = Follow.objects.filter(follower=author, following=viewer).exists()
+    is_friend = is_follower and is_followed_back  # mutual follow
+
+    # decide if viewer is allowed to comment on this post
+    can_comment = False
+
+    if viewer == author:
+        # post owner can always comment
+        can_comment = True
+
+    elif post.visibility == 'PUBLIC':
+        # any logged-in user
+        can_comment = True
+
+    elif post.visibility == 'PUBLIC_UNLISTED':
+        # if you are logged in and you got here, you can comment
+        can_comment = True
+
+    elif post.visibility == 'FRIENDS':
+        # mutual follow only
+        if is_friend:
+            can_comment = True
+
+    if not can_comment:
         return HttpResponse("Forbidden", status=403)
-    # Process submitted comment form
-    form = CommentForm(request.POST)
-    if form.is_valid():
-        # Create and save comment
-        Comment.objects.create(
-            post=post,
-            author=request.user,
-            content=form.cleaned_data["content"]
-        )
-        messages.success(request, "Comment posted!")
-    else:
-        messages.error(request, "Could not post comment.")
+
+    # grab content directly from POST (not relying on form.is_valid())
+    content_text = request.POST.get("content", "").strip()
+    if not content_text:
+        messages.error(request, "Comment cannot be empty.")
+        return redirect('authors:post_detail', post_id=post.id)
+
+    Comment.objects.create(
+        post=post,
+        author=viewer,
+        content=content_text,
+    )
+    messages.success(request, "Comment posted!")
     return redirect('authors:post_detail', post_id=post.id)
 
 

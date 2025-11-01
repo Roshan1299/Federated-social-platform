@@ -247,12 +247,22 @@ curl -X POST http://127.0.0.1:8000/api/posts/ \
 
 ### Get a Single Post
 
-Retrieves the details of a single post by its ID.
+Retrieves the details of a single post by its ID with appropriate visibility-based access controls.
 
 *   **URL:** `/api/posts/{POST_ID}/`
 *   **Method:** `GET`
 *   **URL Params:**
     *   `POST_ID` (required): The UUID of the post to retrieve.
+*   **Access Controls:**
+    *   **PUBLIC posts:** Accessible to all users
+    *   **PUBLIC_UNLISTED posts:** Accessible to all users 
+    *   **FRIENDS posts:** Accessible only to the post author and mutual friends (both authors must follow each other)
+
+#### Example Request:
+
+```bash
+curl http://127.0.0.1:8000/api/posts/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/
+```
 
 #### Example Response: 
 *   **Code:** `200 OK`
@@ -279,6 +289,9 @@ Retrieves the details of a single post by its ID.
     "updated": "2023-01-01T00:00:00Z"
 }
 ```
+
+#### Example Response (Access Denied):
+*   **Code:** `403 Forbidden` - When trying to access a FRIENDS post without proper permissions
 
 #### Post Response Fields:
 
@@ -552,6 +565,33 @@ curl -X POST http://127.0.0.1:8000/comments/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
   "created_at": "2025-10-18T03:40:00Z"
 }
 ```
+
+## Security Features
+
+This application implements several security measures to protect user data and prevent common web vulnerabilities:
+
+### API Access Control
+- **Visibility-Based Access:** API endpoints respect post visibility settings:
+  - PUBLIC posts: Accessible to all users
+  - PUBLIC_UNLISTED posts: Accessible to all users
+  - FRIENDS posts: Accessible only to post author and mutual friends
+- **Authentication Requirements:** Sensitive endpoints require proper user authentication
+- **Authorization Checks:** Users can only modify their own content
+
+### CSRF Protection
+- All forms include CSRF tokens to prevent cross-site request forgery attacks
+- API endpoints follow Django's built-in CSRF protection mechanisms
+- Session-based authentication ensures only legitimate users can access protected resources
+
+### XSS Prevention
+- UI and API endpoints communicate through the same server domain
+- Proper input sanitization and output encoding for all user-generated content
+- Content Security Policy implemented via Django's security middleware
+
+### Distributed System Security
+- Local API endpoints properly validate cross-node requests
+- Visibility rules are enforced consistently across UI and API layers
+- Proper authentication for both local UI interactions and distributed node communications
 
 ## GitHub Activity Integration
 

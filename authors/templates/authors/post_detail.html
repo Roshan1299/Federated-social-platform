@@ -65,14 +65,26 @@
   <section class="comment-section">
     <h3>Comments ({{ comments|length }})</h3>
 
-    {% if user.is_authenticated and post.visibility == 'PUBLIC' or user.id == post.author.id %}
-      <form method="post" action="{% url 'authors:add_comment' post_id=post.id %}" class="comment-form">
+ {% if can_interact %}
+      <form method="post"
+            action="{% url 'authors:add_comment' post_id=post.id %}"
+            class="comment-form"
+            style="margin-bottom: 1rem;">
         {% csrf_token %}
-        {{ comment_form.content }}
-        <button type="submit" class="btn-primary">💬 Comment</button>
+
+        <textarea
+          name="content"
+          rows="3"
+          placeholder="Write a comment..."
+          required
+          style="width:100%; padding:0.5rem; border:1px solid #ccc; border-radius:6px; resize:vertical;"></textarea>
+
+        <button type="submit" class="btn-primary" style="margin-top:0.5rem;">
+          💬 Comment
+        </button>
       </form>
     {% else %}
-      <p><em>Log in to comment.</em></p>
+      <p><em>You cannot comment on this post.</em></p>
     {% endif %}
 
     {% if comments %}
