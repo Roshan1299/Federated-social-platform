@@ -897,3 +897,260 @@ class InboxAPIView(View):
             
         except Exception as e:
             return JsonResponse({'error': f'Failed to process comment: {str(e)}'}, status=400)
+
+
+@method_decorator(http_basic_auth_or_session, name='dispatch')
+class FollowersAPIView(View):
+    """
+    GET /api/authors/{AUTHOR_SERIAL}/followers
+    Returns a list of authors who follow the specified author
+    """
+    
+    def get(self, request, author_id):
+        """Get list of followers"""
+        author = get_object_or_404(Author, id=author_id)
+        
+        # Get all follower relationships
+        follower_relations = Follow.objects.filter(following=author)
+        
+        # Build items list
+        items = []
+        for follow in follower_relations:
+            items.append(build_author_dict(follow.follower, request))
+        
+        response_data = {
+            "type": "followers",
+            "items": items
+        }
+        
+        return JsonResponse(response_data)
+
+
+@method_decorator(http_basic_auth_or_session, name='dispatch')
+class SingleFollowerAPIView(View):
+    """
+    GET /api/authors/{AUTHOR_SERIAL}/followers/{FOREIGN_AUTHOR_ID}
+    Check if FOREIGN_AUTHOR is a follower of AUTHOR
+    Returns 404 if not a follower, 200 if they are
+    """
+    
+    def get(self, request, author_id, follower_id):
+        """Check if follower_id follows author_id"""
+        author = get_object_or_404(Author, id=author_id)
+        
+        # Try to decode the follower_id (it might be URL encoded)
+        # The follower_id could be a UUID or a full URL
+        try:
+            # First try as UUID
+            follower = Author.objects.get(id=follower_id)
+        except:
+            # Try as URL
+            follower = get_object_or_404(Author, url=follower_id)
+        
+        # Check if follow relationship exists
+        is_follower = Follow.objects.filter(follower=follower, following=author).exists()
+        
+        if is_follower:
+            return JsonResponse(build_author_dict(follower, request))
+        else:
+            return HttpResponse("Not Found", status=404)
+    
+    def delete(self, request, author_id, follower_id):
+        """Remove a follower"""
+        author = get_object_or_404(Author, id=author_id)
+        
+        try:
+            follower = Author.objects.get(id=follower_id)
+        except:
+            follower = get_object_or_404(Author, url=follower_id)
+        
+        # Delete the follow relationship
+        Follow.objects.filter(follower=follower, following=author).delete()
+        
+        return JsonResponse({'message': 'Follower removed'}, status=204)
+    
+    @method_decorator(csrf_exempt)
+    def put(self, request, author_id, follower_id):
+        """Add a follower (used when approving follow requests)"""
+        author = get_object_or_404(Author, id=author_id)
+        
+        try:
+            follower = Author.objects.get(id=follower_id)
+        except:
+            follower = get_object_or_404(Author, url=follower_id)
+        
+        # Create follow relationship
+        follow, created = Follow.objects.get_or_create(
+            follower=follower,
+            following=author
+        )
+        
+        return JsonResponse({'message': 'Follower added'}, status=201 if created else 200)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(http_basic_auth_or_session, name='dispatch')
+class EntriesAPIView(View):
+    """
+    GET /api/authors/{AUTHOR_SERIAL}/entries/
+    Returns recent posts by the author (paginated)
+    
+    POST /api/authors/{AUTHOR_SERIAL}/entries/
+    Create a new post for the author
+    """
+    
+    def get(self, request, author_id):
+        """Get paginated list of author's posts"""
+        author = get_object_or_404(Author, id=author_id)
+        
+        # Get page and size parameters
+        page_num = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('size', 10))
+        
+        # Get public posts (or all if viewing own profile)
+        if request.user.is_authenticated and request.user.id == author.id:
+            posts = Post.objects.filter(author=author, deleted=False).order_by('-published')
+        else:
+            posts = Post.objects.filter(author=author, visibility='PUBLIC', deleted=False).order_by('-published')
+        
+        # Paginate
+        paginator = Paginator(posts, page_size)
+        page_obj = paginator.get_page(page_num)
+        
+        # Build items list
+        items = [build_post_dict(post, request) for post in page_obj]
+        
+        response_data = {
+            "type": "posts",
+            "items": items,
+            "page": page_num,
+            "size": page_size,
+            "count": paginator.count
+        }
+        
+        return JsonResponse(response_data)
+    
+    @method_decorator(csrf_exempt)
+    def post(self, request, author_id):
+        """Create a new post"""
+        author = get_object_or_404(Author, id=author_id)
+        
+        try:
+            data = json.loads(request.body)
+            content_type = data.get('contentType', 'text/plain')
+            content = data.get('content', '')
+            
+            # Create the post
+            post = Post.objects.create(
+                author=author,
+                title=data.get('title', 'Untitled'),
+                content=content,
+                contentType=content_type,
+                visibility=data.get('visibility', 'PUBLIC'),
+                source=data.get('source'),
+                origin=data.get('origin'),
+            )
+            
+            # Handle base64 image data
+            if ';base64' in content_type and content:
+                try:
+                    # Decode the base64 image
+                    image_data = base64.b64decode(content)
+                    
+                    # Determine file extension
+                    ext = 'png'
+                    if 'jpeg' in content_type or 'jpg' in content_type:
+                        ext = 'jpg'
+                    elif 'gif' in content_type:
+                        ext = 'gif'
+                    
+                    # Save to image field
+                    from django.core.files.base import ContentFile
+                    filename = f"post_{post.id}.{ext}"
+                    post.image.save(filename, ContentFile(image_data), save=True)
+                except Exception as e:
+                    # If image decoding fails, continue without image
+                    pass
+            
+            return JsonResponse(build_post_dict(post, request), status=201)
+            
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(http_basic_auth_or_session, name='dispatch')
+class SingleEntryAPIView(View):
+    """
+    GET /api/authors/{AUTHOR_SERIAL}/entries/{ENTRY_SERIAL}
+    GET /api/entries/{ENTRY_FQID}
+    Get a single post/entry
+    
+    PUT /api/authors/{AUTHOR_SERIAL}/entries/{ENTRY_SERIAL}
+    Update a post/entry
+    
+    DELETE /api/authors/{AUTHOR_SERIAL}/entries/{ENTRY_SERIAL}
+    Delete a post/entry
+    """
+    
+    def get(self, request, author_id=None, entry_id=None, entry_fqid=None):
+        """Get a single post - handles both UUID and FQID"""
+        post = _get_post_by_id_or_fqid(entry_id=entry_id, entry_fqid=entry_fqid, author_id=author_id)
+        
+        # Check if deleted
+        if post.deleted:
+            return HttpResponse("Not Found", status=404)
+        
+        # Check visibility permissions
+        if post.visibility == "FRIENDS":
+            # Require authentication for friends-only posts
+            if not request.user.is_authenticated:
+                return HttpResponse("Forbidden", status=403)
+            
+            # Author can always see their own posts
+            # Use Django ORM comparison to ensure proper UUID handling
+            if request.user.pk != post.author.pk:
+                # Check if they are friends (mutual follows)
+                is_friend = (
+                    Follow.objects.filter(follower=request.user, following=post.author).exists() and
+                    Follow.objects.filter(follower=post.author, following=request.user).exists()
+                )
+                if not is_friend:
+                    return HttpResponse("Forbidden", status=403)
+        
+        return JsonResponse(build_post_dict(post, request))
+    
+    @method_decorator(csrf_exempt)
+    def put(self, request, author_id=None, entry_id=None, entry_fqid=None):
+        """Update a post"""
+        post = _get_post_by_id_or_fqid(entry_id=entry_id, entry_fqid=entry_fqid, author_id=author_id)
+        
+        try:
+            data = json.loads(request.body)
+            
+            # Update fields
+            post.title = data.get('title', post.title)
+            post.content = data.get('content', post.content)
+            post.contentType = data.get('contentType', post.contentType)
+            post.visibility = data.get('visibility', post.visibility)
+            post.save()
+            
+            return JsonResponse(build_post_dict(post, request))
+            
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    @method_decorator(csrf_exempt)
+    def delete(self, request, author_id=None, entry_id=None, entry_fqid=None):
+        """Delete a post (soft delete)"""
+        post = _get_post_by_id_or_fqid(entry_id=entry_id, entry_fqid=entry_fqid, author_id=author_id)
+        post.deleted = True
+        post.save()
+        
+        return JsonResponse({'message': 'Post deleted'}, status=204)
+
+
