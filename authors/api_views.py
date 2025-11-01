@@ -218,6 +218,7 @@ def build_comment_like_dict(comment_like, request):
 
 
 @method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(http_basic_auth_required, name='dispatch')
 class InboxAPIView(View):
     """
     POST /api/authors/{AUTHOR_SERIAL}/inbox
