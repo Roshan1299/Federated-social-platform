@@ -294,27 +294,64 @@ class PostDetailView(DetailView):
         context['VISIBILITY_FRIENDS'] = "FRIENDS"
 
         user = self.request.user
+        author = post.author
+
+        # relationship checks
+        is_follower = user.is_authenticated and Follow.objects.filter(
+            follower=user, following=author
+        ).exists()
+        is_followed_back = user.is_authenticated and Follow.objects.filter(
+            follower=author, following=user
+        ).exists()
+        is_friend = is_follower and is_followed_back  # mutual follow
+
+        # who can like / interact (show buttons, form, etc)
+        can_interact = False
+        can_like = False
+
+        if user.is_authenticated:
+            if user == author or user.is_superuser:
+                can_interact = True
+                can_like = True
+            elif post.visibility == 'PUBLIC':
+                can_interact = True
+                can_like = True
+            elif post.visibility == 'PUBLIC_UNLISTED':
+                can_interact = True
+                can_like = True
+            elif post.visibility == 'FRIENDS':
+                if is_friend:
+                    can_interact = True
+                    can_like = True
+
+        context['can_like'] = can_like
         context['like_count'] = post.likes.count()
         context['liked_by_me'] = user.is_authenticated and post.likes.filter(author=user).exists()
-        context['can_like'] = user.is_authenticated and (
-            post.visibility in ['PUBLIC', 'PUBLIC_UNLISTED'] or 
-            (post.visibility == 'FRIENDS' and Follow.objects.filter(follower=user, following=post.author).exists()) or 
-            user == post.author
-        )
+        context['can_interact'] = can_interact
 
-        user = self.request.user
-        context['can_interact'] = user.is_authenticated and (
-            post.visibility in ['PUBLIC', 'PUBLIC_UNLISTED'] or 
-            (post.visibility == 'FRIENDS' and Follow.objects.filter(follower=user, following=post.author).exists()) or 
-            user == post.author or
-            user.is_superuser
-        )
-
+        # expose if admin is viewing a deleted post
         context["is_deleted_and_admin_viewing"] = (
             post.deleted and user.is_authenticated and user.is_superuser
         )
-        
-        context["comment_form"] = CommentForm()
+
+  
+        if user == author:
+            comments_qs = post.comments.all()
+        elif post.visibility == 'PUBLIC':
+            comments_qs = post.comments.all()
+        elif post.visibility == 'PUBLIC_UNLISTED':
+            if is_follower:
+                comments_qs = post.comments.all()
+            else:
+                comments_qs = post.comments.filter(author=user)
+        elif post.visibility == 'FRIENDS':
+            if is_friend:
+                comments_qs = post.comments.all()
+            else:
+                comments_qs = post.comments.filter(author=user)
+        else:
+            comments_qs = post.comments.filter(author=user)
+
 
         comments = (
             post.comments
@@ -784,21 +821,49 @@ class PostLikesView(LoginRequiredMixin, TemplateView):
 def add_comment(request, post_id):
     post = get_object_or_404(Post, id=post_id)
 
-    # allow commenting only if post is PUBLIC/PUBLIC_UNLISTED (anyone can comment), or is friends-only and user follows author/owns post
-    if post.visibility == 'FRIENDS' and post.author != request.user and not Follow.objects.filter(follower=request.user, following=post.author).exists():
+    viewer = request.user
+    author = post.author
+
+    # relationship checks
+    is_follower = Follow.objects.filter(follower=viewer, following=author).exists()
+    is_followed_back = Follow.objects.filter(follower=author, following=viewer).exists()
+    is_friend = is_follower and is_followed_back  # mutual follow
+
+    # decide if viewer is allowed to comment on this post
+    can_comment = False
+
+    if viewer == author:
+        # post owner can always comment
+        can_comment = True
+
+    elif post.visibility == 'PUBLIC':
+        # any logged-in user
+        can_comment = True
+
+    elif post.visibility == 'PUBLIC_UNLISTED':
+        # if you are logged in and you got here, you can comment
+        can_comment = True
+
+    elif post.visibility == 'FRIENDS':
+        # mutual follow only
+        if is_friend:
+            can_comment = True
+
+    if not can_comment:
         return HttpResponse("Forbidden", status=403)
-    # Process submitted comment form
-    form = CommentForm(request.POST)
-    if form.is_valid():
-        # Create and save comment
-        Comment.objects.create(
-            post=post,
-            author=request.user,
-            content=form.cleaned_data["content"]
-        )
-        messages.success(request, "Comment posted!")
-    else:
-        messages.error(request, "Could not post comment.")
+
+    # grab content directly from POST (not relying on form.is_valid())
+    content_text = request.POST.get("content", "").strip()
+    if not content_text:
+        messages.error(request, "Comment cannot be empty.")
+        return redirect('authors:post_detail', post_id=post.id)
+
+    Comment.objects.create(
+        post=post,
+        author=viewer,
+        content=content_text,
+    )
+    messages.success(request, "Comment posted!")
     return redirect('authors:post_detail', post_id=post.id)
 
 
