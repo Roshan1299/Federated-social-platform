@@ -108,7 +108,7 @@ urlpatterns = [
     re_path(r'^api/commented/(?P<comment_fqid>.+)$', CommentsAPIView.as_view(), name="comment_fqid_api"),
     
     # Liked API with FQID
-    re_path(r'^api/authors/(?P<author_fqid>.+)/liked$', LikedAPIView.as_view(), name="author_fqid_liked_api"),
+    re_path(r'^api/authors/(?P<author_fqid>.+)/liked/?$', LikedAPIView.as_view(), name="author_fqid_liked_api"),
     re_path(r'^api/liked/(?P<like_fqid>.+)$', LikedAPIView.as_view(), name="like_fqid_api"),
     
     # Single Author API with FQID (remote nodes can query by full URL) - MUST BE LAST
