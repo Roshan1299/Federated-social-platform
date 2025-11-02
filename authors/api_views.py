@@ -138,6 +138,45 @@ def _get_like_by_id_or_fqid(like_id=None, like_fqid=None):
         raise Http404("Like identifier required")
 
 
+# ==================== Access Control Helper ====================
+
+def can_access_post(post, request):
+    """
+    Check if the requesting user can access a post based on visibility rules.
+    
+    Returns True if:
+    - Post is PUBLIC or PUBLIC_UNLISTED
+    - Post is FRIENDS and user is the author
+    - Post is FRIENDS and user is a mutual friend (both follow each other)
+    - User is authenticated locally (for local requests)
+    
+    For remote requests (detected by lack of local authentication):
+    - Only PUBLIC and PUBLIC_UNLISTED posts are accessible
+    """
+    # PUBLIC and PUBLIC_UNLISTED are always accessible
+    if post.visibility in ['PUBLIC', 'PUBLIC_UNLISTED']:
+        return True
+    
+    # FRIENDS posts require authentication
+    if post.visibility == 'FRIENDS':
+        # Not authenticated = remote request, FRIENDS posts not accessible
+        if not hasattr(request, 'user') or request.user is None or not request.user.is_authenticated:
+            return False
+        
+        # Author can always see their own posts
+        if request.user.pk == post.author.pk:
+            return True
+        
+        # Check if mutual friends
+        is_friend = (
+            Follow.objects.filter(follower=request.user, following=post.author).exists() and
+            Follow.objects.filter(follower=post.author, following=request.user).exists()
+        )
+        return is_friend
+    
+    return False
+
+
 # ==================== JSON Builder Functions ====================
 
 def build_author_dict(author, request):
@@ -843,18 +882,31 @@ class CommentsAPIView(View):
             # GET /api/authors/{AUTHOR_ID}/entries/{ENTRY_ID}/comment/{COMMENT_FQID}
             # GET /api/authors/{AUTHOR_SERIAL}/commented/{COMMENT_SERIAL}
             comment = _get_comment_by_id_or_fqid(comment_id=comment_id, comment_fqid=comment_fqid)
+            
+            # Check if user can access the post this comment is on
+            if not can_access_post(comment.post, request):
+                return HttpResponse("Forbidden", status=403)
+            
             return JsonResponse(build_comment_dict(comment, request))
         
         elif author_fqid or (author_id and not entry_id):
             # GET /api/authors/{AUTHOR_FQID}/commented
             # GET /api/authors/{AUTHOR_ID}/commented
             author = _get_author_by_id_or_fqid(author_fqid or author_id)
-            comments = Comment.objects.filter(author=author).order_by('-created_at')
+            all_comments = Comment.objects.filter(author=author).order_by('-created_at')
             
-            # Paginate
+            # Filter comments based on post visibility
+            # Local authenticated users can see comments on all posts (including FRIENDS)
+            # Remote users can only see comments on PUBLIC and PUBLIC_UNLISTED posts
+            filtered_comments = []
+            for comment in all_comments:
+                if can_access_post(comment.post, request):
+                    filtered_comments.append(comment)
+            
+            # Paginate the filtered comments
             page_num = int(request.GET.get('page', 1))
             page_size = int(request.GET.get('size', 10))
-            paginator = Paginator(comments, page_size)
+            paginator = Paginator(filtered_comments, page_size)
             page_obj = paginator.get_page(page_num)
             
             items = [build_comment_dict(comment, request) for comment in page_obj]
@@ -872,20 +924,9 @@ class CommentsAPIView(View):
             # GET /api/entries/{ENTRY_FQID}/comments
             post = _get_post_by_id_or_fqid(entry_id=entry_id, entry_fqid=entry_fqid, author_id=author_id)
             
-            # Check visibility - friends-only posts can only be viewed by author and friends
-            if post.visibility == 'FRIENDS':
-                if not request.user.is_authenticated:
-                    return HttpResponse("Forbidden", status=403)
-                
-                # Check if user is the author
-                if request.user.pk != post.author.pk:
-                    # Check if mutual friends
-                    is_friend = (
-                        Follow.objects.filter(follower=request.user, following=post.author).exists() and
-                        Follow.objects.filter(follower=post.author, following=request.user).exists()
-                    )
-                    if not is_friend:
-                        return HttpResponse("Forbidden", status=403)
+            # Check if user can access this post
+            if not can_access_post(post, request):
+                return HttpResponse("Forbidden", status=403)
             
             # Get page and size parameters
             page_num = int(request.GET.get('page', 1))
@@ -931,20 +972,9 @@ class LikesAPIView(View):
         """Get list of likes on a post - handles both UUID and FQID"""
         post = _get_post_by_id_or_fqid(entry_id=entry_id, entry_fqid=entry_fqid, author_id=author_id)
         
-        # Check visibility - friends-only posts can only be viewed by author and friends
-        if post.visibility == 'FRIENDS':
-            if not request.user.is_authenticated:
-                return HttpResponse("Forbidden", status=403)
-            
-            # Check if user is the author
-            if request.user.pk != post.author.pk:
-                # Check if mutual friends
-                is_friend = (
-                    Follow.objects.filter(follower=request.user, following=post.author).exists() and
-                    Follow.objects.filter(follower=post.author, following=request.user).exists()
-                )
-                if not is_friend:
-                    return HttpResponse("Forbidden", status=403)
+        # Check if user can access this post
+        if not can_access_post(post, request):
+            return HttpResponse("Forbidden", status=403)
         
         # Get all likes
         likes = Like.objects.filter(post=post).order_by('-created_at')
@@ -972,21 +1002,9 @@ class CommentLikesAPIView(View):
         # Get the comment
         comment = _get_comment_by_id_or_fqid(comment_id=comment_id, comment_fqid=comment_fqid)
         
-        # Check visibility of the parent post - friends-only posts can only be viewed by author and friends
-        post = comment.post
-        if post.visibility == 'FRIENDS':
-            if not request.user.is_authenticated:
-                return HttpResponse("Forbidden", status=403)
-            
-            # Check if user is the author
-            if request.user.pk != post.author.pk:
-                # Check if mutual friends
-                is_friend = (
-                    Follow.objects.filter(follower=request.user, following=post.author).exists() and
-                    Follow.objects.filter(follower=post.author, following=request.user).exists()
-                )
-                if not is_friend:
-                    return HttpResponse("Forbidden", status=403)
+        # Check if user can access the post this comment is on
+        if not can_access_post(comment.post, request):
+            return HttpResponse("Forbidden", status=403)
         
         # Get all comment likes
         comment_likes = CommentLike.objects.filter(comment=comment).order_by('-created_at')
@@ -1019,6 +1037,11 @@ class LikedAPIView(View):
             # GET /api/liked/{LIKE_FQID}
             # GET /api/authors/{AUTHOR_SERIAL}/liked/{LIKE_SERIAL}
             like = _get_like_by_id_or_fqid(like_id=like_id, like_fqid=like_fqid)
+            
+            # Check if user can access the post that was liked
+            if not can_access_post(like.post, request):
+                return HttpResponse("Forbidden", status=403)
+            
             return JsonResponse(build_like_dict(like, request))
         
         else:
@@ -1032,19 +1055,20 @@ class LikedAPIView(View):
             # Get all comment likes by this author
             comment_likes = CommentLike.objects.filter(author=author).order_by('-created_at')
             
-            # Build items list - combine both types of likes
+            # Build items list - combine both types of likes, filtering by post visibility
             items = []
             
-            # Add post likes
+            # Add post likes (only for posts the requester can access)
             for like in post_likes:
-                items.append(build_like_dict(like, request))
+                if can_access_post(like.post, request):
+                    items.append(build_like_dict(like, request))
             
-            # Add comment likes
+            # Add comment likes (only for comments on posts the requester can access)
             for comment_like in comment_likes:
-                items.append(build_comment_like_dict(comment_like, request))
+                if can_access_post(comment_like.comment.post, request):
+                    items.append(build_comment_like_dict(comment_like, request))
             
-            # Sort by created_at (most recent first)
-            # Since we can't easily sort across two querysets, we'll combine and sort the dicts
+            # Sort by published timestamp (most recent first)
             items.sort(key=lambda x: x.get('published', ''), reverse=True)
             
             response_data = {
@@ -1067,20 +1091,9 @@ class ImageEntryAPIView(View):
         """Get image from post - handles both UUID and FQID"""
         post = _get_post_by_id_or_fqid(entry_id=entry_id, entry_fqid=entry_fqid, author_id=author_id)
         
-        # Check visibility - friends-only posts can only be viewed by author and friends
-        if post.visibility == 'FRIENDS':
-            if not request.user.is_authenticated:
-                return HttpResponse("Forbidden", status=403)
-            
-            # Check if user is the author
-            if request.user.pk != post.author.pk:
-                # Check if mutual friends
-                is_friend = (
-                    Follow.objects.filter(follower=request.user, following=post.author).exists() and
-                    Follow.objects.filter(follower=post.author, following=request.user).exists()
-                )
-                if not is_friend:
-                    return HttpResponse("Forbidden", status=403)
+        # Check if user can access this post
+        if not can_access_post(post, request):
+            return HttpResponse("Forbidden", status=403)
         
         if not post.image:
             return HttpResponse("No image found", status=404)
