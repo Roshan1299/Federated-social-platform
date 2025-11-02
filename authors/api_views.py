@@ -195,7 +195,7 @@ def build_comment_dict(comment, request):
     """Helper function to build comment JSON object"""
     post = comment.post
     author = post.author
-    comment_url = f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/entries/{post.id}/comments/{comment.id}"
+    comment_url = f"{request.scheme}://{request.get_host()}/api/authors/{comment.author.id}/commented/{comment.id}"
     
     return {
         "type": "comment",
@@ -845,9 +845,10 @@ class CommentsAPIView(View):
             comment = _get_comment_by_id_or_fqid(comment_id=comment_id, comment_fqid=comment_fqid)
             return JsonResponse(build_comment_dict(comment, request))
         
-        elif author_fqid:
+        elif author_fqid or (author_id and not entry_id):
             # GET /api/authors/{AUTHOR_FQID}/commented
-            author = _get_author_by_id_or_fqid(author_fqid)
+            # GET /api/authors/{AUTHOR_ID}/commented
+            author = _get_author_by_id_or_fqid(author_fqid or author_id)
             comments = Comment.objects.filter(author=author).order_by('-created_at')
             
             # Paginate
