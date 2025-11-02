@@ -42,7 +42,7 @@ def http_basic_auth_required(view_func):
             auth_decoded = base64.b64decode(auth_string).decode('utf-8')
             username, password = auth_decoded.split(':', 1)
             
-            # Authenticate user
+            # Authenticate user (should be an Author in our system)
             user = authenticate(request, username=username, password=password)
             
             if user is None:

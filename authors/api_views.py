@@ -14,7 +14,7 @@ from django.urls import reverse
 from django.core.paginator import Paginator
 from django.db.models import Q
 from .models import Author, Post, Follow, FollowRequest, Like, Comment, CommentLike
-from .authentication import http_basic_auth_or_session
+from .authentication import http_basic_auth_or_session, http_basic_auth_required
 
 
 # ==================== Helper Functions for FQID Support ====================
@@ -616,10 +616,32 @@ class EntriesAPIView(View):
         page_num = int(request.GET.get('page', 1))
         page_size = int(request.GET.get('size', 10))
         
-        # Get public posts (or all if viewing own profile)
+        # Determine what posts the user can see based on authentication and relationship
         if request.user.is_authenticated and request.user.id == author.id:
+            # Authenticated as author: all entries
             posts = Post.objects.filter(author=author, deleted=False).order_by('-published')
+        elif request.user.is_authenticated:
+            # Check if authenticated user is a friend (mutual follow)
+            is_friend = (
+                Follow.objects.filter(follower=request.user, following=author).exists() and
+                Follow.objects.filter(follower=author, following=request.user).exists()
+            )
+            
+            if is_friend:
+                # Authenticated as friend: all entries
+                posts = Post.objects.filter(author=author, deleted=False).order_by('-published')
+            elif Follow.objects.filter(follower=request.user, following=author).exists():
+                # Authenticated as follower: public + unlisted
+                posts = Post.objects.filter(
+                    author=author, 
+                    deleted=False,
+                    visibility__in=['PUBLIC', 'PUBLIC_UNLISTED']
+                ).order_by('-published')
+            else:
+                # Authenticated but not following: only public
+                posts = Post.objects.filter(author=author, visibility='PUBLIC', deleted=False).order_by('-published')
         else:
+            # Not authenticated: only public entries
             posts = Post.objects.filter(author=author, visibility='PUBLIC', deleted=False).order_by('-published')
         
         # Paginate
@@ -643,6 +665,10 @@ class EntriesAPIView(View):
     def post(self, request, author_id):
         """Create a new post"""
         author = get_object_or_404(Author, id=author_id)
+        
+        # Check that authenticated user is the author
+        if not request.user.is_authenticated or request.user.id != author.id:
+            return HttpResponse("Forbidden", status=403)
         
         try:
             data = json.loads(request.body)
@@ -736,6 +762,10 @@ class SingleEntryAPIView(View):
         """Update a post"""
         post = _get_post_by_id_or_fqid(entry_id=entry_id, entry_fqid=entry_fqid, author_id=author_id)
         
+        # Check that authenticated user is the author
+        if not request.user.is_authenticated or request.user.pk != post.author.pk:
+            return HttpResponse("Forbidden", status=403)
+        
         try:
             data = json.loads(request.body)
             
@@ -757,6 +787,11 @@ class SingleEntryAPIView(View):
     def delete(self, request, author_id=None, entry_id=None, entry_fqid=None):
         """Delete a post (soft delete)"""
         post = _get_post_by_id_or_fqid(entry_id=entry_id, entry_fqid=entry_fqid, author_id=author_id)
+        
+        # Check that authenticated user is the author
+        if not request.user.is_authenticated or request.user.pk != post.author.pk:
+            return HttpResponse("Forbidden", status=403)
+        
         post.deleted = True
         post.save()
         
@@ -814,6 +849,21 @@ class CommentsAPIView(View):
             # GET /api/entries/{ENTRY_FQID}/comments
             post = _get_post_by_id_or_fqid(entry_id=entry_id, entry_fqid=entry_fqid, author_id=author_id)
             
+            # Check visibility - friends-only posts can only be viewed by author and friends
+            if post.visibility == 'FRIENDS':
+                if not request.user.is_authenticated:
+                    return HttpResponse("Forbidden", status=403)
+                
+                # Check if user is the author
+                if request.user.pk != post.author.pk:
+                    # Check if mutual friends
+                    is_friend = (
+                        Follow.objects.filter(follower=request.user, following=post.author).exists() and
+                        Follow.objects.filter(follower=post.author, following=request.user).exists()
+                    )
+                    if not is_friend:
+                        return HttpResponse("Forbidden", status=403)
+            
             # Get page and size parameters
             page_num = int(request.GET.get('page', 1))
             page_size = int(request.GET.get('size', 5))
@@ -858,6 +908,21 @@ class LikesAPIView(View):
         """Get list of likes on a post - handles both UUID and FQID"""
         post = _get_post_by_id_or_fqid(entry_id=entry_id, entry_fqid=entry_fqid, author_id=author_id)
         
+        # Check visibility - friends-only posts can only be viewed by author and friends
+        if post.visibility == 'FRIENDS':
+            if not request.user.is_authenticated:
+                return HttpResponse("Forbidden", status=403)
+            
+            # Check if user is the author
+            if request.user.pk != post.author.pk:
+                # Check if mutual friends
+                is_friend = (
+                    Follow.objects.filter(follower=request.user, following=post.author).exists() and
+                    Follow.objects.filter(follower=post.author, following=request.user).exists()
+                )
+                if not is_friend:
+                    return HttpResponse("Forbidden", status=403)
+        
         # Get all likes
         likes = Like.objects.filter(post=post).order_by('-created_at')
         
@@ -883,6 +948,22 @@ class CommentLikesAPIView(View):
         """Get list of likes on a comment - handles both UUID and FQID"""
         # Get the comment
         comment = _get_comment_by_id_or_fqid(comment_id=comment_id, comment_fqid=comment_fqid)
+        
+        # Check visibility of the parent post - friends-only posts can only be viewed by author and friends
+        post = comment.post
+        if post.visibility == 'FRIENDS':
+            if not request.user.is_authenticated:
+                return HttpResponse("Forbidden", status=403)
+            
+            # Check if user is the author
+            if request.user.pk != post.author.pk:
+                # Check if mutual friends
+                is_friend = (
+                    Follow.objects.filter(follower=request.user, following=post.author).exists() and
+                    Follow.objects.filter(follower=post.author, following=request.user).exists()
+                )
+                if not is_friend:
+                    return HttpResponse("Forbidden", status=403)
         
         # Get all comment likes
         comment_likes = CommentLike.objects.filter(comment=comment).order_by('-created_at')
@@ -962,6 +1043,21 @@ class ImageEntryAPIView(View):
     def get(self, request, author_id=None, entry_id=None, entry_fqid=None):
         """Get image from post - handles both UUID and FQID"""
         post = _get_post_by_id_or_fqid(entry_id=entry_id, entry_fqid=entry_fqid, author_id=author_id)
+        
+        # Check visibility - friends-only posts can only be viewed by author and friends
+        if post.visibility == 'FRIENDS':
+            if not request.user.is_authenticated:
+                return HttpResponse("Forbidden", status=403)
+            
+            # Check if user is the author
+            if request.user.pk != post.author.pk:
+                # Check if mutual friends
+                is_friend = (
+                    Follow.objects.filter(follower=request.user, following=post.author).exists() and
+                    Follow.objects.filter(follower=post.author, following=request.user).exists()
+                )
+                if not is_friend:
+                    return HttpResponse("Forbidden", status=403)
         
         if not post.image:
             return HttpResponse("No image found", status=404)
