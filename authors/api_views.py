@@ -16,41 +16,63 @@ from django.db.models import Q
 from .models import Author, Post, Follow, FollowRequest, Like, Comment, CommentLike
 from .authentication import http_basic_auth_or_session, http_basic_auth_required
 
-
 # ==================== Helper Functions for FQID Support ====================
 
 def _get_author_by_id_or_fqid(identifier):
     """Get author by UUID or FQID (full URL)"""
     if not identifier:
         return None
+    
+    # Normalize trailing slashes
+    identifier_normalized = identifier.rstrip('/') if isinstance(identifier, str) else identifier
+    
+    # Try UUID first (only if it looks like a UUID)
     try:
-        # Try UUID first
-        return Author.objects.get(id=identifier)
+        # Check if it could be a UUID (doesn't contain :// which indicates a URL)
+        if '://' not in str(identifier):
+            return Author.objects.get(id=identifier)
     except (Author.DoesNotExist, ValueError):
-        # Fall back to FQID (full URL)
-        return get_object_or_404(Author, url=identifier)
+        pass
+    
+    # Fall back to FQID (full URL) - try both with and without trailing slash
+    try:
+        return Author.objects.get(url=identifier_normalized)
+    except Author.DoesNotExist:
+        try:
+            return Author.objects.get(url=identifier_normalized + '/')
+        except Author.DoesNotExist:
+            raise Http404("Author not found")
 
 
 def _get_post_by_id_or_fqid(entry_id=None, entry_fqid=None, author_id=None):
     """Get post by UUID or FQID (full URL)"""
     if entry_fqid:
         # Try to find by FQID
+        # Normalize by stripping trailing slashes for comparison
+        entry_fqid_normalized = entry_fqid.rstrip('/')
+        
         try:
             # Try by origin field first
-            return Post.objects.get(origin=entry_fqid)
+            return Post.objects.get(origin=entry_fqid_normalized)
         except Post.DoesNotExist:
             try:
                 # Try by source field
-                return Post.objects.get(source=entry_fqid)
+                return Post.objects.get(source=entry_fqid_normalized)
             except Post.DoesNotExist:
                 # Try parsing the FQID to extract UUID
-                parts = entry_fqid.split('/')
+                parts = entry_fqid_normalized.split('/')
                 if len(parts) >= 2:
                     potential_uuid = parts[-1]
-                    try:
-                        return Post.objects.get(id=potential_uuid)
-                    except (Post.DoesNotExist, ValueError):
-                        pass
+                    if potential_uuid:  # Make sure it's not empty
+                        try:
+                            return Post.objects.get(id=potential_uuid)
+                        except (Post.DoesNotExist, ValueError):
+                            pass
+                # Also try using entry_fqid directly as UUID (fallback for plain UUIDs)
+                try:
+                    return Post.objects.get(id=entry_fqid_normalized)
+                except (Post.DoesNotExist, ValueError):
+                    pass
                 raise Http404("Post not found")
     elif entry_id:
         # Use UUID
@@ -437,9 +459,9 @@ class InboxAPIView(View):
                 }
             )
             
-            # Extract post ID - can be from comment's id field OR entry field
+            # Extract post ID - can be from comment's id field OR entry/post/object field
             comment_id_url = data.get('id', '')
-            entry_url = data.get('entry', data.get('object', ''))
+            entry_url = data.get('entry', data.get('post', data.get('object', '')))
             
             # Try to extract from id field first (format: .../authors/{id}/entries/{post_id}/comments/{comment_id})
             if comment_id_url:
