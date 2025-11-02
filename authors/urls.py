@@ -51,42 +51,45 @@ urlpatterns = [
     
 
     # ========== REST API Routes (JSON) ==========
+    # Note: Trailing slashes are optional for API endpoints
     
     # Authors API
     path("api/authors/", AuthorsListAPIView.as_view(), name="authors_api"),
     path("api/authors/<uuid:author_id>/", AuthorAPIView.as_view(), name="author_api"),
 
     # Inbox API (important)
-    path("api/authors/<uuid:author_id>/inbox", InboxAPIView.as_view(), name="inbox_api"),
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/inbox/?$', InboxAPIView.as_view(), name="inbox_api"),
     
     # Followers API
-    path("api/authors/<uuid:author_id>/followers", FollowersAPIView.as_view(), name="followers_api"),
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/followers/?$', FollowersAPIView.as_view(), name="followers_api"),
     # to support FQID in addition to UUID
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/followers/(?P<follower_id>.+)$', 
             SingleFollowerAPIView.as_view(), name="single_follower_api"),
     
     # Entries/Posts API 
+    # List/create endpoint
     path("api/authors/<uuid:author_id>/entries/", EntriesAPIView.as_view(), name="entries_api"),
-    path("api/authors/<uuid:author_id>/entries/<uuid:entry_id>", SingleEntryAPIView.as_view(), name="single_entry_api"),
+    # Single entry
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/?$', SingleEntryAPIView.as_view(), name="single_entry_api"),
     
     # Image Entry API
-    path("api/authors/<uuid:author_id>/entries/<uuid:entry_id>/image", ImageEntryAPIView.as_view(), name="image_entry_api"),
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/image/?$', ImageEntryAPIView.as_view(), name="image_entry_api"),
     
     # Comments API
-    path("api/authors/<uuid:author_id>/entries/<uuid:entry_id>/comments", CommentsAPIView.as_view(), name="comments_api"),
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments/?$', CommentsAPIView.as_view(), name="comments_api"),
     
     # Single Comment by SERIAL (UUID)
-    path("api/authors/<uuid:author_id>/commented/<uuid:comment_id>", CommentsAPIView.as_view(), name="single_comment_api"),
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/commented/(?P<comment_id>[0-9a-f-]+)/?$', CommentsAPIView.as_view(), name="single_comment_api"),
     
     # Comment Likes API
-    path("api/authors/<uuid:author_id>/entries/<uuid:entry_id>/comments/<uuid:comment_id>/likes", CommentLikesAPIView.as_view(), name="comment_likes_api"),
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments/(?P<comment_id>[0-9a-f-]+)/likes/?$', CommentLikesAPIView.as_view(), name="comment_likes_api"),
     
     # Likes API
-    path("api/authors/<uuid:author_id>/entries/<uuid:entry_id>/likes", LikesAPIView.as_view(), name="entry_likes_api"),
-    path("api/authors/<uuid:author_id>/liked", LikedAPIView.as_view(), name="liked_api"),
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/likes/?$', LikesAPIView.as_view(), name="entry_likes_api"),
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/liked/?$', LikedAPIView.as_view(), name="liked_api"),
     
     # Single Like by SERIAL (UUID)
-    path("api/authors/<uuid:author_id>/liked/<uuid:like_id>", LikedAPIView.as_view(), name="single_like_api"),
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/liked/(?P<like_id>[0-9a-f-]+)/?$', LikedAPIView.as_view(), name="single_like_api"),
     
     # ========== FQID Routes (for cross-node federation) ==========
     # Accept percent-encoded full URLs as parameters
