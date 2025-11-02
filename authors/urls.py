@@ -78,6 +78,9 @@ urlpatterns = [
     # Comments API
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments/?$', CommentsAPIView.as_view(), name="comments_api"),
     
+    # Commented API - List of comments by author (UUID)
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/commented/?$', CommentsAPIView.as_view(), name="commented_api"),
+    
     # Single Comment by SERIAL (UUID)
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/commented/(?P<comment_id>[0-9a-f-]+)/?$', CommentsAPIView.as_view(), name="single_comment_api"),
     
