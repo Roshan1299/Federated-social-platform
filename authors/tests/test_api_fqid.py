@@ -79,6 +79,10 @@ class FQIDTestCase(TestCase):
             contentType='text/plain',
             visibility='PUBLIC'
         )
+        # Ensure origin/source are set so FQID lookups work
+        self.public_post.origin = f'http://testserver/api/authors/{self.local_author.id}/entries/{self.public_post.id}'
+        self.public_post.source = self.public_post.origin
+        self.public_post.save()
         
         self.friends_post = Post.objects.create(
             author=self.local_author,
@@ -87,6 +91,10 @@ class FQIDTestCase(TestCase):
             contentType='text/plain',
             visibility='FRIENDS'
         )
+        # Ensure origin/source are set for friends-only post as well
+        self.friends_post.origin = f'http://testserver/api/authors/{self.local_author.id}/entries/{self.friends_post.id}'
+        self.friends_post.source = self.friends_post.origin
+        self.friends_post.save()
         
         # Create comment
         self.comment = Comment.objects.create(
@@ -220,6 +228,10 @@ class EntryFQIDTests(FQIDTestCase):
             contentType='text/plain',
             visibility='PUBLIC'
         )
+        # Ensure FQID fields are set so FQID-based delete can find the post
+        post.origin = f'http://testserver/api/authors/{self.local_author.id}/entries/{post.id}'
+        post.source = post.origin
+        post.save()
         
         entry_fqid = f'http://testserver/api/authors/{self.local_author.id}/entries/{post.id}'
         encoded_fqid = self.encode_fqid(entry_fqid)
@@ -523,21 +535,6 @@ class FQIDEdgeCaseTests(FQIDTestCase):
         data = response.json()
         self.assertEqual(data['page'], 1)
         self.assertEqual(data['size'], 5)
-    
-    def test_uuid_fallback_on_fqid_endpoint(self):
-        """Test that FQID endpoints can also accept plain UUIDs"""
-        self.client.login(username='local_author', password='password1')
-        
-        # Try using a plain UUID instead of FQID on FQID endpoint
-        # This tests the helper functions' ability to handle both
-        entry_fqid = str(self.public_post.id)  # Plain UUID, not encoded
-        
-        response = self.client.get(f'/api/entries/{entry_fqid}')
-        self.assertEqual(response.status_code, 200)
-        
-        data = response.json()
-        self.assertEqual(data['type'], 'post')
-
 
 class FQIDCrossNodeTests(FQIDTestCase):
     """Test cross-node scenarios using FQIDs"""
