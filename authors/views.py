@@ -19,6 +19,8 @@ from django.shortcuts import redirect
 from django.views.decorators.http import require_POST
 from django.utils.decorators import method_decorator
 from .authentication import http_basic_auth_or_session
+from django.http import HttpResponse, Http404
+from .models import Image
 
 
 def render_post_content(post):
@@ -924,3 +926,25 @@ def toggle_comment_like(request, comment_id):
         messages.success(request, "Liked comment.")
 
     return redirect('authors:post_detail', post_id=post.id)
+
+def upload_image(request):
+    if request.method == 'POST' and request.FILES.get('image'):
+        img_file = request.FILES['image']
+        image = Image.objects.create(
+            file_name=img_file.name,
+            content_type=img_file.content_type,
+            data=img_file.read()
+        )
+        messages.success(request, f"Image uploaded successfully! ID: {image.id}")
+        return redirect('authors:serve_image', image_id=image.id)
+    return render(request, 'authors/upload_image.html')
+
+def serve_image(request, image_id):
+    try:
+        img = Image.objects.get(pk=image_id)
+    except Image.DoesNotExist:
+        raise Http404("Image not found")
+
+    response = HttpResponse(img.data, content_type=img.content_type)
+    response['Content-Disposition'] = f'inline; filename={img.file_name}'
+    return response

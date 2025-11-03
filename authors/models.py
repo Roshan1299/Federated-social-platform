@@ -13,7 +13,15 @@ class Author(AbstractUser):
     profileImage = models.ImageField(blank=True, null=True, upload_to="user_images/") # Store images in media/user_images/
     last_github_event_id = models.CharField(max_length=255, blank=True, null=True)
 
+class Image(models.Model):
+    id = models.AutoField(primary_key=True)
+    file_name = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=50)
+    data = models.BinaryField()
 
+    def __str__(self):
+        return self.file_name
+    
 class Post(models.Model):
     CONTENT_TYPE_CHOICES = [
         ('text/plain', 'Plain Text'),
@@ -49,6 +57,7 @@ class Post(models.Model):
     image = models.ImageField(upload_to="post_images/", blank=True, null=True)
     # Track if the post is deleted
     deleted = models.BooleanField(default=False)
+    image = models.ForeignKey(Image, on_delete=models.SET_NULL, null=True, blank=True)
     
     def __str__(self):
         return f"{self.title} by {self.author.displayName}"
@@ -124,3 +133,4 @@ class CommentLike(models.Model):
 
     def __str__(self):
         return f"{self.author.displayName} likes a comment on {self.comment.post.title}"
+    

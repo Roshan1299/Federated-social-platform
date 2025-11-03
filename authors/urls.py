@@ -1,4 +1,5 @@
 from django.urls import path, re_path
+from . import views
 from .views import (
     SignUpView, redirect_to_profile, StreamRedirectView, AuthorProfileView, 
     AuthorsListAPIView, AuthorAPIView, AuthorEditView, CreatePostView, 
@@ -125,4 +126,6 @@ urlpatterns = [
     
     # ========== Legacy API Routes (kept for backwards compatibility) ==========
     path("api/posts/<uuid:post_id>/", PostAPIView.as_view(), name="post_api"),
+    path('upload_image/', views.upload_image, name='upload_image'),
+    path('image/<int:image_id>/', views.serve_image, name='serve_image'),
 ]
