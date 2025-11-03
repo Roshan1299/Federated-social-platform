@@ -800,11 +800,24 @@ def redirect_to_profile(request):
 def toggle_like(request, post_id):
     # Get the post by ID, or show 404 if not found
     post = get_object_or_404(Post, id=post_id)
-    can_like = (
-        post.visibility in ['PUBLIC', 'PUBLIC_UNLISTED'] or 
-        (post.visibility == 'FRIENDS' and Follow.objects.filter(follower=request.user, following=post.author).exists()) or
-        request.user == post.author
-    )
+    viewer = request.user
+    author = post.author
+
+    is_follower = Follow.objects.filter(follower=viewer, following=author).exists()
+    is_followed_back = Follow.objects.filter(follower=author, following=viewer).exists()
+    is_friend = is_follower and is_followed_back
+    has_link = bool(request.session.get(f"unlisted_access_{post.id}", False))
+
+    can_like = False
+    if viewer == author or viewer.is_superuser:
+        can_like = True
+    elif post.visibility == 'PUBLIC':
+        can_like = True
+    elif post.visibility == 'PUBLIC_UNLISTED':
+        can_like = is_follower or has_link
+    elif post.visibility == 'FRIENDS':
+        can_like = is_friend
+
     if not can_like:
         return HttpResponse("Forbidden", status=403)
 
@@ -832,11 +845,20 @@ class PostLikesView(LoginRequiredMixin, TemplateView):
         ctx = super().get_context_data(**kwargs)
         post = get_object_or_404(Post, id=self.kwargs["post_id"])
 
-        # Permission check
-        is_owner = self.request.user == post.author
-        is_follower = Follow.objects.filter(follower=self.request.user, following=post.author).exists()
-        # Allow viewing likes only if post is public, is friends-only and user follows author, or owned by current user
-        if (post.visibility == 'FRIENDS' and not is_follower and not is_owner) or (post.visibility not in ['PUBLIC', 'PUBLIC_UNLISTED'] and not is_owner):
+        user = self.request.user
+        is_owner = user == post.author
+        is_follower = Follow.objects.filter(follower=user, following=post.author).exists()
+        is_followed_back = Follow.objects.filter(follower=post.author, following=user).exists()
+        is_friend = is_follower and is_followed_back
+        has_link = bool(self.request.session.get(f"unlisted_access_{post.id}", False))
+
+        # FRIENDS: only owner or mutual friends can view likes
+        if post.visibility == 'FRIENDS' and not (is_owner or is_friend):
+            ctx["error"] = "You don't have permission to view likes for this post."
+            return ctx
+
+        # UNLISTED: owner or follower or has_link (session)
+        if post.visibility == 'PUBLIC_UNLISTED' and not (is_owner or is_follower or has_link):
             ctx["error"] = "You don't have permission to view likes for this post."
             return ctx
 
