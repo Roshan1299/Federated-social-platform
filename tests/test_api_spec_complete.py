@@ -351,7 +351,8 @@ class APISpecTester:
                 )
         
         return passed
-    
+
+
     # ==================== INBOX API TESTS ====================
     
     def test_inbox_follow_request(self):
@@ -1302,7 +1303,7 @@ class APISpecTester:
         
         # Followers API tests
         self.test_followers_api()
-        
+
         # Inbox API tests
         self.test_inbox_follow_request()
         self.test_inbox_post()
