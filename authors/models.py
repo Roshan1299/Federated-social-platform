@@ -57,7 +57,7 @@ class Post(models.Model):
     image = models.ImageField(upload_to="post_images/", blank=True, null=True)
     # Track if the post is deleted
     deleted = models.BooleanField(default=False)
-    image = models.ForeignKey(Image, on_delete=models.SET_NULL, null=True, blank=True)
+    # image = models.ForeignKey(Image, on_delete=models.SET_NULL, null=True, blank=True)
     
     def __str__(self):
         return f"{self.title} by {self.author.displayName}"
