@@ -45,41 +45,39 @@ def _get_author_by_id_or_fqid(identifier):
 
 
 def _get_post_by_id_or_fqid(entry_id=None, entry_fqid=None, author_id=None):
-    """Get post by UUID or FQID (full URL)"""
+    """
+    Get post by UUID or FQID (full URL).
+    
+    IMPORTANT: When entry_fqid is provided, ONLY match against source/origin fields.
+    
+    """
     if entry_fqid:
-        # Try to find by FQID
+        # FQID lookup - ONLY match against source/origin fields
         # Normalize by stripping trailing slashes for comparison
         entry_fqid_normalized = entry_fqid.rstrip('/')
         
+        # Also try with trailing slash in case it's stored that way
+        entry_fqid_with_slash = entry_fqid_normalized + '/'
+        
         try:
-            # Try by origin field first
-            return Post.objects.get(origin=entry_fqid_normalized)
+            # Try by origin field first (with and without trailing slash)
+            return Post.objects.get(Q(origin=entry_fqid_normalized) | Q(origin=entry_fqid_with_slash))
         except Post.DoesNotExist:
             try:
-                # Try by source field
-                return Post.objects.get(source=entry_fqid_normalized)
+                # Try by source field (with and without trailing slash)
+                return Post.objects.get(Q(source=entry_fqid_normalized) | Q(source=entry_fqid_with_slash))
             except Post.DoesNotExist:
-                # Try parsing the FQID to extract UUID
-                parts = entry_fqid_normalized.split('/')
-                if len(parts) >= 2:
-                    potential_uuid = parts[-1]
-                    if potential_uuid:  # Make sure it's not empty
-                        try:
-                            return Post.objects.get(id=potential_uuid)
-                        except (Post.DoesNotExist, ValueError):
-                            pass
-                # Also try using entry_fqid directly as UUID (fallback for plain UUIDs)
-                try:
-                    return Post.objects.get(id=entry_fqid_normalized)
-                except (Post.DoesNotExist, ValueError):
-                    pass
-                raise Http404("Post not found")
+                # DO NOT extract UUID as fallback!
+                # If FQID doesn't match source/origin, we don't have this post
+                raise Http404("Post not found - FQID does not match any post in database")
+    
     elif entry_id:
-        # Use UUID
+        # UUID/Serial lookup - match by id field
         if author_id:
             return get_object_or_404(Post, id=entry_id, author_id=author_id)
         else:
             return get_object_or_404(Post, id=entry_id)
+    
     else:
         raise Http404("No entry identifier provided")
 
