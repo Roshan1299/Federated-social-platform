@@ -262,9 +262,8 @@ def build_like_dict(like, request):
 def build_comment_like_dict(comment_like, request):
     """Helper function to build comment like JSON object"""
     comment = comment_like.comment
-    post = comment.post
-    author = post.author
-    comment_url = f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/entries/{post.id}/comments/{comment.id}"
+    # Use the correct comment URL format: /api/authors/{comment.author.id}/commented/{comment.id}
+    comment_url = f"{request.scheme}://{request.get_host()}/api/authors/{comment.author.id}/commented/{comment.id}"
     
     return {
         "type": "like",
@@ -629,13 +628,29 @@ class SingleFollowerAPIView(View):
             return HttpResponse("Not Found", status=404)
     
     def delete(self, request, author_id, follower_id):
-        """Remove a follower"""
+        """Remove a follower - only AUTHOR_SERIAL can remove their followers"""
         author = get_object_or_404(Author, id=author_id)
         
-        try:
-            follower = Author.objects.get(id=follower_id)
-        except:
-            follower = get_object_or_404(Author, url=follower_id)
+        # Authorization: Only the author being followed can remove followers
+        if str(request.user.id) != str(author_id):
+            return HttpResponse('Forbidden: Only the author can remove their followers', status=403)
+        
+        # Parse follower_id (UUID or FQID)
+        import re
+        follower = None
+        uuid_regex = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+        if uuid_regex.match(follower_id):
+            try:
+                follower = Author.objects.get(id=follower_id)
+            except Author.DoesNotExist:
+                follower = None
+        
+        if not follower:
+            follower_id_norm = follower_id.rstrip('/')
+            follower = Author.objects.filter(url__in=[follower_id_norm, follower_id_norm + '/']).first()
+        
+        if not follower:
+            return HttpResponse("Follower not found", status=404)
         
         # Delete the follow relationship
         Follow.objects.filter(follower=follower, following=author).delete()
@@ -644,13 +659,30 @@ class SingleFollowerAPIView(View):
     
     @method_decorator(csrf_exempt)
     def put(self, request, author_id, follower_id):
-        """Add a follower (used when approving follow requests)"""
+        """Add a follower - only FOREIGN_AUTHOR_ID (the follower) can add themselves"""
         author = get_object_or_404(Author, id=author_id)
         
-        try:
-            follower = Author.objects.get(id=follower_id)
-        except:
-            follower = get_object_or_404(Author, url=follower_id)
+        # Parse follower_id (UUID or FQID)
+        import re
+        follower = None
+        uuid_regex = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+        if uuid_regex.match(follower_id):
+            try:
+                follower = Author.objects.get(id=follower_id)
+            except Author.DoesNotExist:
+                follower = None
+        
+        if not follower:
+            follower_id_norm = follower_id.rstrip('/')
+            follower = Author.objects.filter(url__in=[follower_id_norm, follower_id_norm + '/']).first()
+        
+        if not follower:
+            return HttpResponse("Follower not found", status=404)
+        
+        # Authorization: Only the follower themselves can add the follow relationship
+        # Compare authenticated user with the follower
+        if str(request.user.id) != str(follower.id):
+            return HttpResponse('Forbidden: Only the follower can add themselves', status=403)
         
         # Create follow relationship
         follow, created = Follow.objects.get_or_create(
