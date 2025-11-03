@@ -290,7 +290,16 @@ class PostDetailView(DetailView):
             if not is_friend:
                 return HttpResponse("Forbidden", status=403)
 
-        # PUBLIC_UNLISTED posts are always viewable by link
+        # PUBLIC_UNLISTED: if a logged-in non-follower opened the detail page,
+        # mark session so they "have the link".
+        if (
+            post.visibility == "PUBLIC_UNLISTED" and
+            request.user.is_authenticated and
+            request.user != post.author
+        ):
+            is_follower = Follow.objects.filter(follower=request.user, following=post.author).exists()
+            if not is_follower:
+                request.session[f"unlisted_access_{post.id}"] = True
 
         return super().get(request, *args, **kwargs)
 
@@ -315,7 +324,7 @@ class PostDetailView(DetailView):
         user = self.request.user
         author = post.author
 
-        # relationship checks
+                # relationship checks
         is_follower = user.is_authenticated and Follow.objects.filter(
             follower=user, following=author
         ).exists()
@@ -323,30 +332,40 @@ class PostDetailView(DetailView):
             follower=author, following=user
         ).exists()
         is_friend = is_follower and is_followed_back  # mutual follow
+        has_link = bool(self.request.session.get(f"unlisted_access_{post.id}", False))
 
         # who can like / interact (show buttons, form, etc)
         can_interact = False
         can_like = False
+        can_like_comments = False
 
         if user.is_authenticated:
             if user == author or user.is_superuser:
                 can_interact = True
                 can_like = True
+                can_like_comments = True
             elif post.visibility == 'PUBLIC':
                 can_interact = True
                 can_like = True
+                can_like_comments = True
             elif post.visibility == 'PUBLIC_UNLISTED':
-                can_interact = True
-                can_like = True
+                # follower OR has the link
+                if is_follower or has_link:
+                    can_interact = True
+                    can_like = True
+                    can_like_comments = True
             elif post.visibility == 'FRIENDS':
                 if is_friend:
                     can_interact = True
                     can_like = True
+                    can_like_comments = True
 
         context['can_like'] = can_like
+        context['can_like_comments'] = can_like_comments
         context['like_count'] = post.likes.count()
         context['liked_by_me'] = user.is_authenticated and post.likes.filter(author=user).exists()
         context['can_interact'] = can_interact
+
 
         # expose if admin is viewing a deleted post
         context["is_deleted_and_admin_viewing"] = (
@@ -858,6 +877,7 @@ def add_comment(request, post_id):
     is_follower = Follow.objects.filter(follower=viewer, following=author).exists()
     is_followed_back = Follow.objects.filter(follower=author, following=viewer).exists()
     is_friend = is_follower and is_followed_back  # mutual follow
+    has_link = bool(request.session.get(f"unlisted_access_{post.id}", False))
 
     # decide if viewer is allowed to comment on this post
     can_comment = False
@@ -871,8 +891,8 @@ def add_comment(request, post_id):
         can_comment = True
 
     elif post.visibility == 'PUBLIC_UNLISTED':
-        # if you are logged in and you got here, you can comment
-        can_comment = True
+        # following the person or has link
+        can_comment = is_follower or has_link
 
     elif post.visibility == 'FRIENDS':
         # mutual follow only
@@ -902,14 +922,29 @@ def add_comment(request, post_id):
 def toggle_comment_like(request, comment_id):
     comment = get_object_or_404(Comment, id=comment_id)
     post = comment.post
+    viewer = request.user
+    author = post.author
 
-    # allow liking comment only if post is PUBLIC/PUBLIC_UNLISTED (anyone can like), or is friends-only and user follows author/owns post
-    if post.visibility == 'FRIENDS' and post.author != request.user and not Follow.objects.filter(follower=request.user, following=post.author).exists():
+    is_follower = Follow.objects.filter(follower=viewer, following=author).exists()
+    is_followed_back = Follow.objects.filter(follower=author, following=viewer).exists()
+    is_friend = is_follower and is_followed_back
+    has_link = bool(request.session.get(f"unlisted_access_{post.id}", False))
+
+    can_like = False
+    if viewer == author or viewer.is_superuser:
+        can_like = True
+    elif post.visibility == 'PUBLIC':
+        can_like = True
+    elif post.visibility == 'PUBLIC_UNLISTED':
+        can_like = is_follower or has_link
+    elif post.visibility == 'FRIENDS':
+        can_like = is_friend
+
+    if not can_like:
         return HttpResponse("Forbidden", status=403)
 
-    like, created = CommentLike.objects.get_or_create(author=request.user, comment=comment)
+    like, created = CommentLike.objects.get_or_create(author=viewer, comment=comment)
     if not created:
-        # Already liked -> unlike
         like.delete()
         messages.info(request, "Unliked comment.")
     else:
