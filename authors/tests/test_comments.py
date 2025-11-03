@@ -1,26 +1,40 @@
 """
 API Tests for User Stories 28, 29
-28. As an author, I want to comment on entries that I can access, so I can make a witty reply.
-29. As an author, I want to like comments that I can access, so I can show my appreciation.
-"""
 
+28. As an author, I want to comment on entries that I can access,
+    so I can make a witty reply.
+
+29. As an author, I want to like comments that I can access,
+    so I can show my appreciation.
+"""
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.utils import timezone
 
-from authors.models import Author, Post, Comment, CommentLike
+from authors.models import Author, Post, Follow, Comment, CommentLike
+
 
 class CommentsAPITests(TestCase):
     def setUp(self):
-        # Users
+        # ── Users ───────────────────────────────────────────────────────────────
         self.alice = Author.objects.create_user(
             username="alice", password="pw", displayName="Alice"
         )
         self.bob = Author.objects.create_user(
             username="bob", password="pw", displayName="Bob"
         )
+        self.carol = Author.objects.create_user(
+            username="carol", password="pw", displayName="Carol"
+        )
 
-        # Posts
+        # ── Relationships ───────────────────────────────────────────────────────
+        # Carol follows Bob (one-way)
+        Follow.objects.create(follower=self.carol, following=self.bob)
+        # Alice and Bob are mutual friends
+        Follow.objects.create(follower=self.alice, following=self.bob)
+        Follow.objects.create(follower=self.bob, following=self.alice)
+
+        # ── Posts ───────────────────────────────────────────────────────────────
         self.public_post = Post.objects.create(
             author=self.bob,
             title="Public Post",
@@ -30,141 +44,268 @@ class CommentsAPITests(TestCase):
             published=timezone.now(),
             updated=timezone.now(),
         )
-        self.bobs_private_post = Post.objects.create(
+        self.unlisted_post = Post.objects.create(
             author=self.bob,
-            title="Bob Private",
-            content="Secret",
+            title="Unlisted Post",
+            content="Hello unlisted",
+            contentType="text/plain",
+            visibility="PUBLIC_UNLISTED",
+            published=timezone.now(),
+            updated=timezone.now(),
+        )
+        self.bobs_friends_post = Post.objects.create(
+            author=self.bob,
+            title="Bob Friends Post",
+            content="Bob's friends-only",
             contentType="text/plain",
             visibility="FRIENDS",
             published=timezone.now(),
             updated=timezone.now(),
         )
-        self.alices_private_post = Post.objects.create(
+        self.alices_friends_post = Post.objects.create(
             author=self.alice,
-            title="Alice Private",
-            content="Alice Secret",
+            title="Alice Friends Post",
+            content="Alice's friends-only",
             contentType="text/plain",
             visibility="FRIENDS",
             published=timezone.now(),
             updated=timezone.now(),
         )
 
-        # A comment on the public post (by Bob) – used for like tests
+        # ── Existing comments for like tests ────────────────────────────────────
         self.public_comment = Comment.objects.create(
-            post=self.public_post,
-            author=self.bob,
-            content="Thanks for reading!"
+            post=self.public_post, author=self.bob, content="Public thanks!"
         )
-
-        # A comment on Bob's private post (by Bob)
-        self.private_comment_bob = Comment.objects.create(
-            post=self.bobs_private_post,
-            author=self.bob,
-            content="Private thoughts"
+        self.unlisted_comment = Comment.objects.create(
+            post=self.unlisted_post, author=self.bob, content="Unlisted thanks!"
         )
-
-        # A comment on Alice's private post (by Alice)
-        self.private_comment_alice = Comment.objects.create(
-            post=self.alices_private_post,
-            author=self.alice,
-            content="Alice's private thoughts"
+        self.bobs_friends_comment = Comment.objects.create(
+            post=self.bobs_friends_post, author=self.bob, content="Friends only!"
         )
 
         self.client = Client()
 
-    # ---------------------------
+    # ───────────────────────────────────────────────────────────────────────────
     # US-28: Comment on entries I can access
-    # ---------------------------
+    # ───────────────────────────────────────────────────────────────────────────
 
-    def test_comment_on_public_post_creates_comment_and_redirects(self):
-        """Authenticated user can comment on PUBLIC post; view redirects back to post detail."""
+    def test_comment_public_any_authenticated(self):
+        """PUBLIC: any logged-in user can comment (302 and row created)."""
         self.client.force_login(self.alice)
         url = reverse("authors:add_comment", kwargs={"post_id": self.public_post.id})
-        resp = self.client.post(url, data={"content": "Nice post!"})
+        resp = self.client.post(url, data={"content": "Nice public!"})
         self.assertEqual(resp.status_code, 302)
-
-        # Redirect target should be post detail
-        expected = reverse("authors:post_detail", kwargs={"post_id": self.public_post.id})
-        self.assertTrue(resp["Location"].endswith(expected))
-
-        # Comment created
         self.assertTrue(
-            Comment.objects.filter(post=self.public_post, author=self.alice, content="Nice post!").exists()
+            Comment.objects.filter(
+                post=self.public_post, author=self.alice, content="Nice public!"
+            ).exists()
         )
 
-    def test_comment_on_private_post_forbidden_if_not_owner(self):
-        """Non-owner cannot comment on PRIVATE post (403)."""
+    def test_comment_unlisted_non_follower_without_link_forbidden(self):
+        """
+        PUBLIC_UNLISTED: non-follower WITHOUT link → 403 (no session flag set).
+        Carol is a follower of Bob in setUp. Use a non-follower: Alice unfollows Bob first.
+        """
+        # Remove Alice↔Bob to simulate true non-follower w/o link
+        Follow.objects.filter(follower=self.alice, following=self.bob).delete()
+        Follow.objects.filter(follower=self.bob, following=self.alice).delete()
+
         self.client.force_login(self.alice)
-        url = reverse("authors:add_comment", kwargs={"post_id": self.bobs_private_post.id})
-        resp = self.client.post(url, data={"content": "I should not be allowed"})
+        url = reverse("authors:add_comment", kwargs={"post_id": self.unlisted_post.id})
+        # Direct POST (no detail GET) => should fail
+        resp = self.client.post(url, data={"content": "should fail (no link)"})
         self.assertEqual(resp.status_code, 403)
         self.assertFalse(
-            Comment.objects.filter(post=self.bobs_private_post, author=self.alice).exists()
+            Comment.objects.filter(
+                post=self.unlisted_post, author=self.alice
+            ).exists()
         )
 
-    def test_comment_on_private_post_allowed_for_owner(self):
-        """Owner can comment on their own PRIVATE post; redirects back to detail."""
+    def test_comment_unlisted_non_follower_with_link_allowed(self):
+        """
+        PUBLIC_UNLISTED: non-follower WITH link → allowed.
+        We simulate "has the link" by GETing the detail first (session flag set).
+        """
+        # Make Alice a true non-follower
+        Follow.objects.filter(follower=self.alice, following=self.bob).delete()
+        Follow.objects.filter(follower=self.bob, following=self.alice).delete()
+
         self.client.force_login(self.alice)
-        url = reverse("authors:add_comment", kwargs={"post_id": self.alices_private_post.id})
-        resp = self.client.post(url, data={"content": "My private note"})
+
+        # Visit detail page first to set session flag unlisted_access_<id>=True
+        detail = reverse("authors:post_detail", kwargs={"post_id": self.unlisted_post.id})
+        self.client.get(detail)
+
+        url = reverse("authors:add_comment", kwargs={"post_id": self.unlisted_post.id})
+        resp = self.client.post(url, data={"content": "now I have the link"})
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(
-            Comment.objects.filter(post=self.alices_private_post, author=self.alice, content="My private note").exists()
+            Comment.objects.filter(
+                post=self.unlisted_post, author=self.alice, content="now I have the link"
+            ).exists()
         )
 
-    # ---------------------------
-    # US-29: Like comments I can access
-    # ---------------------------
+    def test_comment_unlisted_follower_allowed(self):
+        """PUBLIC_UNLISTED: follower can comment without visiting detail first."""
+        self.client.force_login(self.carol)  # Carol follows Bob (one-way)
+        url = reverse("authors:add_comment", kwargs={"post_id": self.unlisted_post.id})
+        resp = self.client.post(url, data={"content": "follower can comment"})
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(
+            Comment.objects.filter(
+                post=self.unlisted_post, author=self.carol, content="follower can comment"
+            ).exists()
+        )
 
-    def test_like_comment_on_public_post_creates_like_and_redirects(self):
-        """Authenticated user can like a comment on a PUBLIC post; view redirects to post detail."""
+    def test_comment_friends_requires_mutual_or_owner(self):
+        """
+        FRIENDS:
+          - Carol (one-way follower) → 403
+          - Alice (mutual) → 302
+          - Bob (owner) → 302
+        """
+        url = reverse("authors:add_comment", kwargs={"post_id": self.bobs_friends_post.id})
+
+        self.client.force_login(self.carol)
+        r1 = self.client.post(url, data={"content": "carol nope"})
+        self.assertEqual(r1.status_code, 403)
+
         self.client.force_login(self.alice)
-        url = reverse("authors:toggle_comment_like", kwargs={"comment_id": self.public_comment.id})
+        r2 = self.client.post(url, data={"content": "alice ok"})
+        self.assertEqual(r2.status_code, 302)
+        self.assertTrue(
+            Comment.objects.filter(
+                post=self.bobs_friends_post, author=self.alice, content="alice ok"
+            ).exists()
+        )
+
+        self.client.force_login(self.bob)
+        r3 = self.client.post(url, data={"content": "owner ok"})
+        self.assertEqual(r3.status_code, 302)
+        self.assertTrue(
+            Comment.objects.filter(
+                post=self.bobs_friends_post, author=self.bob, content="owner ok"
+            ).exists()
+        )
+
+    def test_owner_can_always_comment_on_own_post(self):
+        """Owner sanity check on FRIENDS."""
+        self.client.force_login(self.alice)
+        url = reverse("authors:add_comment", kwargs={"post_id": self.alices_friends_post.id})
+        resp = self.client.post(url, data={"content": "my note"})
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(
+            Comment.objects.filter(
+                post=self.alices_friends_post, author=self.alice, content="my note"
+            ).exists()
+        )
+
+    # ───────────────────────────────────────────────────────────────────────────
+    # US-29: Like comments that I can access
+    # ───────────────────────────────────────────────────────────────────────────
+
+    def test_like_comment_public_any_authenticated(self):
+        """PUBLIC comment: any logged-in user can like (302 & row created)."""
+        self.client.force_login(self.alice)
+        url = reverse("authors:toggle_comment_like",
+                      kwargs={"comment_id": self.public_comment.id})
         resp = self.client.post(url)
         self.assertEqual(resp.status_code, 302)
-
-        expected = reverse("authors:post_detail", kwargs={"post_id": self.public_post.id})
-        self.assertTrue(resp["Location"].endswith(expected))
-
-        # Like created
         self.assertTrue(
-            CommentLike.objects.filter(author=self.alice, comment=self.public_comment).exists()
+            CommentLike.objects.filter(author=self.alice,
+                                       comment=self.public_comment).exists()
         )
 
-    def test_like_comment_toggle_unlike_on_second_call(self):
-        """Second toggle removes the like and redirects; count returns to zero."""
+    def test_like_comment_unlisted_non_follower_without_link_forbidden(self):
+        """UNLISTED comment: non-follower without link → 403."""
+        # Make Alice a true non-follower
+        Follow.objects.filter(follower=self.alice, following=self.bob).delete()
+        Follow.objects.filter(follower=self.bob, following=self.alice).delete()
+
         self.client.force_login(self.alice)
-        url = reverse("authors:toggle_comment_like", kwargs={"comment_id": self.public_comment.id})
-
-        # First call: like
-        self.client.post(url)
-        self.assertTrue(
-            CommentLike.objects.filter(author=self.alice, comment=self.public_comment).exists()
-        )
-
-        # Second call: unlike
-        resp = self.client.post(url)
-        self.assertEqual(resp.status_code, 302)
-        self.assertFalse(
-            CommentLike.objects.filter(author=self.alice, comment=self.public_comment).exists()
-        )
-
-    def test_like_comment_on_private_post_forbidden_if_not_owner(self):
-        """Non-owner cannot like a comment on a PRIVATE post (403)."""
-        self.client.force_login(self.alice)
-        url = reverse("authors:toggle_comment_like", kwargs={"comment_id": self.private_comment_bob.id})
-        resp = self.client.post(url)
+        url = reverse("authors:toggle_comment_like",
+                      kwargs={"comment_id": self.unlisted_comment.id})
+        resp = self.client.post(url)  # no detail visit => no session flag
         self.assertEqual(resp.status_code, 403)
         self.assertFalse(
-            CommentLike.objects.filter(author=self.alice, comment=self.private_comment_bob).exists()
+            CommentLike.objects.filter(author=self.alice,
+                                       comment=self.unlisted_comment).exists()
         )
 
-    def test_like_comment_on_private_post_allowed_for_owner(self):
-        """Owner can like a comment on their own PRIVATE post."""
+    def test_like_comment_unlisted_non_follower_with_link_allowed(self):
+        """UNLISTED comment: non-follower with link (detail GET first) → allowed."""
+        # Make Alice a true non-follower
+        Follow.objects.filter(follower=self.alice, following=self.bob).delete()
+        Follow.objects.filter(follower=self.bob, following=self.alice).delete()
+
         self.client.force_login(self.alice)
-        url = reverse("authors:toggle_comment_like", kwargs={"comment_id": self.private_comment_alice.id})
+        # GET detail to set session flag
+        self.client.get(reverse("authors:post_detail",
+                                kwargs={"post_id": self.unlisted_post.id}))
+
+        url = reverse("authors:toggle_comment_like",
+                      kwargs={"comment_id": self.unlisted_comment.id})
         resp = self.client.post(url)
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(
-            CommentLike.objects.filter(author=self.alice, comment=self.private_comment_alice).exists()
+            CommentLike.objects.filter(author=self.alice,
+                                       comment=self.unlisted_comment).exists()
         )
+
+    def test_like_comment_unlisted_follower_allowed(self):
+        """UNLISTED comment: follower (Carol) can like without link."""
+        self.client.force_login(self.carol)  # Carol follows Bob
+        url = reverse("authors:toggle_comment_like",
+                      kwargs={"comment_id": self.unlisted_comment.id})
+        resp = self.client.post(url)
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(
+            CommentLike.objects.filter(author=self.carol,
+                                       comment=self.unlisted_comment).exists()
+        )
+
+    def test_like_comment_friends_requires_mutual_or_owner(self):
+        """
+        FRIENDS comment:
+          - Carol (one-way) → 403
+          - Alice (mutual) → 302
+          - Bob (owner) → 302
+        """
+        url = reverse("authors:toggle_comment_like",
+                      kwargs={"comment_id": self.bobs_friends_comment.id})
+
+        self.client.force_login(self.carol)
+        r1 = self.client.post(url)
+        self.assertEqual(r1.status_code, 403)
+
+        self.client.force_login(self.alice)
+        r2 = self.client.post(url)
+        self.assertEqual(r2.status_code, 302)
+        self.assertTrue(
+            CommentLike.objects.filter(author=self.alice,
+                                       comment=self.bobs_friends_comment).exists()
+        )
+
+        self.client.force_login(self.bob)
+        r3 = self.client.post(url)
+        self.assertEqual(r3.status_code, 302)
+        self.assertTrue(
+            CommentLike.objects.filter(author=self.bob,
+                                       comment=self.bobs_friends_comment).exists()
+        )
+
+    def test_like_comment_toggle_cycle_public(self):
+        """Toggle like/unlike on PUBLIC comment."""
+        self.client.force_login(self.alice)
+        url = reverse("authors:toggle_comment_like",
+                      kwargs={"comment_id": self.public_comment.id})
+        # like
+        r1 = self.client.post(url)
+        self.assertEqual(r1.status_code, 302)
+        self.assertTrue(CommentLike.objects.filter(author=self.alice,
+                                                   comment=self.public_comment).exists())
+        # unlike
+        r2 = self.client.post(url)
+        self.assertEqual(r2.status_code, 302)
+        self.assertFalse(CommentLike.objects.filter(author=self.alice,
+                                                    comment=self.public_comment).exists())
