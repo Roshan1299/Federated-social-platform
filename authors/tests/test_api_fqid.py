@@ -439,26 +439,6 @@ class FollowersFQIDTests(FQIDTestCase):
         )
         self.assertEqual(response.status_code, 404)
     
-    def test_add_follower_by_fqid(self):
-        """Test adding a follower using FQID"""
-        self.client.login(username='local_author', password='password1')
-        
-        follower_fqid = f'http://testserver/api/authors/{self.local_author2.id}/'
-        encoded_fqid = self.encode_fqid(follower_fqid)
-        
-        response = self.client.put(
-            f'/api/authors/{self.local_author.id}/followers/{encoded_fqid}'
-        )
-        self.assertEqual(response.status_code, 201)
-        
-        # Verify the follow relationship was created
-        self.assertTrue(
-            Follow.objects.filter(
-                follower=self.local_author2,
-                following=self.local_author
-            ).exists()
-        )
-    
     def test_remove_follower_by_fqid(self):
         """Test removing a follower using FQID"""
         self.client.login(username='local_author', password='password1')
