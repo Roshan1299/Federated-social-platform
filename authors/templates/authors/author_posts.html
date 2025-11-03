@@ -1,44 +1,88 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
+{% load humanize %}
 
 {% block title %}
-    Posts by {{ author.displayName }}
+  Posts by {{ author.displayName }}
 {% endblock %}
 
 {% block content %}
-  <h2>
-      Posts by {{ author.displayName }}
-  </h2>
-  
+<div class="container">
+  <header class="stream-header">
+    <div class="header-content">
+      <h1>{{ author.displayName }}'s Posts</h1>
+      <p>All posts shared by this author</p>
+    </div>
+
+    {% if user.is_authenticated and user.id == author.id %}
+      <div class="header-actions">
+        <a href="{% url 'authors:create_post' %}" class="btn btn-primary">Create Post</a>
+      </div>
+    {% endif %}
+  </header>
+
   {% if posts %}
-    {% for post in posts %}
-      <article>
-        <h3><a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a></h3>
-        
-        {% if post.contentType|slice:":6" == "image/" %}
+    <div class="posts-grid">
+      {% for post in posts %}
+        <article class="post-card">
+          <div class="post-header">
+            <div class="post-author">
+              <a href="{% url 'authors:author_profile' author.id %}">
+                {{ author.displayName }}
+              </a>
+            </div>
+            <div class="post-meta">
+              <span class="publish-date">Published {{ post.published|naturaltime }}</span>
+              {% if post.updated and post.updated != post.published %}
+                • <span class="update-date">Updated {{ post.updated|naturaltime }}</span>
+              {% endif %}
+              <br>
+              <span class="visibility">Visibility: {{ post.get_visibility_display }}</span>
+            </div>
+          </div>
+
+          <h3 class="post-title">
+            <a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a>
+          </h3>
+
           {% if post.image %}
-            <div class="post-image-preview">
+            <div class="post-image-container">
               <a href="{% url 'authors:post_detail' post.id %}">
-                <img src="{{ post.image.url }}" alt="{{ post.title }}" style="max-width: 200px; height: auto; border: 1px solid #ccc;">
+                <img src="{{ post.image.url }}" alt="Image for {{ post.title }}" class="post-image">
               </a>
             </div>
           {% endif %}
-        {% else %}
-          <!-- For text posts, display a preview of the content -->
-          <p>{{ post.content|truncatechars:200 }}</p>
+
+          <div class="post-content">
+            {{ post.rendered_content|truncatechars_html:300|safe }}
+          </div>
+
+          <div class="post-actions">
+            <a href="{% url 'authors:post_detail' post.id %}" class="btn btn-primary">Read More</a>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+
+    {% if is_paginated %}
+      <div class="pagination">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-secondary">Previous</a>
         {% endif %}
-        
-        <p>Published: {{ post.published }}</p>
-        <p>Visibility: {{ post.get_visibility_display }}</p>
-      </article>
-      <hr>
-    {% endfor %}
+        <span class="page-info">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}" class="btn btn-secondary">Next</a>
+        {% endif %}
+      </div>
+    {% endif %}
   {% else %}
-    <p>No posts yet.</p>
+    <div class="empty-state">
+      <h3>No posts yet</h3>
+      <p>This author hasn't shared any posts yet.</p>
+    </div>
   {% endif %}
-  
-  {% if user.is_authenticated and user.id == author.id %}
-    <a href="{% url 'authors:create_post' %}">Create New Post</a>
-  {% endif %}
-  
-  <a href="{% url 'authors:author_profile' author.id %}">Back to Profile</a>
+
+  <div class="footer-actions">
+    <a href="{% url 'authors:author_profile' author.id %}" class="btn btn-secondary">⬅ Back to Profile</a>
+  </div>
+</div>
 {% endblock %}

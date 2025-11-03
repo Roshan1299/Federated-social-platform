@@ -457,27 +457,42 @@ class AuthorPostsView(ListView):
     model = Post
     template_name = "authors/author_posts.html"
     context_object_name = "posts"
-    
+    paginate_by = 10  # optional, consistent with stream
+
     def get_queryset(self):
-        author_id = self.kwargs['author_id']
+        author_id = self.kwargs["author_id"]
         current_user = self.request.user
         author = get_object_or_404(Author, id=author_id)
-        
-        # If user is viewing their own profile, show all posts that aren't deleted
-        if current_user.is_authenticated and current_user == author:
-            return Post.objects.filter(author_id=author_id, deleted=False).order_by('-published')
 
-        # If viewing an author you follow, show public and friends-only posts (NOT unlisted)
+        # Viewing own posts → show all (not deleted)
+        if current_user.is_authenticated and current_user == author:
+            queryset = Post.objects.filter(author=author, deleted=False)
+        # Viewing someone you follow → show PUBLIC + FRIENDS
         elif current_user.is_authenticated and Follow.objects.filter(follower=current_user, following=author).exists():
-            return Post.objects.filter(
-                author_id=author_id,
+            queryset = Post.objects.filter(
+                author=author,
                 visibility__in=["PUBLIC", "FRIENDS"],
                 deleted=False
-            ).order_by('-published')
-        # Otherwise, show only public posts that aren't deleted
+            )
+        # Otherwise → only PUBLIC
         else:
-            return Post.objects.filter(author_id=author_id, visibility='PUBLIC', deleted=False).order_by('-published')
-        
+            queryset = Post.objects.filter(author=author, visibility="PUBLIC", deleted=False)
+
+        queryset = queryset.order_by("-updated")
+
+        # Preprocess rendered content for display (like in stream)
+        for post in queryset:
+            post.rendered_content = render_post_content(post)
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        author = get_object_or_404(Author, id=self.kwargs["author_id"])
+        context["author"] = author
+        return context
+
+
 class AuthorDeletedPostsAdminView(LoginRequiredMixin, UserPassesTestMixin, ListView):
     model = Post
     template_name = "authors/author_deleted_posts_admin.html"
