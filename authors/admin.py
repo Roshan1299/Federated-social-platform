@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.utils.translation import gettext_lazy as _
 from .models import Author, Post, Follow, Comment, Like, FollowRequest, CommentLike
+from .models import Image
 
 class AuthorAdmin(UserAdmin):
     model = Author
@@ -66,3 +67,4 @@ admin.site.register(Comment, CommentAdmin)
 admin.site.register(Like, LikeAdmin)
 admin.site.register(FollowRequest, FollowRequestAdmin)
 admin.site.register(CommentLike, CommentLikeAdmin)
+admin.site.register(Image)
