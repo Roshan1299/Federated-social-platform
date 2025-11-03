@@ -605,15 +605,20 @@ class SingleFollowerAPIView(View):
     def get(self, request, author_id, follower_id):
         """Check if follower_id follows author_id"""
         author = get_object_or_404(Author, id=author_id)
-        
-        # Try to decode the follower_id (it might be URL encoded)
+
         # The follower_id could be a UUID or a full URL
-        try:
-            # First try as UUID
-            follower = Author.objects.get(id=follower_id)
-        except:
-            # Try as URL
-            follower = get_object_or_404(Author, url=follower_id)
+        import re
+        follower = None
+        uuid_regex = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+        if uuid_regex.match(follower_id):
+            try:
+                follower = Author.objects.get(id=follower_id)
+            except Author.DoesNotExist:
+                follower = None
+
+        if not follower:
+            follower_id_norm = follower_id.rstrip('/')
+            follower = Author.objects.filter(url__in=[follower_id_norm, follower_id_norm + '/']).first()
         
         # Check if follow relationship exists
         is_follower = Follow.objects.filter(follower=follower, following=author).exists()
