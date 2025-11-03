@@ -11,12 +11,26 @@ class Author(AbstractUser):
     github = models.URLField(blank=True, null=True)
     description = models.CharField(max_length=500, blank=True, null=True)
     profileImage = models.ImageField(blank=True, null=True, upload_to="user_images/") # Store images in media/user_images/
+    last_github_event_id = models.CharField(max_length=255, blank=True, null=True)
 
+class Image(models.Model):
+    id = models.AutoField(primary_key=True)
+    file_name = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=50)
+    data = models.BinaryField()
 
+    def __str__(self):
+        return self.file_name
+    
 class Post(models.Model):
     CONTENT_TYPE_CHOICES = [
         ('text/plain', 'Plain Text'),
         ('text/markdown', 'Markdown/ CommonMark'),
+        ('image/png', 'Image/PNG'),
+        ('image/jpeg', 'Image/JPEG'),
+        ('image/gif', 'Image/GIF'),
+        ('image/bmp', 'Image/BMP'),
+        ('image/webp', 'Image/WEBP'),
     ]
     
     VISIBILITY_CHOICES = [
@@ -29,7 +43,7 @@ class Post(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     author = models.ForeignKey(Author, on_delete=models.CASCADE, related_name='posts')
     title = models.CharField(max_length=255)
-    description = models.CharField(max_length=500, blank=True, null=True)  # Short description or summary
+
     content = models.TextField()  # The actual post content
     contentType = models.CharField(max_length=20, choices=CONTENT_TYPE_CHOICES, default='text/plain')
     visibility = models.CharField(max_length=20, choices=VISIBILITY_CHOICES, default='PUBLIC')
@@ -43,6 +57,7 @@ class Post(models.Model):
     image = models.ImageField(upload_to="post_images/", blank=True, null=True)
     # Track if the post is deleted
     deleted = models.BooleanField(default=False)
+    # image = models.ForeignKey(Image, on_delete=models.SET_NULL, null=True, blank=True)
     
     def __str__(self):
         return f"{self.title} by {self.author.displayName}"
@@ -118,4 +133,4 @@ class CommentLike(models.Model):
 
     def __str__(self):
         return f"{self.author.displayName} likes a comment on {self.comment.post.title}"
-
+    

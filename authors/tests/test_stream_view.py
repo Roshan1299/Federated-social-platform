@@ -80,8 +80,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Public Post',
             content='This is public',
             contentType='text/plain',
-            visibility='PUBLIC_UNLISTED',
-            unlisted=False
+            visibility='PUBLIC',
         )
         
         # Create private post
@@ -91,7 +90,6 @@ class AuthorStreamViewTestCase(TestCase):
             content='This is private',
             contentType='text/plain',
             visibility='FRIENDS',
-            unlisted=False
         )
         
         url = reverse('authors:author_stream', kwargs={'author_id': self.author1.id})
@@ -111,8 +109,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Listed Post',
             content='This is listed',
             contentType='text/plain',
-            visibility='PUBLIC_UNLISTED',
-            unlisted=False
+            visibility='PUBLIC',
         )
         
         # Create unlisted post
@@ -144,8 +141,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Oldest Post',
             content='Created first',
             contentType='text/plain',
-            visibility='PUBLIC_UNLISTED',
-            unlisted=False
+            visibility='PUBLIC',
         )
         post1.updated = now - timedelta(days=3)
         post1.save()
@@ -155,8 +151,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Middle Post',
             content='Created second',
             contentType='text/plain',
-            visibility='PUBLIC_UNLISTED',
-            unlisted=False
+            visibility='PUBLIC',
         )
         post2.updated = now - timedelta(days=1)
         post2.save()
@@ -166,8 +161,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Newest Post',
             content='Created third',
             contentType='text/plain',
-            visibility='PUBLIC_UNLISTED',
-            unlisted=False
+            visibility='PUBLIC',
         )
         post3.updated = now
         post3.save()
@@ -187,17 +181,14 @@ class AuthorStreamViewTestCase(TestCase):
         """Test that stream is paginated with PAGE_SIZE posts per page"""
         self.client.login(username='testauthor1', password='testpass123')
         
-        # Create 25 public posts
         for i in range(25):
             Post.objects.create(
                 author=self.author2,
                 title=f'Post {i}',
                 content=f'Content {i}',
                 contentType='text/plain',
-                visibility='PUBLIC_UNLISTED',
-                unlisted=False
+                visibility='PUBLIC',
             )
-        
         url = reverse('authors:author_stream', kwargs={'author_id': self.author1.id})
         response = self.client.get(url)
         
@@ -219,8 +210,7 @@ class AuthorStreamViewTestCase(TestCase):
                 title=f'Post {i}',
                 content=f'Content {i}',
                 contentType='text/plain',
-                visibility='PUBLIC_UNLISTED',
-                unlisted=False
+                visibility='PUBLIC',
             )
         
         url = reverse('authors:author_stream', kwargs={'author_id': self.author1.id})
@@ -242,8 +232,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Post from followed author',
             content='Should appear in followed section',
             contentType='text/plain',
-            visibility='PUBLIC_UNLISTED',
-            unlisted=False
+            visibility='PUBLIC',
         )
         
         url = reverse('authors:author_stream', kwargs={'author_id': self.author1.id})
@@ -268,8 +257,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Followed Post',
             content='Content',
             contentType='text/plain',
-            visibility='PUBLIC_UNLISTED',
-            unlisted=False
+            visibility='PUBLIC',
         )
         
         url = reverse('authors:author_stream', kwargs={'author_id': self.author1.id})
@@ -303,8 +291,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Markdown Post',
             content='# Heading\n\n**Bold text**',
             contentType='text/markdown',
-            visibility='PUBLIC_UNLISTED',
-            unlisted=False
+            visibility='PUBLIC',
         )
         
         url = reverse('authors:author_stream', kwargs={'author_id': self.author1.id})
@@ -321,8 +308,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Image Post',
             content='Check out this image',
             contentType='text/plain',
-            visibility='PUBLIC_UNLISTED',
-            unlisted=False
+            visibility='PUBLIC',
         )
         
         url = reverse('authors:author_stream', kwargs={'author_id': self.author1.id})
@@ -349,8 +335,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Test Post',
             content='Content',
             contentType='text/plain',
-            visibility='PUBLIC_UNLISTED',
-            unlisted=False
+            visibility='PUBLIC',
         )
         
         url = reverse('authors:author_stream', kwargs={'author_id': self.author1.id})
@@ -393,8 +378,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Plain Text',
             content='Plain text content',
             contentType='text/plain',
-            visibility='PUBLIC_UNLISTED',
-            unlisted=False
+            visibility='PUBLIC',
         )
         
         markdown_post = Post.objects.create(
@@ -402,8 +386,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Markdown',
             content='# Markdown content',
             contentType='text/markdown',
-            visibility='PUBLIC_UNLISTED',
-            unlisted=False
+            visibility='PUBLIC',
         )
         
         url = reverse('authors:author_stream', kwargs={'author_id': self.author1.id})
@@ -432,8 +415,7 @@ class AuthorStreamViewTestCase(TestCase):
             title='Test Post',
             content='Content',
             contentType='text/plain',
-            visibility='PUBLIC_UNLISTED',
-            unlisted=False
+            visibility='PUBLIC',
         )
         
         url = reverse('authors:author_stream', kwargs={'author_id': self.author1.id})
@@ -502,8 +484,7 @@ class StreamViewFollowIntegrationTestCase(TestCase):
             title='Friend Post',
             content='Friend content',
             contentType='text/markdown',
-            visibility='PUBLIC_UNLISTED',
-            unlisted=False
+            visibility='PUBLIC',
         )
         
         # Friend2's public post (user doesn't follow friend2)
@@ -512,8 +493,7 @@ class StreamViewFollowIntegrationTestCase(TestCase):
             title='Stranger Post',
             content='Stranger content',
             contentType='text/plain',
-            visibility='PUBLIC_UNLISTED',
-            unlisted=False
+            visibility='PUBLIC',
         )
         
         # Private post shouldn't appear
@@ -523,7 +503,6 @@ class StreamViewFollowIntegrationTestCase(TestCase):
             content='Private content',
             contentType='text/plain',
             visibility='FRIENDS',
-            unlisted=False
         )
         
         url = reverse('authors:author_stream', kwargs={'author_id': self.user.id})
@@ -551,8 +530,7 @@ class StreamViewFollowIntegrationTestCase(TestCase):
                 title=f'Friend Post {i}',
                 content=f'Content {i}',
                 contentType='text/plain',
-                visibility='PUBLIC_UNLISTED',
-                unlisted=False
+                visibility='PUBLIC',
             )
         
         url = reverse('authors:author_stream', kwargs={'author_id': self.user.id})
@@ -580,8 +558,7 @@ class StreamViewFollowIntegrationTestCase(TestCase):
             title='Friend1 Post',
             content='Content from friend 1',
             contentType='text/plain',
-            visibility='PUBLIC_UNLISTED',
-            unlisted=False
+            visibility='PUBLIC',
         )
         
         Post.objects.create(
@@ -589,8 +566,7 @@ class StreamViewFollowIntegrationTestCase(TestCase):
             title='Friend2 Post',
             content='Content from friend 2',
             contentType='text/plain',
-            visibility='PUBLIC_UNLISTED',
-            unlisted=False
+            visibility='PUBLIC',
         )
         
         url = reverse('authors:author_stream', kwargs={'author_id': self.user.id})
@@ -615,8 +591,7 @@ class StreamViewFollowIntegrationTestCase(TestCase):
             title='Some Post',
             content='Content',
             contentType='text/plain',
-            visibility='PUBLIC_UNLISTED',
-            unlisted=False
+            visibility='PUBLIC',
         )
         
         url = reverse('authors:author_stream', kwargs={'author_id': self.user.id})
@@ -648,15 +623,13 @@ class StreamViewPaginationTestCase(TestCase):
 
     def test_pagination_with_exactly_PAGE_SIZE_posts(self):
         """Test pagination with exactly PAGE_SIZE posts (one full page)"""
-        # Create exactly PAGE_SIZE posts
         for i in range(PAGE_SIZE):
             Post.objects.create(
                 author=self.author,
                 title=f'Post {i}',
                 content=f'Content {i}',
                 contentType='text/plain',
-                visibility='PUBLIC_UNLISTED',
-                unlisted=False
+                visibility='PUBLIC',
             )
         
         url = reverse('authors:author_stream', kwargs={'author_id': self.author.id})
@@ -671,17 +644,14 @@ class StreamViewPaginationTestCase(TestCase):
 
     def test_pagination_exceeds_limit(self):
         """Test pagination with more posts (requires 2 pages)"""
-        # Create 21 posts
         for i in range(PAGE_SIZE + 1):
             Post.objects.create(
                 author=self.author,
                 title=f'Post {i}',
                 content=f'Content {i}',
                 contentType='text/plain',
-                visibility='PUBLIC_UNLISTED',
-                unlisted=False
-            )
-        
+                visibility='PUBLIC',
+            )        
         url = reverse('authors:author_stream', kwargs={'author_id': self.author.id})
         response = self.client.get(url)
         
@@ -704,8 +674,7 @@ class StreamViewPaginationTestCase(TestCase):
                 title=f'Post {i}',
                 content=f'Content {i}',
                 contentType='text/plain',
-                visibility='PUBLIC_UNLISTED',
-                unlisted=False
+                visibility='PUBLIC',
             )
         
         url = reverse('authors:author_stream', kwargs={'author_id': self.author.id})

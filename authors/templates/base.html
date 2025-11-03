@@ -8,7 +8,34 @@
   <link rel="stylesheet" type="text/css" href="{% static 'css/main.css' %}">
   <!-- Add any other CSS files needed throughout the site -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* Badge styling for follow request indicator */
+    .follow-requests-badge {
+      background-color: #ff4757;
+      color: #fff;
+      border-radius: 50%;
+      padding: 2px 7px;
+      font-size: 0.75em;
+      font-weight: 600;
+      margin-left: 5px;
+      vertical-align: middle;
+      display: inline-block;
+      line-height: 1.2;
+    }
+
+    .nav-follow-requests {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .nav-follow-requests:hover .follow-requests-badge {
+      background-color: #ff6b81;
+    }
+  </style>
 </head>
+
 <body>
   <nav>
     {% if user.is_authenticated %}
@@ -22,12 +49,22 @@
           <span class="nav-display-name">{{ user.displayName|default:user.username }}</span>
         </a>
       </div>
+
       <div class="nav-center">
         <a href="{% url 'authors:author_stream' author_id=user.id %}" class="nav-logo">Darkblue</a>
       </div>
+
       <div class="nav-right">
         <a href="{% url 'authors:create_post' %}" class="nav-create-post">Create Post</a>
-        <a href="{% url 'authors:follow_requests' %}" class="nav-follow-requests">Follow Requests</a>
+
+        <!-- Follow Requests link with badge -->
+        <a href="{% url 'authors:follow_requests' %}" class="nav-follow-requests">
+          Follow Requests
+          {% if pending_follow_requests_count > 0 %}
+            <span class="follow-requests-badge">{{ pending_follow_requests_count }}</span>
+          {% endif %}
+        </a>
+
         <form action="{% url 'logout' %}" method="post" class="nav-logout-form">
           {% csrf_token %}
           <button type="submit" class="nav-logout-btn">Logout</button>
@@ -37,13 +74,16 @@
       <div class="nav-left">
         <a href="{% url 'login' %}" class="nav-logo">Darkblue</a>
       </div>
+
       <div class="nav-right">
         <a href="{% url 'login' %}">Login</a>
         <a href="{% url 'authors:signup' %}">Sign Up</a>
       </div>
     {% endif %}
   </nav>
+
   <hr>
+
   <main>
     {% if messages %}
       <div class="messages">

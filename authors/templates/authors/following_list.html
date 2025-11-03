@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}{{ author.displayName }} is Following{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h1>{{ author.displayName }} is Following ({{ following_count }})</h1>
+
+  {% if following %}
+    <ul class="following-list">
+      {% for follow in following %}
+        <li class="following-item">
+          <a href="{% url 'authors:author_profile' follow.following.id %}">
+            {% if follow.following.profileImage %}
+              <img src="{{ follow.following.profileImage.url }}" class="following-avatar" alt="{{ follow.following.displayName }}">
+            {% else %}
+              <span class="following-placeholder">👤</span>
+            {% endif %}
+            {{ follow.following.displayName }}
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>Not following anyone yet.</p>
+  {% endif %}
+</div>
+
+<style>
+  .following-list {
+    list-style: none;
+    padding: 0;
+  }
+  .following-item {
+    margin: 10px 0;
+  }
+  .following-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    vertical-align: middle;
+    margin-right: 10px;
+  }
+  .following-placeholder {
+    margin-right: 10px;
+  }
+</style>
+{% endblock %}

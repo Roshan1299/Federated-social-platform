@@ -290,8 +290,8 @@ class VisibilityCombinationsTestCase(TestCase):
         # self.assertContains(response, 'My Friends Post')
         self.assertContains(response, 'My Private Post')
 
-    def test_private_posts_only_visible_to_author(self):
-        """Private posts should only be visible to the author"""
+    def test_private_posts_not_visible_to_non_friends(self):
+        """Friends-only posts should not be visible to followers or strangers, only to mutual friends and author"""
         post = Post.objects.create(
             author=self.author,
             title='Private Post',
@@ -301,13 +301,13 @@ class VisibilityCombinationsTestCase(TestCase):
             
         )
         
-        # Friend cannot see it
+        # Friend CAN see it since they are mutual friends
         self.client.login(username='friend', password='testpass123')
         url = reverse('authors:author_stream', kwargs={'author_id': self.friend.id})
         response = self.client.get(url)
-        self.assertNotContains(response, 'Private Post')
+        self.assertContains(response, 'Private Post')
         
-        # Follower cannot see it
+        # Follower cannot see it (not a mutual friend)
         self.client.login(username='follower', password='testpass123')
         url = reverse('authors:author_stream', kwargs={'author_id': self.follower.id})
         response = self.client.get(url)
@@ -361,12 +361,12 @@ class StreamVisibilityMatrixTestCase(TestCase):
         # Follower (one-way)
         Follow.objects.create(follower=self.follower, following=self.author)
 
-    def test_visibility_matrix_public(self):
-        """Test: Public posts -> Friend: link+stream, Follower: link+stream, Everyone: link+stream"""
+    def test_visibility_matrix_unlisted(self):
+        """Test: Unlisted posts -> Friend: link+stream, Follower: link+stream, Everyone: link only (no stream)"""
         post = Post.objects.create(
             author=self.author,
-            title='Public Post',
-            content='Public content',
+            title='Unlisted Post',
+            content='Unlisted content',
             visibility='PUBLIC_UNLISTED',
             
         )
@@ -375,19 +375,19 @@ class StreamVisibilityMatrixTestCase(TestCase):
         self.client.login(username='friend', password='testpass123')
         response = self.client.get(reverse('authors:author_stream', 
                                            kwargs={'author_id': self.friend.id}))
-        self.assertContains(response, 'Public Post')
+        self.assertContains(response, 'Unlisted Post')
         
         # Follower sees in stream
         self.client.login(username='follower', password='testpass123')
         response = self.client.get(reverse('authors:author_stream', 
                                            kwargs={'author_id': self.follower.id}))
-        self.assertContains(response, 'Public Post')
+        self.assertContains(response, 'Unlisted Post')
         
-        # Everyone sees in stream
+        # Everyone does NOT see in stream (only via direct link)
         self.client.login(username='everyone', password='testpass123')
         response = self.client.get(reverse('authors:author_stream', 
                                            kwargs={'author_id': self.everyone.id}))
-        self.assertContains(response, 'Public Post')
+        self.assertNotContains(response, 'Unlisted Post')
 
     def test_visibility_matrix_unlisted(self):
         """Test: Unlisted posts -> Friend: link+stream, Follower: link+stream, Everyone: link only"""

@@ -39,7 +39,6 @@ class PostCreationTests(TestCase):
         # Test creating a plain text post via UI
         response = self.client.post(reverse('authors:create_post'), {
             'title': 'Test Plain Text Post',
-            'description': 'This is a test plain text post',
             'content': 'Hello world! This is plain text content.',
             'contentType': 'text/plain',
             'visibility': 'PUBLIC'
@@ -62,7 +61,6 @@ class PostCreationTests(TestCase):
         # Test creating a markdown post via UI
         response = self.client.post(reverse('authors:create_post'), {
             'title': 'Test Markdown Post',
-            'description': 'This is a test markdown post',
             'content': '# Hello World\n\nThis is **markdown** content.',
             'contentType': 'text/markdown',
             'visibility': 'PUBLIC'
@@ -125,7 +123,6 @@ class PostCreationTests(TestCase):
         # Create post with image
         response = self.client.post(reverse('authors:create_post'), {
             'title': 'Image Post',
-            'description': 'This post has an image',
             'content': 'Check out this image!',
             'contentType': 'image/png',
             'visibility': 'PUBLIC',
@@ -292,5 +289,6 @@ class PostCreationTests(TestCase):
             author=self.user
         )
 
+        self.client.login(username='otheruser', password='testpass123')
         response = self.client.get(reverse('authors:post_detail', kwargs={'post_id': post.id}))
         self.assertEqual(response.status_code, 403)  # Forbidden

@@ -42,15 +42,13 @@
         <form method="post" action="{% url 'authors:toggle_like' post_id=post.id %}" class="inline-form">
           {% csrf_token %}
           <button type="submit" class="btn-like">
-            {% if liked_by_me %}💔 Unlike{% else %}👍 Like{% endif %}
+            {% if liked_by_me %}👎 Unlike {% else %}👍 Like {% endif %}
           </button>
         </form>
       {% endif %}
       <a href="{% url 'authors:post_likes_page' post_id=post.id %}" class="link-view-likes">View Likes</a>
 
-      {% if post.visibility != VISIBILITY_PRIVATE %}
-        <button class="btn-copy" data-link="{{ absolute_url }}">📋 Copy Link</button>
-      {% endif %}
+      <button class="btn-copy" data-link="{{ absolute_url }}">📋 Copy Link</button>
     </div>
   </section>
 
@@ -67,14 +65,26 @@
   <section class="comment-section">
     <h3>Comments ({{ comments|length }})</h3>
 
-    {% if user.is_authenticated and post.visibility == 'PUBLIC' or user.id == post.author.id %}
-      <form method="post" action="{% url 'authors:add_comment' post_id=post.id %}" class="comment-form">
+ {% if can_interact %}
+      <form method="post"
+            action="{% url 'authors:add_comment' post_id=post.id %}"
+            class="comment-form"
+            style="margin-bottom: 1rem;">
         {% csrf_token %}
-        {{ comment_form.content }}
-        <button type="submit" class="btn-primary">💬 Comment</button>
+
+        <textarea
+          name="content"
+          rows="3"
+          placeholder="Write a comment..."
+          required
+          style="width:100%; padding:0.5rem; border:1px solid #ccc; border-radius:6px; resize:vertical;"></textarea>
+
+        <button type="submit" class="btn-primary" style="margin-top:0.5rem;">
+          💬 Comment
+        </button>
       </form>
     {% else %}
-      <p><em>Log in to comment.</em></p>
+      <p><em>You cannot comment on this post.</em></p>
     {% endif %}
 
     {% if comments %}
@@ -87,16 +97,16 @@
           <div class="comment-content">{{ c.content|linebreaksbr }}</div>
           <div class="comment-actions">
             <span>{{ c.likes.count }} like{{ c.likes.count|pluralize }}</span>
-            {% if user.is_authenticated and post.visibility == 'PUBLIC' or user.id == post.author.id %}
+            {% if can_like_comments %}
               <form method="post" action="{% url 'authors:toggle_comment_like' comment_id=c.id %}" class="inline-form">
-                {% csrf_token %}
-                {% if c.liked_by_me %}
-                  <button type="submit" class="btn-secondary">💔 Unlike</button>
-                {% else %}
-                  <button type="submit" class="btn-primary">👍 Like</button>
-                {% endif %}
-              </form>
-            {% endif %}
+              {% csrf_token %}
+              {% if c.liked_by_me %}
+                <button type="submit" class="btn-secondary">👎 Unlike</button>
+              {% else %}
+                <button type="submit" class="btn-primary">👍 Like</button>
+              {% endif %}
+            </form>
+          {% endif %}
           </div>
         </div>
       {% endfor %}

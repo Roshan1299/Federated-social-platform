@@ -13,9 +13,6 @@
     {% for post in posts %}
       <article>
         <h3><a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a></h3>
-        {% if post.description %}
-          <p>{{ post.description }}</p>
-        {% endif %}
         
         {% if post.contentType|slice:":6" == "image/" %}
           {% if post.image %}
