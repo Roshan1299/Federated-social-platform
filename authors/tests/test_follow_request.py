@@ -13,8 +13,9 @@ from authors.models import Follow, FollowRequest
 
 User = get_user_model()
 
+
 class FollowRequestAPITests(TestCase):
-    """Test follow request creation, approval, and denial functionality."""
+    """Test follow request creation, approval, denial, and friendship behavior."""
 
     def setUp(self):
         """Set up test users and authenticated client"""
@@ -25,106 +26,136 @@ class FollowRequestAPITests(TestCase):
         self.bob = User.objects.create_user(
             username='bob', password='pass123', displayName='Bob'
         )
-        self.client.login(username='bob', password='pass123')  # Bob will send requests
+        self.charlie = User.objects.create_user(
+            username='charlie', password='pass123', displayName='Charlie'
+        )
+        self.client.login(username='bob', password='pass123')  # Bob starts as active user
 
-    def test_follow_request_creation(self):
-        """Test that a user can send a follow request to another user"""
+    # ==================== FOLLOW REQUEST TEST ====================
+    def test_follow_request_create(self):
+        """User can send a valid follow request"""
         url = reverse('authors:follow_author', kwargs={'author_id': self.alice.id})
         response = self.client.post(url)
-
         self.assertEqual(response.status_code, 302)
         self.assertTrue(
             FollowRequest.objects.filter(sender=self.bob, receiver=self.alice).exists(),
             "FollowRequest should be created when Bob follows Alice."
         )
-
         follow_req = FollowRequest.objects.get(sender=self.bob, receiver=self.alice)
         self.assertEqual(follow_req.status, 'PENDING')
 
-    def test_cannot_follow_self(self):
-        """Ensure users cannot follow themselves"""
+    # ==================== SELF-FOLLOW TEST ====================
+    def test_follow_self_not_allowed(self):
+        """Ensure a user cannot follow themselves"""
         url = reverse('authors:follow_author', kwargs={'author_id': self.bob.id})
         response = self.client.post(url)
         self.assertEqual(response.status_code, 302)
-        self.assertFalse(FollowRequest.objects.filter(sender=self.bob, receiver=self.bob).exists())
+        self.assertFalse(
+            FollowRequest.objects.filter(sender=self.bob, receiver=self.bob).exists(),
+            "Self-follow requests should never be created."
+        )
 
+    # ==================== DUPLICATE FOLLOW REQUEST TEST ====================
     def test_duplicate_follow_request(self):
-        """Test that duplicate follow requests are not created"""
+        """Duplicate follow requests should not create new entries"""
         FollowRequest.objects.create(sender=self.bob, receiver=self.alice)
         url = reverse('authors:follow_author', kwargs={'author_id': self.alice.id})
         self.client.post(url)
-
-        # Should still be only one pending request
         count = FollowRequest.objects.filter(sender=self.bob, receiver=self.alice).count()
         self.assertEqual(count, 1, "Duplicate follow requests should not be created.")
 
-    def test_approve_follow_request(self):
-        """Test that a receiver can approve a follow request"""
-        follow_req = FollowRequest.objects.create(sender=self.bob, receiver=self.alice)
-        approve_url = reverse('authors:approve_follow_request', kwargs={'request_id': follow_req.id})
+    # ==================== CANCEL FOLLOW REQUEST TEST ====================
+    def test_cancel_follow_request(self):
+        """User can cancel a pending follow request"""
+        FollowRequest.objects.create(sender=self.bob, receiver=self.alice, status='PENDING')
+        cancel_url = reverse('authors:cancel_follow_request', kwargs={'author_id': self.alice.id})
+        response = self.client.post(cancel_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            FollowRequest.objects.filter(sender=self.bob, receiver=self.alice).exists(),
+            "Follow request should be deleted upon cancellation."
+        )
 
-        # Alice approves
+    # ==================== APPROVE FOLLOW REQUEST TEST ====================
+    def test_approve_follow_request(self):
+        """Receiver can approve a pending follow request"""
+        follow_req = FollowRequest.objects.create(sender=self.bob, receiver=self.alice, status='PENDING')
+        approve_url = reverse('authors:approve_follow_request', kwargs={'request_id': follow_req.id})
+        # Alice logs in to approve
         self.client.logout()
         self.client.login(username='alice', password='pass123')
         response = self.client.post(approve_url)
-
         self.assertEqual(response.status_code, 302)
         follow_req.refresh_from_db()
-        self.assertEqual(follow_req.status, 'APPROVED', "Follow request should be approved.")
-
-        # Verify that a Follow relationship was created
+        self.assertEqual(follow_req.status, 'APPROVED')
         self.assertTrue(
             Follow.objects.filter(follower=self.bob, following=self.alice).exists(),
-            "A Follow record should be created after approval."
+            "Follow relationship should be created after approval."
         )
 
+    # ==================== DENY FOLLOW REQUEST TEST ====================
     def test_deny_follow_request(self):
-        """Test that a receiver can deny a follow request"""
-        follow_req = FollowRequest.objects.create(sender=self.bob, receiver=self.alice)
+        """Receiver can deny a pending follow request"""
+        follow_req = FollowRequest.objects.create(sender=self.bob, receiver=self.alice, status='PENDING')
         deny_url = reverse('authors:deny_follow_request', kwargs={'request_id': follow_req.id})
-
         self.client.logout()
         self.client.login(username='alice', password='pass123')
         response = self.client.post(deny_url)
-
         self.assertEqual(response.status_code, 302)
         follow_req.refresh_from_db()
-        self.assertEqual(follow_req.status, 'DENIED', "Follow request should be denied.")
+        self.assertEqual(follow_req.status, 'DENIED')
         self.assertFalse(
             Follow.objects.filter(follower=self.bob, following=self.alice).exists(),
-            "No Follow relationship should be created after denial."
+            "Denied follow requests should not create a Follow relationship."
         )
 
-    def test_follow_requests_page_lists_pending(self):
-        """Test that pending follow requests appear in the receiver’s follow requests page"""
-        FollowRequest.objects.create(sender=self.bob, receiver=self.alice)
+    # ==================== MUTUAL FOLLOW TO FRIENDSHIP TEST ====================
+    def test_mutual_follow_creates_friendship(self):
+        """Mutual follows should make both users friends"""
+        # Bob follows Alice
+        Follow.objects.create(follower=self.bob, following=self.alice)
+        # Alice follows Bob (creating mutual)
+        Follow.objects.create(follower=self.alice, following=self.bob)
+        is_friend = (
+            Follow.objects.filter(follower=self.bob, following=self.alice).exists()
+            and Follow.objects.filter(follower=self.alice, following=self.bob).exists()
+        )
+        self.assertTrue(is_friend, "Mutual follow should establish friendship.")
 
+    # ==================== UNFOLLOW TEST ====================
+    def test_unfollow_author(self):
+        """User can unfollow another user"""
+        Follow.objects.create(follower=self.bob, following=self.alice)
+        unfollow_url = reverse('authors:unfollow_author', kwargs={'author_id': self.alice.id})
+        response = self.client.post(unfollow_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            Follow.objects.filter(follower=self.bob, following=self.alice).exists(),
+            "User should be able to unfollow another author."
+        )
+
+    # ==================== PERMISSIONS / EDGE CASES ====================
+    def test_non_receiver_cannot_approve_or_deny(self):
+        """Only the intended receiver can approve or deny follow requests"""
+        follow_req = FollowRequest.objects.create(sender=self.bob, receiver=self.alice, status='PENDING')
+        # Charlie tries to approve/deny
+        self.client.logout()
+        self.client.login(username='charlie', password='pass123')
+        approve_url = reverse('authors:approve_follow_request', kwargs={'request_id': follow_req.id})
+        deny_url = reverse('authors:deny_follow_request', kwargs={'request_id': follow_req.id})
+        response_approve = self.client.post(approve_url)
+        response_deny = self.client.post(deny_url)
+        self.assertEqual(response_approve.status_code, 404)
+        self.assertEqual(response_deny.status_code, 404)
+        follow_req.refresh_from_db()
+        self.assertEqual(follow_req.status, 'PENDING')
+
+    def test_follow_requests_page_lists_pending(self):
+        """Receiver can view their pending follow requests on the page"""
+        FollowRequest.objects.create(sender=self.bob, receiver=self.alice, status='PENDING')
         self.client.logout()
         self.client.login(username='alice', password='pass123')
         response = self.client.get(reverse('authors:follow_requests'))
-
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Bob")
         self.assertTemplateUsed(response, "authors/follow_requests.html")
-
-    def test_non_receiver_cannot_approve_or_deny(self):
-        """Ensure only the intended receiver can approve/deny follow requests"""
-        follow_req = FollowRequest.objects.create(sender=self.bob, receiver=self.alice)
-
-        # A random user tries to approve
-        charlie = User.objects.create_user(username='charlie', password='pass123', displayName='Charlie')
-        self.client.logout()
-        self.client.login(username='charlie', password='pass123')
-
-        approve_url = reverse('authors:approve_follow_request', kwargs={'request_id': follow_req.id})
-        deny_url = reverse('authors:deny_follow_request', kwargs={'request_id': follow_req.id})
-
-        response_approve = self.client.post(approve_url)
-        response_deny = self.client.post(deny_url)
-
-        # Should return 404 (not authorized)
-        self.assertEqual(response_approve.status_code, 404)
-        self.assertEqual(response_deny.status_code, 404)
-
-        follow_req.refresh_from_db()
-        self.assertEqual(follow_req.status, 'PENDING', "Request should remain pending if unauthorized user acts.")
