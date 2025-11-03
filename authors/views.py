@@ -172,11 +172,19 @@ class AuthorAPIView(View):
         try:
             author = Author.objects.get(id=identifier)
         except (Author.DoesNotExist, ValueError, Exception):
-            # Fall back to FQID
+            # Fall back to FQID - try with and without trailing slash
             try:
                 author = Author.objects.get(url=identifier)
             except Author.DoesNotExist:
-                return JsonResponse({"error": "Author not found"}, status=404)
+                try:
+                    # Try with trailing slash added
+                    author = Author.objects.get(url=identifier + '/')
+                except Author.DoesNotExist:
+                    try:
+                        # Try with trailing slash removed
+                        author = Author.objects.get(url=identifier.rstrip('/'))
+                    except Author.DoesNotExist:
+                        return JsonResponse({"error": "Author not found"}, status=404)
         
         web_url = reverse('authors:author_profile', kwargs={'author_id': author.id})
         author_id_url = author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/"
