@@ -1,11 +1,33 @@
 """
-API Tests for User Stories 28, 29
+API Tests for User Stories 28, 29, 44
 
 28. As an author, I want to comment on entries that I can access,
     so I can make a witty reply.
 
 29. As an author, I want to like comments that I can access,
     so I can show my appreciation.
+
+44. As an author, comments on my friends-only entries are visible only to my friends and the comment's author.
+
+These tests cover
+- Any logged-in user can comment on a PUBLIC post
+- Non-followers without the link can’t comment on an UNLISTED post
+- Non-followers with the link can comment on an UNLISTED post
+- Followers can comment on an UNLISTED post even without the link
+- On FRIENDS-only posts, only mutual followers or the post owner can comment; one-way followers are blocked
+- Post owner can always comment on their own FRIENDS-only post
+- Any logged-in user can like a PUBLIC comment
+- Non-followers without the link can’t like an UNLISTED comment
+- Non-followers with the link can like an UNLISTED comment
+- Followers can like an UNLISTED comment
+- Only mutual friends or the owner can like comments on FRIENDS-only posts
+- Liking a PUBLIC comment twice toggles like/unlike properly
+
+Edge cases
+- Empty or whitespace-only comments are rejected (validates input)
+- Unauthenticated users can’t comment or like (redirect to login)
+- Comments with empty content can’t be liked
+- liking a comment that was deleted should give error
 """
 from django.test import TestCase, Client
 from django.urls import reverse
@@ -90,7 +112,7 @@ class CommentsAPITests(TestCase):
     # ───────────────────────────────────────────────────────────────────────────
 
     def test_comment_public_any_authenticated(self):
-        """PUBLIC: any logged-in user can comment (302 and row created)."""
+        """Any logged-in user can comment on a PUBLIC post"""
         self.client.force_login(self.alice)
         url = reverse("authors:add_comment", kwargs={"post_id": self.public_post.id})
         resp = self.client.post(url, data={"content": "Nice public!"})
@@ -103,7 +125,7 @@ class CommentsAPITests(TestCase):
 
     def test_comment_unlisted_non_follower_without_link_forbidden(self):
         """
-        PUBLIC_UNLISTED: non-follower WITHOUT link → 403 (no session flag set).
+        Non-followers without the link can’t comment on an UNLISTED post
         Carol is a follower of Bob in setUp. Use a non-follower: Alice unfollows Bob first.
         """
         # Remove Alice↔Bob to simulate true non-follower w/o link
@@ -123,8 +145,8 @@ class CommentsAPITests(TestCase):
 
     def test_comment_unlisted_non_follower_with_link_allowed(self):
         """
-        PUBLIC_UNLISTED: non-follower WITH link → allowed.
-        We simulate "has the link" by GETing the detail first (session flag set).
+        Non-followers with the link can comment on an UNLISTED post
+        We simulate "has the link" by GETing the detail first.
         """
         # Make Alice a true non-follower
         Follow.objects.filter(follower=self.alice, following=self.bob).delete()
@@ -146,7 +168,7 @@ class CommentsAPITests(TestCase):
         )
 
     def test_comment_unlisted_follower_allowed(self):
-        """PUBLIC_UNLISTED: follower can comment without visiting detail first."""
+        """Followers can comment on an UNLISTED post even without the link"""
         self.client.force_login(self.carol)  # Carol follows Bob (one-way)
         url = reverse("authors:add_comment", kwargs={"post_id": self.unlisted_post.id})
         resp = self.client.post(url, data={"content": "follower can comment"})
@@ -159,6 +181,7 @@ class CommentsAPITests(TestCase):
 
     def test_comment_friends_requires_mutual_or_owner(self):
         """
+        On FRIENDS-only posts, only mutual followers or the post owner can comment; one-way followers are blocked
         FRIENDS:
           - Carol (one-way follower) → 403
           - Alice (mutual) → 302
@@ -189,7 +212,7 @@ class CommentsAPITests(TestCase):
         )
 
     def test_owner_can_always_comment_on_own_post(self):
-        """Owner sanity check on FRIENDS."""
+        """Post owner can always comment on their own FRIENDS-only post"""
         self.client.force_login(self.alice)
         url = reverse("authors:add_comment", kwargs={"post_id": self.alices_friends_post.id})
         resp = self.client.post(url, data={"content": "my note"})
@@ -205,7 +228,7 @@ class CommentsAPITests(TestCase):
     # ───────────────────────────────────────────────────────────────────────────
 
     def test_like_comment_public_any_authenticated(self):
-        """PUBLIC comment: any logged-in user can like (302 & row created)."""
+        """Any logged-in user can like a PUBLIC comment"""
         self.client.force_login(self.alice)
         url = reverse("authors:toggle_comment_like",
                       kwargs={"comment_id": self.public_comment.id})
@@ -217,7 +240,7 @@ class CommentsAPITests(TestCase):
         )
 
     def test_like_comment_unlisted_non_follower_without_link_forbidden(self):
-        """UNLISTED comment: non-follower without link → 403."""
+        """Non-followers without the link can’t like an UNLISTED comment"""
         # Make Alice a true non-follower
         Follow.objects.filter(follower=self.alice, following=self.bob).delete()
         Follow.objects.filter(follower=self.bob, following=self.alice).delete()
@@ -233,7 +256,7 @@ class CommentsAPITests(TestCase):
         )
 
     def test_like_comment_unlisted_non_follower_with_link_allowed(self):
-        """UNLISTED comment: non-follower with link (detail GET first) → allowed."""
+        """Non-followers with the link can like an UNLISTED comment"""
         # Make Alice a true non-follower
         Follow.objects.filter(follower=self.alice, following=self.bob).delete()
         Follow.objects.filter(follower=self.bob, following=self.alice).delete()
@@ -253,7 +276,7 @@ class CommentsAPITests(TestCase):
         )
 
     def test_like_comment_unlisted_follower_allowed(self):
-        """UNLISTED comment: follower (Carol) can like without link."""
+        """Followers can like an UNLISTED comment"""
         self.client.force_login(self.carol)  # Carol follows Bob
         url = reverse("authors:toggle_comment_like",
                       kwargs={"comment_id": self.unlisted_comment.id})
@@ -266,6 +289,7 @@ class CommentsAPITests(TestCase):
 
     def test_like_comment_friends_requires_mutual_or_owner(self):
         """
+        Only mutual friends or the owner can like comments on FRIENDS-only posts
         FRIENDS comment:
           - Carol (one-way) → 403
           - Alice (mutual) → 302
@@ -295,7 +319,7 @@ class CommentsAPITests(TestCase):
         )
 
     def test_like_comment_toggle_cycle_public(self):
-        """Toggle like/unlike on PUBLIC comment."""
+        """Liking a PUBLIC comment twice toggles like/unlike properly"""
         self.client.force_login(self.alice)
         url = reverse("authors:toggle_comment_like",
                       kwargs={"comment_id": self.public_comment.id})
@@ -309,3 +333,88 @@ class CommentsAPITests(TestCase):
         self.assertEqual(r2.status_code, 302)
         self.assertFalse(CommentLike.objects.filter(author=self.alice,
                                                     comment=self.public_comment).exists())
+    # ───────────────────────────────────────────────────────────────────────────
+    # Some Extra Edge Cases test
+    # ───────────────────────────────────────────────────────────────────────────
+
+    def test_comment_empty_content_rejected(self):
+        """
+        Empty or whitespace-only comments are rejected (validates input)
+        """
+        self.client.force_login(self.alice)
+        url = reverse("authors:add_comment", kwargs={"post_id": self.public_post.id})
+
+        r1 = self.client.post(url, data={"content": ""})
+        r2 = self.client.post(url, data={"content": "   "})
+
+        # both attempts redirect back, but no comment rows are created
+        self.assertEqual(r1.status_code, 302)
+        self.assertEqual(r2.status_code, 302)
+        self.assertFalse(
+            Comment.objects.filter(post=self.public_post, author=self.alice, content="").exists()
+        )
+        self.assertFalse(
+            Comment.objects.filter(post=self.public_post, author=self.alice, content="   ").exists()
+        )
+
+    def test_unauthenticated_cannot_comment_or_like(self):
+        """
+        Unauthenticated users that are not logged in can’t comment or like (redirect to login)
+        """
+        url_comment = reverse("authors:add_comment", kwargs={"post_id": self.public_post.id})
+        url_like_comment = reverse("authors:toggle_comment_like",
+                                   kwargs={"comment_id": self.public_comment.id})
+
+        # Not logged in
+        resp_comment = self.client.post(url_comment, data={"content": "hi"})
+        resp_like = self.client.post(url_like_comment)
+
+        # Django default: redirect to login page
+        self.assertEqual(resp_comment.status_code, 302)
+        self.assertEqual(resp_like.status_code, 302)
+
+        # And no side effects
+        self.assertFalse(
+            Comment.objects.filter(post=self.public_post, content="hi").exists()
+        )
+        self.assertFalse(
+            CommentLike.objects.filter(comment=self.public_comment).exists()
+        )
+    def test_cannot_like_empty_comment(self):
+        """
+        Comments with empty content can’t be liked
+        """
+        # Create an empty comment manually
+        empty_comment = Comment.objects.create(
+            post=self.public_post, author=self.bob, content=""
+        )
+
+        self.client.force_login(self.alice)
+        url = reverse("authors:toggle_comment_like",
+                      kwargs={"comment_id": empty_comment.id})
+
+        resp = self.client.post(url)
+
+        # Expect forbidden (403) or redirect blocked
+        self.assertIn(resp.status_code, (403, 400))
+        self.assertFalse(
+            CommentLike.objects.filter(author=self.alice, comment=empty_comment).exists()
+        )
+
+    def test_like_deleted_comment_returns_404(self):
+        """
+        liking a comment that was deleted should give error
+        """
+        self.client.force_login(self.alice)
+
+        # Create and delete comment
+        temp_comment = Comment.objects.create(
+            post=self.public_post, author=self.bob, content="temp"
+        )
+        temp_id = temp_comment.id
+        temp_comment.delete()
+
+        # Attempt to like deleted comment
+        url = reverse("authors:toggle_comment_like", kwargs={"comment_id": temp_id})
+        resp = self.client.post(url)
+        self.assertEqual(resp.status_code, 404)
