@@ -4,6 +4,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy, reverse
 from django.views.generic.edit import CreateView, UpdateView
 from django.views.generic import DetailView, ListView, TemplateView
+from django.core.paginator import Paginator
 from django.views import View
 from django.http import HttpResponse, JsonResponse
 from django.db.models import Q
@@ -209,13 +210,28 @@ GET requests only.
 @method_decorator(http_basic_auth_or_session, name='dispatch')
 class AuthorsListAPIView(View):
     def get(self, request):
-        authors = Author.objects.all()
-        authors_data = []
-        for author in authors:
+        # Pagination parameters
+        try:
+            page_num = int(request.GET.get('page', 1))
+        except ValueError:
+            page_num = 1
+
+        try:
+            page_size = int(request.GET.get('size', 10))
+        except ValueError:
+            page_size = 10
+
+        # Base queryset and ordering
+        authors_qs = Author.objects.all().order_by('displayName')
+
+        paginator = Paginator(authors_qs, page_size)
+        page_obj = paginator.get_page(page_num)
+
+        items = []
+        for author in page_obj:
             web_url = reverse('authors:author_profile', kwargs={'author_id': author.id})
-            # Build full URL for id if not set
             author_id_url = author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/"
-            authors_data.append({
+            items.append({
                 "type": "author",
                 "id": author_id_url,
                 "host": author.host or f"{request.scheme}://{request.get_host()}",
@@ -224,7 +240,17 @@ class AuthorsListAPIView(View):
                 "profileImage": request.build_absolute_uri(author.profileImage.url) if author.profileImage else None,
                 "web": f"{request.scheme}://{request.get_host()}{web_url}",
             })
-        return JsonResponse(authors_data, safe=False, json_dumps_params={'indent': 2})
+
+        response_data = {
+            "type": "authors",
+            "items": items,
+            "page": page_obj.number,
+            "size": page_size,
+            "count": paginator.count,
+            "num_pages": paginator.num_pages,
+        }
+
+        return JsonResponse(response_data, safe=False, json_dumps_params={'indent': 2})
 
 
 class CreatePostView(CreateView):
