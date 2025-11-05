@@ -427,6 +427,27 @@ class InboxAPIView(View):
             
             # Extract the object being liked (post ID)
             object_url = data.get('object', '')
+            # If the object refers to a comment (comment likes), handle specially
+            # Comment URL format used by this API: /api/authors/{author_id}/commented/{comment_id}
+            if '/commented/' in object_url or '/comments/' in object_url:
+                # Extract comment id (last path component)
+                comment_id_str = object_url.split('/')[-1]
+                try:
+                    # Try to resolve comment by id or FQID
+                    comment = _get_comment_by_id_or_fqid(comment_id=comment_id_str, comment_fqid=object_url)
+                    if not comment:
+                        return JsonResponse({'error': 'Comment not found for comment-like'}, status=404)
+
+                    # Create or get the comment liker (remote/local)
+                    # (liker was created above)
+                    comment_like, created = CommentLike.objects.get_or_create(
+                        author=liker,
+                        comment=comment
+                    )
+                    return JsonResponse({'message': 'Comment like received'}, status=201 if created else 200)
+                except Exception as e:
+                    return JsonResponse({'error': f'Failed to process comment like: {str(e)}'}, status=400)
+
             post_id_str = object_url.split('/')[-1]
             
             # Try to parse as UUID
