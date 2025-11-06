@@ -788,7 +788,6 @@ curl -u username:password \
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 200 OK | Foreign author IS following | Follow relationship exists |
 | 404 Not Found | Foreign author is NOT following | No follow relationship or author doesn't exist |
 | 401 Unauthorized | Authentication required | No/invalid credentials |
 
@@ -905,7 +904,6 @@ curl -u username:password -X POST \
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 201 Created | Follow request successfully received | Request processed and queued for approval |
 | 400 Bad Request | Invalid request format | Missing required fields or incorrect JSON structure |
 | 401 Unauthorized | Authentication required | No/invalid credentials provided |
 | 404 Not Found | Author not found | AUTHOR_SERIAL doesn't exist on this node |
@@ -1170,7 +1168,6 @@ curl -u username:password -X POST \
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 201 Created | Post created successfully | Valid request, properly authenticated |
 | 400 Bad Request | Invalid request data | Missing required fields or invalid data |
 | 401 Unauthorized | Authentication required | Not authenticated |
 | 403 Forbidden | Not authorized to post as this author | Authenticated but not as the specified author |
@@ -1264,7 +1261,6 @@ curl https://dark-blue-t-6ce3d0bd82d3.herokuapp.com/api/authors/2cabd0b3-4cc7-49
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 200 OK | Post retrieved successfully | Valid request with proper permissions |
 | 401 Unauthorized | Authentication required | Friends-only post accessed without auth |
 | 403 Forbidden | Access denied | Friends-only post but user is not a friend |
 | 404 Not Found | Post not found | ENTRY_SERIAL doesn't exist or post is deleted |
@@ -1409,7 +1405,6 @@ curl -u username:password \
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 200 OK | Comments retrieved successfully | Valid request with proper permissions |
 | 401 Unauthorized | Authentication required | Friends-only post accessed without auth |
 | 403 Forbidden | Access denied | Friends-only post but user is not a friend |
 | 404 Not Found | Post not found | ENTRY_SERIAL doesn't exist or post is deleted |
@@ -1533,7 +1528,6 @@ The response is an array of comment objects (not wrapped in a container object).
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 200 OK | Comments retrieved successfully | Valid request |
 | 401 Unauthorized | Authentication required | No/invalid credentials |
 | 404 Not Found | Author not found | AUTHOR_SERIAL doesn't exist |
 
@@ -1602,7 +1596,6 @@ curl -u username:password \
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 200 OK | Comment retrieved successfully | Valid comment ID |
 | 401 Unauthorized | Authentication required | No/invalid credentials |
 | 404 Not Found | Comment not found | COMMENT_SERIAL doesn't exist or author doesn't match |
 
@@ -1739,7 +1732,6 @@ curl -u username:password \
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 200 OK | Likes retrieved successfully | Valid request |
 | 401 Unauthorized | Authentication required | Friends-only post accessed without auth |
 | 403 Forbidden | Access denied | Friends-only post but user is not a friend |
 | 404 Not Found | Post not found | ENTRY_SERIAL doesn't exist or post is deleted |
@@ -1830,7 +1822,6 @@ Same as post likes response - returns a `likes` object with `items` array contai
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 200 OK | Comment likes retrieved successfully | Valid request |
 | 401 Unauthorized | Authentication required | Friends-only post's comment accessed without auth |
 | 403 Forbidden | Access denied | Friends-only post but user is not a friend |
 | 404 Not Found | Comment or post not found | COMMENT_ID doesn't exist or post is deleted |
@@ -1940,7 +1931,6 @@ curl -u username:password \
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 200 OK | Liked items retrieved successfully | Valid request |
 | 401 Unauthorized | Authentication required | No/invalid credentials |
 | 404 Not Found | Author not found | AUTHOR_SERIAL doesn't exist |
 
@@ -2006,7 +1996,6 @@ curl -u username:password \
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 200 OK | Like retrieved successfully | Valid like ID |
 | 401 Unauthorized | Authentication required | No/invalid credentials |
 | 404 Not Found | Like not found | LIKE_SERIAL doesn't exist or author doesn't match |
 
@@ -2362,7 +2351,6 @@ curl -u username:password -X POST \
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 201 Created | Object successfully received | Valid request with proper object type |
 | 400 Bad Request | Invalid request format | Missing required fields, invalid JSON, or unsupported object type |
 | 401 Unauthorized | Authentication required | No/invalid credentials provided |
 | 404 Not Found | Author not found | AUTHOR_SERIAL doesn't exist on this node |
