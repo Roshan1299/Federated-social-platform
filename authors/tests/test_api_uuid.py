@@ -137,8 +137,10 @@ class AuthenticationTests(APILocalTestCase):
         )
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertIsInstance(data, list)
-        self.assertGreater(len(data), 0)
+        # Authors list is paginated and returns an envelope with 'items'
+        self.assertIsInstance(data, dict)
+        self.assertIn('items', data)
+        self.assertGreater(len(data['items']), 0)
     
     def test_authors_list_with_session_auth(self):
         """Test authors list with session authentication"""
@@ -146,8 +148,9 @@ class AuthenticationTests(APILocalTestCase):
         response = self.client.get('/api/authors/')
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertIsInstance(data, list)
-
+        # Authors list is paginated and returns an envelope with 'items'
+        self.assertIsInstance(data, dict)
+        self.assertIn('items', data)
 
 class AuthorsAPITests(APILocalTestCase):
     """Test Authors API endpoints"""
