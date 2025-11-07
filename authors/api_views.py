@@ -15,33 +15,56 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from .models import Author, Post, Follow, FollowRequest, Like, Comment, CommentLike
 from .authentication import http_basic_auth_or_session, http_basic_auth_required
+from .inbox_handlers import (
+    handle_post as ih_handle_post,
+    handle_comment as ih_handle_comment,
+    handle_like as ih_handle_like,
+    handle_follow_request as ih_handle_follow_request,
+)
 
+
+def json_response(data, status=200):
+    """Return a JsonResponse with pretty-printed JSON for readability.
+    Uses 2-space indentation so responses are not smashed together.
+    """
+    return JsonResponse(data, status=status, json_dumps_params={"indent": 2})
+
+
+# Wrap the imported JsonResponse so existing calls remain valid but default to pretty JSON
+_original_JsonResponse = JsonResponse
+def JsonResponse(*args, **kwargs):
+    # Ensure pretty printing unless explicitly overridden
+    if 'json_dumps_params' not in kwargs:
+        kwargs['json_dumps_params'] = {'indent': 2}
+    return _original_JsonResponse(*args, **kwargs)
 # ==================== Helper Functions for FQID Support ====================
 
-def _get_author_by_id_or_fqid(identifier):
-    """Get author by UUID or FQID (full URL)"""
-    if not identifier:
-        return None
-    
-    # Normalize trailing slashes
-    identifier_normalized = identifier.rstrip('/') if isinstance(identifier, str) else identifier
-    
-    # Try UUID first (only if it looks like a UUID)
-    try:
-        # Check if it could be a UUID (doesn't contain :// which indicates a URL)
-        if '://' not in str(identifier):
-            return Author.objects.get(id=identifier)
-    except (Author.DoesNotExist, ValueError):
-        pass
-    
-    # Fall back to FQID (full URL) - try both with and without trailing slash
-    try:
-        return Author.objects.get(url=identifier_normalized)
-    except Author.DoesNotExist:
+def _get_author_by_id_or_fqid(author_id=None, author_fqid=None):
+    """Get author by UUID (author_id) or FQID (author_fqid / full URL).
+
+    Behavior:
+    - If `author_fqid` is provided, perform a strict FQID lookup against the
+      `url` field (no UUID fallback). This mirrors the comment/like FQID helpers.
+    - If `author_id` is provided, perform a UUID/serial lookup against `id`.
+    """
+    # Prefer explicit FQID lookups when provided (strict - no UUID fallback)
+    if author_fqid:
+        fqid_norm = author_fqid.rstrip('/') if isinstance(author_fqid, str) else author_fqid
+        fqid_with_slash = fqid_norm + '/'
         try:
-            return Author.objects.get(url=identifier_normalized + '/')
+            return Author.objects.get(Q(url=fqid_norm) | Q(url=fqid_with_slash))
         except Author.DoesNotExist:
             raise Http404("Author not found")
+
+    # UUID/serial lookup
+    if author_id:
+        try:
+            return Author.objects.get(id=author_id)
+        except (Author.DoesNotExist, ValueError):
+            raise Http404("Author not found")
+
+    # Nothing provided
+    raise Http404("Author identifier required")
 
 
 def _get_post_by_id_or_fqid(entry_id=None, entry_fqid=None, author_id=None):
@@ -60,15 +83,11 @@ def _get_post_by_id_or_fqid(entry_id=None, entry_fqid=None, author_id=None):
         entry_fqid_with_slash = entry_fqid_normalized + '/'
         
         try:
-            # Try by origin field first (with and without trailing slash)
             return Post.objects.get(Q(origin=entry_fqid_normalized) | Q(origin=entry_fqid_with_slash))
         except Post.DoesNotExist:
             try:
-                # Try by source field (with and without trailing slash)
                 return Post.objects.get(Q(source=entry_fqid_normalized) | Q(source=entry_fqid_with_slash))
             except Post.DoesNotExist:
-                # DO NOT extract UUID as fallback!
-                # If FQID doesn't match source/origin, we don't have this post
                 raise Http404("Post not found - FQID does not match any post in database")
     
     elif entry_id:
@@ -83,36 +102,34 @@ def _get_post_by_id_or_fqid(entry_id=None, entry_fqid=None, author_id=None):
 
 
 def _get_comment_by_fqid(comment_fqid):
-    """Get comment by FQID (full URL) or UUID"""
+    """
+    Get comment by FQID (full URL)
+    """
+    if not comment_fqid:
+        raise Http404("Comment identifier required")
+
+    # Normalize and try origin lookup first
+    fqid_norm = comment_fqid.rstrip('/') if isinstance(comment_fqid, str) else comment_fqid
+    fqid_with_slash = fqid_norm + '/'
     try:
-        # Try UUID first
-        return Comment.objects.get(id=comment_fqid)
-    except (Comment.DoesNotExist, ValueError, Exception):
-        # Try parsing the FQID to extract UUID
-        parts = comment_fqid.split('/')
-        if len(parts) >= 2:
-            potential_uuid = parts[-1]
-            try:
-                return Comment.objects.get(id=potential_uuid)
-            except (Comment.DoesNotExist, ValueError, Exception):
-                pass
+        return Comment.objects.get(Q(origin=fqid_norm) | Q(origin=fqid_with_slash))
+    except Comment.DoesNotExist:
+        # No UUID fallback: caller asked for FQID, so fail if origin doesn't match.
         raise Http404("Comment not found")
 
 
 def _get_like_by_fqid(like_fqid):
-    """Get like by FQID (full URL) or UUID"""
+    """Get like by FQID (full URL)
+    """
+    if not like_fqid:
+        raise Http404("Like identifier required")
+
+    fqid_norm = like_fqid.rstrip('/') if isinstance(like_fqid, str) else like_fqid
+    fqid_with_slash = fqid_norm + '/'
     try:
-        # Try UUID first
-        return Like.objects.get(id=like_fqid)
-    except (Like.DoesNotExist, ValueError, Exception):
-        # Try parsing the FQID to extract UUID
-        parts = like_fqid.split('/')
-        if len(parts) >= 2:
-            potential_uuid = parts[-1]
-            try:
-                return Like.objects.get(id=potential_uuid)
-            except (Like.DoesNotExist, ValueError, Exception):
-                pass
+        return Like.objects.get(Q(origin=fqid_norm) | Q(origin=fqid_with_slash))
+    except Like.DoesNotExist:
+        # No UUID fallback for FQID lookups
         raise Http404("Like not found")
 
 
@@ -199,7 +216,8 @@ def build_post_dict(post, request):
     
     data = {
         "type": "post",
-        "id": entry_url,
+        # Use canonical origin as the id when available
+        "id": post.origin or entry_url,
         "author": build_author_dict(author, request),
         "title": post.title,
         "source": post.source or entry_url,
@@ -224,6 +242,21 @@ def build_post_dict(post, request):
     # Add image if present
     if post.image:
         data["image"] = request.build_absolute_uri(post.image.url)
+
+    # Add likes metadata for this entry
+    likes_url = f"{entry_url}/likes"
+    # Derive a human web URL by removing '/api' if present
+    web_url = entry_url.replace('/api', '')
+    data["likes"] = likes_url
+    data["likesSrc"] = {
+        "type": "likes",
+        "page": 1,
+        "size": 5,
+        "post": entry_url,
+        "id": likes_url,
+        "web": web_url,
+        "src": []  # can be populated with like objects
+    }
     
     return data
 
@@ -233,14 +266,26 @@ def build_comment_dict(comment, request):
     post = comment.post
     author = post.author
     comment_url = f"{request.scheme}://{request.get_host()}/api/authors/{comment.author.id}/commented/{comment.id}"
-    
+
     return {
         "type": "comment",
-        "id": comment_url,
+        # Use canonical origin as the id when available
+        "id": comment.origin or comment_url,
         "author": build_author_dict(comment.author, request),
         "comment": comment.content,
         "contentType": "text/plain",
         "published": comment.created_at.isoformat(),
+        # Add likes metadata for this comment
+        "likes": f"{request.scheme}://{request.get_host()}/api/authors/{comment.post.author.id}/entries/{comment.post.id}/comments/{comment.id}/likes",
+        "likesSrc": {
+            "type": "likes",
+            "page": 1,
+            "size": 5,
+            "post": f"{request.scheme}://{request.get_host()}/api/authors/{comment.post.author.id}/entries/{comment.post.id}",
+            "id": f"{request.scheme}://{request.get_host()}/api/authors/{comment.post.author.id}/entries/{comment.post.id}/comments/{comment.id}/likes",
+            "web": f"{request.scheme}://{request.get_host()}/authors/{comment.post.author.id}/entries/{comment.post.id}/",
+            "src": []
+        }
     }
 
 
@@ -249,12 +294,13 @@ def build_like_dict(like, request):
     post = like.post
     author = post.author
     like_id_url = f"{request.scheme}://{request.get_host()}/api/authors/{like.author.id}/liked/{like.id}"
-    
+
     return {
         "type": "like",
-        "id": like_id_url,
+        # Use canonical origin as the id when available
+        "id": like.origin or like_id_url,
         "author": build_author_dict(like.author, request),
-        "object": f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/entries/{post.id}",
+        "object": like.post.origin or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/entries/{post.id}",
         "published": like.created_at.isoformat(),
     }
 
@@ -264,11 +310,14 @@ def build_comment_like_dict(comment_like, request):
     comment = comment_like.comment
     # Use the correct comment URL format: /api/authors/{comment.author.id}/commented/{comment.id}
     comment_url = f"{request.scheme}://{request.get_host()}/api/authors/{comment.author.id}/commented/{comment.id}"
-    
+    like_id_url = f"{request.scheme}://{request.get_host()}/api/authors/{comment_like.author.id}/liked/{comment_like.id}"
+
     return {
         "type": "like",
+        # Use canonical origin as the id when available
+        "id": comment_like.origin or like_id_url,
         "author": build_author_dict(comment_like.author, request),
-        "object": comment_url,
+        "object": comment.origin or comment_url,
         "published": comment_like.created_at.isoformat(),
     }
 
@@ -303,288 +352,28 @@ class InboxAPIView(View):
             elif object_type == 'comment':
                 return self.handle_comment(recipient, data, request)
             else:
-                return JsonResponse({'error': f'Unknown object type: {object_type}'}, status=400)
+                return json_response({'error': f'Unknown object type: {object_type}'}, status=400)
                 
         except json.JSONDecodeError:
-            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+            return json_response({'error': 'Invalid JSON'}, status=400)
         except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
+            return json_response({'error': str(e)}, status=500)
     
     def handle_follow_request(self, recipient, data, request):
-        """Handle incoming follow request"""
-        try:
-            # Extract actor (sender) information
-            actor_data = data.get('actor', {})
-            actor_id = actor_data.get('id')
-            
-            # Try to find existing author or create a stub
-            # For remote authors, generate username from URL
-            actor_username = actor_id.split('/')[-2] if actor_id else 'remote_actor'
-            actor, created = Author.objects.get_or_create(
-                url=actor_id,
-                defaults={
-                    'username': f"remote_{actor_username}_{uuid.uuid4().hex[:8]}",
-                    'displayName': actor_data.get('displayName', 'Unknown'),
-                    'host': actor_data.get('host', ''),
-                    'github': actor_data.get('github'),
-                }
-            )
-            
-            # Create or get follow request
-            follow_request, created = FollowRequest.objects.get_or_create(
-                sender=actor,
-                receiver=recipient,
-                defaults={'status': 'PENDING'}
-            )
-            
-            if created:
-                return JsonResponse({'message': 'Follow request created'}, status=201)
-            else:
-                return JsonResponse({'message': 'Follow request already exists'}, status=200)
-                
-        except Exception as e:
-            return JsonResponse({'error': f'Failed to process follow request: {str(e)}'}, status=400)
+        """Delegate follow handling to inbox_handlers_updated.handle_follow_request"""
+        return ih_handle_follow_request(self, recipient, data, request)
     
     def handle_post(self, recipient, data, request):
-        """Handle incoming post/entry"""
-        try:
-            # Extract author information
-            author_data = data.get('author', {})
-            author_id = author_data.get('id')
-            
-            # Get or create the author
-            # For remote authors, generate username from URL
-            author_username = author_id.split('/')[-2] if author_id else 'remote_author'
-            author, created = Author.objects.get_or_create(
-                url=author_id,
-                defaults={
-                    'username': f"remote_{author_username}_{uuid.uuid4().hex[:8]}",
-                    'displayName': author_data.get('displayName', 'Unknown'),
-                    'host': author_data.get('host', ''),
-                    'github': author_data.get('github'),
-                }
-            )
-            
-            # Extract post ID from the post's id field
-            post_id_str = data.get('id', '').split('/')[-1]
-            # Try to use the ID if it's a valid UUID, otherwise let Django generate one
-            try:
-                post_id = uuid.UUID(post_id_str) if post_id_str else None
-            except (ValueError, AttributeError):
-                post_id = None
-            
-            # Create or update the post
-            if post_id:
-                post, created = Post.objects.update_or_create(
-                    id=post_id,
-                    defaults={
-                        'author': author,
-                        'title': data.get('title', 'Untitled'),
-                        'content': data.get('content', ''),
-                        'contentType': data.get('contentType', 'text/plain'),
-                        'visibility': data.get('visibility', 'PUBLIC'),
-                        'source': data.get('source'),
-                        'origin': data.get('origin'),
-                    }
-                )
-            else:
-                # If no valid UUID, create a new post
-                post = Post.objects.create(
-                    author=author,
-                    title=data.get('title', 'Untitled'),
-                    content=data.get('content', ''),
-                    contentType=data.get('contentType', 'text/plain'),
-                    visibility=data.get('visibility', 'PUBLIC'),
-                    source=data.get('source'),
-                    origin=data.get('origin'),
-                )
-                created = True
-            
-            return JsonResponse({'message': 'Post received'}, status=201 if created else 200)
-            
-        except Exception as e:
-            return JsonResponse({'error': f'Failed to process post: {str(e)}'}, status=400)
+        """Delegate post handling to inbox_handlers_updated.handle_post"""
+        return ih_handle_post(self, recipient, data, request)
     
     def handle_like(self, recipient, data, request):
-        """Handle incoming like"""
-        try:
-            # Extract author information
-            author_data = data.get('author', {})
-            author_id = author_data.get('id')
-            
-            # Get or create the liker
-            # For remote authors, generate username from URL
-            author_username = author_id.split('/')[-2] if author_id else 'remote_author'
-            liker, created = Author.objects.get_or_create(
-                url=author_id,
-                defaults={
-                    'username': f"remote_{author_username}_{uuid.uuid4().hex[:8]}",
-                    'displayName': author_data.get('displayName', 'Unknown'),
-                    'host': author_data.get('host', ''),
-                    'github': author_data.get('github'),
-                }
-            )
-            
-            # Extract the object being liked (post ID)
-            object_url = data.get('object', '')
-            # If the object refers to a comment (comment likes), handle specially
-            # Comment URL format used by this API: /api/authors/{author_id}/commented/{comment_id}
-            if '/commented/' in object_url or '/comments/' in object_url:
-                # Extract comment id (last path component)
-                comment_id_str = object_url.split('/')[-1]
-                try:
-                    # Try to resolve comment by id or FQID
-                    comment = _get_comment_by_id_or_fqid(comment_id=comment_id_str, comment_fqid=object_url)
-                    if not comment:
-                        return JsonResponse({'error': 'Comment not found for comment-like'}, status=404)
-
-                    # Create or get the comment liker (remote/local)
-                    # (liker was created above)
-                    comment_like, created = CommentLike.objects.get_or_create(
-                        author=liker,
-                        comment=comment
-                    )
-                    return JsonResponse({'message': 'Comment like received'}, status=201 if created else 200)
-                except Exception as e:
-                    return JsonResponse({'error': f'Failed to process comment like: {str(e)}'}, status=400)
-
-            post_id_str = object_url.split('/')[-1]
-            
-            # Try to parse as UUID
-            try:
-                post_id = uuid.UUID(post_id_str)
-                # Try to find the post
-                post = Post.objects.filter(id=post_id).first()
-                if not post:
-                    # Post doesn't exist locally - create a stub for federated content
-                    # Extract author ID from object URL (/authors/{id}/entries/{post_id})
-                    url_parts = object_url.split('/')
-                    if 'authors' in url_parts and 'entries' in url_parts:
-                        author_idx = url_parts.index('authors') + 1
-                        post_author_id = url_parts[author_idx]
-                        # Create or get the author stub
-                        post_author, _ = Author.objects.get_or_create(
-                            id=post_author_id,
-                            defaults={
-                                'username': f"federated_{post_author_id[:8]}",
-                                'displayName': 'Federated Author'
-                            }
-                        )
-                        # Create stub post
-                        post = Post.objects.create(
-                            id=post_id,
-                            author=post_author,
-                            title='Federated Post',
-                            content='',
-                            source=object_url,
-                            origin=object_url
-                        )
-                    else:
-                        return JsonResponse({'error': 'Invalid object URL format'}, status=400)
-            except (ValueError, AttributeError):
-                # If not a valid UUID, we can't process this like
-                return JsonResponse({'message': 'Like recorded for external content'}, status=201)
-            
-            # Create the like (if it doesn't exist)
-            like, created = Like.objects.get_or_create(
-                author=liker,
-                post=post
-            )
-            
-            return JsonResponse({'message': 'Like received'}, status=201 if created else 200)
-            
-        except Exception as e:
-            return JsonResponse({'error': f'Failed to process like: {str(e)}'}, status=400)
+        """Delegate like handling to inbox_handlers_updated.handle_like"""
+        return ih_handle_like(self, recipient, data, request)
     
     def handle_comment(self, recipient, data, request):
-        """Handle incoming comment"""
-        try:
-            # Extract author information
-            author_data = data.get('author', {})
-            author_id = author_data.get('id')
-            
-            # Get or create the commenter
-            # For remote authors, generate username from URL
-            author_username = author_id.split('/')[-2] if author_id else 'remote_author'
-            commenter, created = Author.objects.get_or_create(
-                url=author_id,
-                defaults={
-                    'username': f"remote_{author_username}_{uuid.uuid4().hex[:8]}",
-                    'displayName': author_data.get('displayName', 'Unknown'),
-                    'host': author_data.get('host', ''),
-                    'github': author_data.get('github'),
-                }
-            )
-            
-            # Extract post ID - can be from comment's id field OR entry/post/object field
-            comment_id_url = data.get('id', '')
-            entry_url = data.get('entry', data.get('post', data.get('object', '')))
-            
-            # Try to extract from id field first (format: .../authors/{id}/entries/{post_id}/comments/{comment_id})
-            if comment_id_url:
-                parts = comment_id_url.split('/')
-                if 'entries' in parts:
-                    entries_idx = parts.index('entries')
-                    post_id_str = parts[entries_idx + 1] if entries_idx + 1 < len(parts) else None
-                else:
-                    post_id_str = None
-            else:
-                # Fall back to entry/object field (format: .../authors/{id}/entries/{post_id})
-                post_id_str = entry_url.split('/')[-1] if entry_url else None
-            
-            # Try to parse as UUID
-            try:
-                post_id = uuid.UUID(post_id_str) if post_id_str else None
-                # Try to find the post
-                post = Post.objects.filter(id=post_id).first() if post_id else None
-                if not post:
-                    # Post doesn't exist locally - create a stub for federated content
-                    # Use entry_url to extract author and post IDs
-                    url_parts = (entry_url or comment_id_url).split('/')
-                    if 'authors' in url_parts and 'entries' in url_parts:
-                        author_idx = url_parts.index('authors') + 1
-                        entries_idx = url_parts.index('entries')
-                        post_author_id_str = url_parts[author_idx]
-                        post_id_str = url_parts[entries_idx + 1]
-                        
-                        # Try to parse author and post IDs as UUIDs
-                        try:
-                            post_author_id = uuid.UUID(post_author_id_str)
-                            post_id = uuid.UUID(post_id_str)
-                        except (ValueError, AttributeError):
-                            return JsonResponse({'message': 'Comment recorded for external content'}, status=201)
-                        
-                        # Create or get the author stub
-                        post_author, _ = Author.objects.get_or_create(
-                            id=post_author_id,
-                            defaults={
-                                'username': f"federated_{str(post_author_id)[:8]}",
-                                'displayName': 'Federated Author'
-                            }
-                        )
-                        # Create stub post
-                        post = Post.objects.create(
-                            id=post_id,
-                            author=post_author,
-                            title='Federated Post',
-                            content='',
-                        )
-                    else:
-                        return JsonResponse({'error': 'Invalid comment/entry URL format'}, status=400)
-            except (ValueError, AttributeError, TypeError):
-                return JsonResponse({'message': 'Comment recorded for external content'}, status=201)
-            
-            # Create the comment
-            comment = Comment.objects.create(
-                post=post,
-                author=commenter,
-                content=data.get('comment', '')
-            )
-            
-            return JsonResponse({'message': 'Comment received'}, status=201)
-            
-        except Exception as e:
-            return JsonResponse({'error': f'Failed to process comment: {str(e)}'}, status=400)
+        """Delegate comment handling to inbox_handlers_updated.handle_comment"""
+        return ih_handle_comment(self, recipient, data, request)
 
 
 @method_decorator(http_basic_auth_or_session, name='dispatch')
@@ -611,7 +400,7 @@ class FollowersAPIView(View):
             "items": items
         }
         
-        return JsonResponse(response_data)
+        return json_response(response_data)
 
 
 @method_decorator(http_basic_auth_or_session, name='dispatch')
@@ -644,7 +433,7 @@ class SingleFollowerAPIView(View):
         is_follower = Follow.objects.filter(follower=follower, following=author).exists()
         
         if is_follower:
-            return JsonResponse(build_author_dict(follower, request))
+            return json_response(build_author_dict(follower, request))
         else:
             return HttpResponse("Not Found", status=404)
     
@@ -676,7 +465,7 @@ class SingleFollowerAPIView(View):
         # Delete the follow relationship
         Follow.objects.filter(follower=follower, following=author).delete()
         
-        return JsonResponse({'message': 'Follower removed'}, status=204)
+        return json_response({'message': 'Follower removed'}, status=204)
     
     @method_decorator(csrf_exempt)
     def put(self, request, author_id, follower_id):
@@ -711,7 +500,7 @@ class SingleFollowerAPIView(View):
             following=author
         )
         
-        return JsonResponse({'message': 'Follower added'}, status=201 if created else 200)
+        return json_response({'message': 'Follower added'}, status=201 if created else 200)
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -776,7 +565,7 @@ class EntriesAPIView(View):
             "count": paginator.count
         }
         
-        return JsonResponse(response_data)
+        return json_response(response_data)
     
     @method_decorator(csrf_exempt)
     def post(self, request, author_id):
@@ -824,12 +613,12 @@ class EntriesAPIView(View):
                     # If image decoding fails, continue without image
                     pass
             
-            return JsonResponse(build_post_dict(post, request), status=201)
+            return json_response(build_post_dict(post, request), status=201)
             
         except json.JSONDecodeError:
-            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+            return json_response({'error': 'Invalid JSON'}, status=400)
         except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
+            return json_response({'error': str(e)}, status=500)
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -872,7 +661,7 @@ class SingleEntryAPIView(View):
                 if not is_friend:
                     return HttpResponse("Forbidden", status=403)
         
-        return JsonResponse(build_post_dict(post, request))
+        return json_response(build_post_dict(post, request))
     
     @method_decorator(csrf_exempt)
     def put(self, request, author_id=None, entry_id=None, entry_fqid=None):
@@ -893,7 +682,7 @@ class SingleEntryAPIView(View):
             post.visibility = data.get('visibility', post.visibility)
             post.save()
             
-            return JsonResponse(build_post_dict(post, request))
+            return json_response(build_post_dict(post, request))
             
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid JSON'}, status=400)
@@ -948,7 +737,7 @@ class CommentsAPIView(View):
         elif author_fqid or (author_id and not entry_id):
             # GET /api/authors/{AUTHOR_FQID}/commented
             # GET /api/authors/{AUTHOR_ID}/commented
-            author = _get_author_by_id_or_fqid(author_fqid or author_id)
+            author = _get_author_by_id_or_fqid(author_id=author_id, author_fqid=author_fqid)
             all_comments = Comment.objects.filter(author=author).order_by('-created_at')
             
             # Filter comments based on post visibility
@@ -1032,17 +821,35 @@ class LikesAPIView(View):
         if not can_access_post(post, request):
             return HttpResponse("Forbidden", status=403)
         
-        # Get all likes
-        likes = Like.objects.filter(post=post).order_by('-created_at')
-        
-        # Build items list
-        items = [build_like_dict(like, request) for like in likes]
-        
+        # Paginate likes
+        page_num = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('size', 10))
+
+        likes_qs = Like.objects.filter(post=post).order_by('-created_at')
+        paginator = Paginator(likes_qs, page_size)
+        page_obj = paginator.get_page(page_num)
+
+        # Build src list
+        src = [build_like_dict(like, request) for like in page_obj]
+
+        # Determine post URL (could be FQID)
+        if entry_fqid:
+            post_url = entry_fqid
+        else:
+            post_url = f"{request.scheme}://{request.get_host()}/api/authors/{author_id}/entries/{entry_id}"
+
+        web_url = post_url.replace('/api', '')
+
         response_data = {
             "type": "likes",
-            "items": items
+            "id": f"{post_url}/likes",
+            "web": web_url,
+            "page": page_num,
+            "size": page_size,
+            "count": paginator.count,
+            "src": src
         }
-        
+
         return JsonResponse(response_data)
 
 
@@ -1062,17 +869,29 @@ class CommentLikesAPIView(View):
         if not can_access_post(comment.post, request):
             return HttpResponse("Forbidden", status=403)
         
-        # Get all comment likes
-        comment_likes = CommentLike.objects.filter(comment=comment).order_by('-created_at')
-        
-        # Build items list
-        items = [build_comment_like_dict(comment_like, request) for comment_like in comment_likes]
-        
+        # Paginate comment likes
+        page_num = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('size', 10))
+
+        comment_likes_qs = CommentLike.objects.filter(comment=comment).order_by('-created_at')
+        paginator = Paginator(comment_likes_qs, page_size)
+        page_obj = paginator.get_page(page_num)
+
+        src = [build_comment_like_dict(cl, request) for cl in page_obj]
+
+        post_url = f"{request.scheme}://{request.get_host()}/api/authors/{comment.post.author.id}/entries/{comment.post.id}"
+        web_url = post_url.replace('/api', '')
+
         response_data = {
             "type": "likes",
-            "items": items
+            "id": f"{post_url}/comments/{comment.id}/likes",
+            "web": web_url,
+            "page": page_num,
+            "size": page_size,
+            "count": paginator.count,
+            "src": src
         }
-        
+
         return JsonResponse(response_data)
 
 
@@ -1102,8 +921,8 @@ class LikedAPIView(View):
         
         else:
             # GET /api/authors/{AUTHOR_ID or FQID}/liked
-            identifier = author_fqid or author_id
-            author = _get_author_by_id_or_fqid(identifier)
+            # Determine author by UUID or FQID (pass both so helper can choose)
+            author = _get_author_by_id_or_fqid(author_id=author_id, author_fqid=author_fqid)
             
             # Get all post likes by this author
             post_likes = Like.objects.filter(author=author).order_by('-created_at')
@@ -1126,12 +945,24 @@ class LikedAPIView(View):
             
             # Sort by published timestamp (most recent first)
             items.sort(key=lambda x: x.get('published', ''), reverse=True)
-            
+
+            # Paginate combined items
+            page_num = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('size', 10))
+            paginator = Paginator(items, page_size)
+            page_obj = paginator.get_page(page_num)
+
+            author_id_val = author.id
             response_data = {
                 "type": "liked",
-                "items": items
+                "id": f"{request.scheme}://{request.get_host()}/api/authors/{author_id_val}/liked",
+                "web": build_author_dict(author, request).get('web'),
+                "page": page_num,
+                "size": page_size,
+                "count": paginator.count,
+                "src": list(page_obj)
             }
-            
+
             return JsonResponse(response_data)
 
 
