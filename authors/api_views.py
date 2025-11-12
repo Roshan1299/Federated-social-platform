@@ -101,7 +101,7 @@ def _get_post_by_id_or_fqid(entry_id=None, entry_fqid=None, author_id=None):
         raise Http404("No entry identifier provided")
 
 
-def _get_comment_by_fqid(comment_fqid):
+def _get_comment_by_fqid(comment_fqid, author_id=None, entry_id=None):
     """
     Get comment by FQID (full URL)
     """
@@ -112,43 +112,120 @@ def _get_comment_by_fqid(comment_fqid):
     fqid_norm = comment_fqid.rstrip('/') if isinstance(comment_fqid, str) else comment_fqid
     fqid_with_slash = fqid_norm + '/'
     try:
-        return Comment.objects.get(Q(origin=fqid_norm) | Q(origin=fqid_with_slash))
+        comment = Comment.objects.get(Q(origin=fqid_norm) | Q(origin=fqid_with_slash))
     except Comment.DoesNotExist:
         # No UUID fallback: caller asked for FQID, so fail if origin doesn't match.
         raise Http404("Comment not found")
 
+    # Validate parent relationships
+    if entry_id is not None:
+        # author refers to owner of  post. Enforce both entry and post author.
+        if str(comment.post.id) != str(entry_id):
+            raise Http404("Comment not found for this entry")
+        if author_id is not None and str(comment.post.author.id) != str(author_id):
+            raise Http404("Comment not found for this author")
+    else:
+        #"commented" endpoint - author_id refers to commenter.
+        if author_id is not None and str(comment.author.id) != str(author_id):
+            raise Http404("Comment not found for this author")
 
-def _get_like_by_fqid(like_fqid):
-    """Get like by FQID (full URL)
+    return comment
+
+
+def _get_like_by_fqid(like_fqid, author_id=None, entry_id=None, comment_id=None):
+    """Get like by FQID (full URL).
+
+    Helper to resolve the FQID against both post-likes
+    (Like model) and comment-likes (CommentLike model). Validates
+    parent relationships (author/entry/comment) if identifiers are
+    provided in the URL.
     """
     if not like_fqid:
         raise Http404("Like identifier required")
 
     fqid_norm = like_fqid.rstrip('/') if isinstance(like_fqid, str) else like_fqid
     fqid_with_slash = fqid_norm + '/'
+
+    # Try resolving as a post-like first
     try:
-        return Like.objects.get(Q(origin=fqid_norm) | Q(origin=fqid_with_slash))
+        like = Like.objects.get(Q(origin=fqid_norm) | Q(origin=fqid_with_slash))
+        # If the caller asked to scope to a comment, a post-like does not match
+        if comment_id is not None:
+            raise Http404("Like not found for this comment")
+        if entry_id is not None and str(like.post.id) != str(entry_id):
+            raise Http404("Like not found for this entry")
+        # Currently, author is always author of like (not post author)
+        if author_id is not None and str(like.author.id) != str(author_id):
+            raise Http404("Like not found for this author")
+        return like
     except Like.DoesNotExist:
-        # No UUID fallback for FQID lookups
-        raise Http404("Like not found")
+        # Not a post-like; try comment-like
+        try:
+            clike = CommentLike.objects.get(Q(origin=fqid_norm) | Q(origin=fqid_with_slash))
+            if comment_id is not None and str(clike.comment.id) != str(comment_id):
+                raise Http404("Like not found for this comment")
+            if entry_id is not None and str(clike.comment.post.id) != str(entry_id):
+                raise Http404("Like not found for this entry")
+            # Currently, author is always author of like (not comment author)
+            if author_id is not None and str(clike.author.id) != str(author_id):
+                raise Http404("Like not found for this author")
+            return clike
+        except CommentLike.DoesNotExist:
+            raise Http404("Like not found")
 
 
-def _get_comment_by_id_or_fqid(comment_id=None, comment_fqid=None):
+def _get_comment_by_id_or_fqid(comment_id=None, comment_fqid=None, author_id=None, entry_id=None):
     """Get comment by UUID or FQID (full URL)"""
     if comment_fqid:
-        return _get_comment_by_fqid(comment_fqid)
+        return _get_comment_by_fqid(comment_fqid, author_id=author_id, entry_id=entry_id)
     elif comment_id:
-        return get_object_or_404(Comment, id=comment_id)
+        comment = get_object_or_404(Comment, id=comment_id)
+        # validation for UUID lookups
+        if entry_id is not None:
+            # When entry_id is present, author_id refers to the post owner
+            if str(comment.post.id) != str(entry_id):
+                raise Http404("Comment not found for this entry")
+            if author_id is not None and str(comment.post.author.id) != str(author_id):
+                raise Http404("Comment not found for this author")
+        else:
+            # No entry_id: the endpoint is for comments by an author (commenter)
+            if author_id is not None and str(comment.author.id) != str(author_id):
+                raise Http404("Comment not found for this author")
+        return comment
     else:
         raise Http404("Comment identifier required")
 
 
-def _get_like_by_id_or_fqid(like_id=None, like_fqid=None):
+def _get_like_by_id_or_fqid(like_id=None, like_fqid=None, author_id=None, entry_id=None, comment_id=None):
     """Get like by UUID or FQID (full URL)"""
     if like_fqid:
-        return _get_like_by_fqid(like_fqid)
+        return _get_like_by_fqid(like_fqid, author_id=author_id, entry_id=entry_id, comment_id=comment_id)
     elif like_id:
-        return get_object_or_404(Like, id=like_id)
+        # Try resolving as a post-like first
+        try:
+            like = Like.objects.get(id=like_id)
+            if comment_id is not None:
+                raise Http404("Like not found for this comment")
+            if entry_id is not None and str(like.post.id) != str(entry_id):
+                raise Http404("Like not found for this entry")
+            # The author in the URL should match the actor who created the like
+            if author_id is not None and str(like.author.id) != str(author_id):
+                raise Http404("Like not found for this author")
+            return like
+        except Like.DoesNotExist:
+            # Try comment-like
+            try:
+                clike = CommentLike.objects.get(id=like_id)
+                if comment_id is not None and str(clike.comment.id) != str(comment_id):
+                    raise Http404("Like not found for this comment")
+                if entry_id is not None and str(clike.comment.post.id) != str(entry_id):
+                    raise Http404("Like not found for this entry")
+                # For comment-likes, ensure the liker (clike.author) matches
+                if author_id is not None and str(clike.author.id) != str(author_id):
+                    raise Http404("Like not found for this author")
+                return clike
+            except CommentLike.DoesNotExist:
+                raise Http404("Like not found")
     else:
         raise Http404("Like identifier required")
 
@@ -532,8 +609,6 @@ class EntriesAPIView(View):
         # Determine what posts the user can see based on authentication and relationship
         # If this request was authenticated via HTTP Basic Auth (node-to-node),
         # treat it as trusted and allow access to all entries for this author.
-        # This makes remote nodes (that present valid basic-auth creds) able to
-        # read FRIENDS and other non-PUBLIC content as required by the spec.
         if getattr(request, 'is_basic_auth', False):
             posts = Post.objects.filter(author=author, deleted=False).order_by('-published')
         elif request.user.is_authenticated and request.user.id == author.id:
@@ -743,7 +818,7 @@ class CommentsAPIView(View):
             # GET /api/commented/{COMMENT_FQID}
             # GET /api/authors/{AUTHOR_ID}/entries/{ENTRY_ID}/comment/{COMMENT_FQID}
             # GET /api/authors/{AUTHOR_SERIAL}/commented/{COMMENT_SERIAL}
-            comment = _get_comment_by_id_or_fqid(comment_id=comment_id, comment_fqid=comment_fqid)
+            comment = _get_comment_by_id_or_fqid(comment_id=comment_id, comment_fqid=comment_fqid, author_id=self.kwargs.get('author_id'), entry_id=self.kwargs.get('entry_id'))
             
             # Check if user can access the post this comment is on
             if not can_access_post(comment.post, request):
@@ -880,7 +955,7 @@ class CommentLikesAPIView(View):
     def get(self, request, author_id=None, entry_id=None, comment_id=None, comment_fqid=None):
         """Get list of likes on a comment - handles both UUID and FQID"""
         # Get the comment
-        comment = _get_comment_by_id_or_fqid(comment_id=comment_id, comment_fqid=comment_fqid)
+        comment = _get_comment_by_id_or_fqid(comment_id=comment_id, comment_fqid=comment_fqid, author_id=author_id, entry_id=entry_id)
         
         # Check if user can access the post this comment is on
         if not can_access_post(comment.post, request):
@@ -928,13 +1003,25 @@ class LikedAPIView(View):
         if like_fqid or like_id:
             # GET /api/liked/{LIKE_FQID}
             # GET /api/authors/{AUTHOR_SERIAL}/liked/{LIKE_SERIAL}
-            like = _get_like_by_id_or_fqid(like_id=like_id, like_fqid=like_fqid)
-            
+            like_obj = _get_like_by_id_or_fqid(like_id=like_id, like_fqid=like_fqid, author_id=author_id)
+
+            # Determine the post the like is associated with (post-like vs comment-like)
+            if hasattr(like_obj, 'post'):
+                post = like_obj.post
+            elif hasattr(like_obj, 'comment'):
+                post = like_obj.comment.post
+            else:
+                return HttpResponse("Not Found", status=404)
+
             # Check if user can access the post that was liked
-            if not can_access_post(like.post, request):
+            if not can_access_post(post, request):
                 return HttpResponse("Forbidden", status=403)
-            
-            return JsonResponse(build_like_dict(like, request))
+
+            # Return appropriate JSON depending on like type
+            if isinstance(like_obj, CommentLike) or hasattr(like_obj, 'comment'):
+                return JsonResponse(build_comment_like_dict(like_obj, request))
+            else:
+                return JsonResponse(build_like_dict(like_obj, request))
         
         else:
             # GET /api/authors/{AUTHOR_ID or FQID}/liked
