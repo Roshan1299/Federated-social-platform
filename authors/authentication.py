@@ -52,8 +52,16 @@ def http_basic_auth_required(view_func):
                     headers={'WWW-Authenticate': 'Basic realm="API"'}
                 )
             
-            # Set the authenticated user on the request
+            # Set the authenticated user on the request and mark that this
+            # request was authenticated via HTTP Basic Auth. Views can use
+            # `getattr(request, 'is_basic_auth', False)` to detect node-to-node
+            # authentication and relax visibility rules if desired.
             request.user = user
+            try:
+                request.is_basic_auth = True
+            except Exception:
+                # In case request object is immutable for any reason, ignore
+                pass
             
             # Call the actual view
             return view_func(request, *args, **kwargs)
@@ -117,6 +125,10 @@ def http_basic_auth_or_session(view_func):
             
             # Set the authenticated user on the request
             request.user = user
+            try:
+                request.is_basic_auth = True
+            except Exception:
+                pass
             
             # Call the actual view
             return view_func(request, *args, **kwargs)
@@ -155,6 +167,10 @@ class BasicAuthMiddleware:
                         user = authenticate(request, username=username, password=password)
                         if user:
                             request.user = user
+                            try:
+                                request.is_basic_auth = True
+                            except Exception:
+                                pass
                     except (ValueError, UnicodeDecodeError):
                         pass
         

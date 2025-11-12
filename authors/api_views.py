@@ -171,6 +171,13 @@ def can_access_post(post, request):
     # PUBLIC and PUBLIC_UNLISTED are always accessible
     if post.visibility in ['PUBLIC', 'PUBLIC_UNLISTED']:
         return True
+
+    # If the request has been authenticated via HTTP Basic Auth (node-to-node),
+    # treat it as a trusted remote and allow access to posts regardless of the
+    # visibility flag. This enables remote nodes that present valid basic-auth
+    # credentials to read friends-only content when authorized by credentials.
+    if getattr(request, 'is_basic_auth', False):
+        return True
     
     # FRIENDS posts require authentication
     if post.visibility == 'FRIENDS':
@@ -523,7 +530,13 @@ class EntriesAPIView(View):
         page_size = int(request.GET.get('size', 10))
         
         # Determine what posts the user can see based on authentication and relationship
-        if request.user.is_authenticated and request.user.id == author.id:
+        # If this request was authenticated via HTTP Basic Auth (node-to-node),
+        # treat it as trusted and allow access to all entries for this author.
+        # This makes remote nodes (that present valid basic-auth creds) able to
+        # read FRIENDS and other non-PUBLIC content as required by the spec.
+        if getattr(request, 'is_basic_auth', False):
+            posts = Post.objects.filter(author=author, deleted=False).order_by('-published')
+        elif request.user.is_authenticated and request.user.id == author.id:
             # Authenticated as author: all entries
             posts = Post.objects.filter(author=author, deleted=False).order_by('-published')
         elif request.user.is_authenticated:
@@ -643,13 +656,17 @@ class SingleEntryAPIView(View):
         # Check if deleted
         if post.deleted:
             return HttpResponse("Not Found", status=404)
-        
-        # Check visibility permissions
+        # If  request was authenticated via HTTP Basic Auth (node-to-node),
+        # allow access regardless of visibility.
+        if getattr(request, 'is_basic_auth', False):
+            return json_response(build_post_dict(post, request))
+
+        # Check visibility permissions for non-basic-auth requests
         if post.visibility == "FRIENDS":
             # Require authentication for friends-only posts
             if not request.user.is_authenticated:
                 return HttpResponse("Forbidden", status=403)
-            
+
             # Author can always see their own posts
             # Use Django ORM comparison to ensure proper UUID handling
             if request.user.pk != post.author.pk:
@@ -977,10 +994,12 @@ class ImageEntryAPIView(View):
     def get(self, request, author_id=None, entry_id=None, entry_fqid=None):
         """Get image from post - handles both UUID and FQID"""
         post = _get_post_by_id_or_fqid(entry_id=entry_id, entry_fqid=entry_fqid, author_id=author_id)
-        
-        # Check if user can access this post
-        if not can_access_post(post, request):
-            return HttpResponse("Forbidden", status=403)
+        # If basic-authenticated, allow access to the image regardless of
+        # post visibility for remote nodes
+        if not getattr(request, 'is_basic_auth', False):
+            # For non-basic-auth requests, use the normal visibility rules
+            if not can_access_post(post, request):
+                return HttpResponse("Forbidden", status=403)
         
         if not post.image:
             return HttpResponse("No image found", status=404)
