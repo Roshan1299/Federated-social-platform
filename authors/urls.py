@@ -106,8 +106,8 @@ urlpatterns = [
     re_path(r'^api/entries/(?P<entry_fqid>.+)$', SingleEntryAPIView.as_view(), name="entry_fqid_api"),
     
     # Comment with FQID in path
-    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comment/(?P<comment_fqid>.+)$', 
-            CommentsAPIView.as_view(), name="remote_comment_api"),
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments?/(?P<comment_fqid>.+)$', 
+        CommentsAPIView.as_view(), name="remote_comment_api"),
     
     # Comment Likes with FQID
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments/(?P<comment_fqid>.+)/likes$', 
