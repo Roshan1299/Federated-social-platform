@@ -495,96 +495,86 @@ class SingleFollowerAPIView(View):
     Returns 404 if not a follower, 200 if they are
     """
     
-    def get(self, request, author_id, follower_id):
-        """Check if follower_id follows author_id"""
+    def get(self, request, author_id, follower_fqid):
+        """Check if follower_fqid follows author_id.
+        If the follower Author cannot be resolved by FQID, return 404. If resolved but
+        not a follower, return 404. Otherwise return the follower author JSON.
+        """
         author = get_object_or_404(Author, id=author_id)
 
-        # The follower_id could be a UUID or a full URL
-        import re
-        follower = None
-        uuid_regex = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
-        if uuid_regex.match(follower_id):
-            try:
-                follower = Author.objects.get(id=follower_id)
-            except Author.DoesNotExist:
-                follower = None
+        # Resolve follower by FQID only (strict match against Author.url)
+        try:
+            follower = _get_author_by_id_or_fqid(author_fqid=follower_fqid)
+        except Http404:
+            return HttpResponse("Not Found", status=404)
 
-        if not follower:
-            follower_id_norm = follower_id.rstrip('/')
-            follower = Author.objects.filter(url__in=[follower_id_norm, follower_id_norm + '/']).first()
-        
         # Check if follow relationship exists
         is_follower = Follow.objects.filter(follower=follower, following=author).exists()
-        
+
         if is_follower:
             return json_response(build_author_dict(follower, request))
         else:
             return HttpResponse("Not Found", status=404)
     
-    def delete(self, request, author_id, follower_id):
+    def delete(self, request, author_id, follower_fqid):
         """Remove a follower - only AUTHOR_SERIAL can remove their followers"""
         author = get_object_or_404(Author, id=author_id)
-        
-        # Authorization: Only the author being followed can remove followers
+        # Authorization: Only the author being followed can remove/deny followers
         if str(request.user.id) != str(author_id):
-            return HttpResponse('Forbidden: Only the author can remove their followers', status=403)
-        
-        # Parse follower_id (UUID or FQID)
-        import re
-        follower = None
-        uuid_regex = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
-        if uuid_regex.match(follower_id):
-            try:
-                follower = Author.objects.get(id=follower_id)
-            except Author.DoesNotExist:
-                follower = None
-        
-        if not follower:
-            follower_id_norm = follower_id.rstrip('/')
-            follower = Author.objects.filter(url__in=[follower_id_norm, follower_id_norm + '/']).first()
-        
-        if not follower:
-            return HttpResponse("Follower not found", status=404)
-        
-        # Delete the follow relationship
-        Follow.objects.filter(follower=follower, following=author).delete()
-        
-        return json_response({'message': 'Follower removed'}, status=204)
+            return HttpResponse('Forbidden: Only the author can remove or deny followers', status=403)
+
+        # Resolve follower by FQID only
+        try:
+            follower = _get_author_by_id_or_fqid(author_fqid=follower_fqid)
+        except Http404:
+            return HttpResponse("Not Found", status=404)
+
+        # If there's a pending follow request, treat DELETE as 'deny' and remove it
+        fr_qs = FollowRequest.objects.filter(sender=follower, receiver=author, status='PENDING')
+        if fr_qs.exists():
+            fr_qs.delete()
+            return json_response({'message': 'Follow request denied'}, status=204)
+
+        # Otherwise, if follower relationship exists, remove it (revoke)
+        if Follow.objects.filter(follower=follower, following=author).exists():
+            Follow.objects.filter(follower=follower, following=author).delete()
+            return json_response({'message': 'Follower removed'}, status=204)
+
+        # Nothing to deny or remove
+        return HttpResponse("Not Found", status=404)
     
     @method_decorator(csrf_exempt)
-    def put(self, request, author_id, follower_id):
-        """Add a follower - only FOREIGN_AUTHOR_ID (the follower) can add themselves"""
+    def put(self, request, author_id, follower_fqid):
+        """Accept a follow request: only the local AUTHOR_SERIAL may accept.
+
+        If a pending follow request from the foreign author does not exist, return 404. Otherwise
+        mark the request approved and create the Follow relationship.
+        """
         author = get_object_or_404(Author, id=author_id)
-        
-        # Parse follower_id (UUID or FQID)
-        import re
-        follower = None
-        uuid_regex = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
-        if uuid_regex.match(follower_id):
-            try:
-                follower = Author.objects.get(id=follower_id)
-            except Author.DoesNotExist:
-                follower = None
-        
-        if not follower:
-            follower_id_norm = follower_id.rstrip('/')
-            follower = Author.objects.filter(url__in=[follower_id_norm, follower_id_norm + '/']).first()
-        
-        if not follower:
-            return HttpResponse("Follower not found", status=404)
-        
-        # Authorization: Only the follower themselves can add the follow relationship
-        # Compare authenticated user with the follower
-        if str(request.user.id) != str(follower.id):
-            return HttpResponse('Forbidden: Only the follower can add themselves', status=403)
-        
-        # Create follow relationship
-        follow, created = Follow.objects.get_or_create(
-            follower=follower,
-            following=author
-        )
-        
-        return json_response({'message': 'Follower added'}, status=201 if created else 200)
+
+        # Authorization: only the receiver (author) can accept follow requests
+        if str(request.user.id) != str(author_id):
+            return HttpResponse('Forbidden: Only the author can accept follow requests', status=403)
+
+        # Resolve follower by FQID only
+        try:
+            follower = _get_author_by_id_or_fqid(author_fqid=follower_fqid)
+        except Http404:
+            return HttpResponse("Not Found", status=404)
+
+        # Look for a pending follow request from this follower to this author
+        try:
+            fr = FollowRequest.objects.get(sender=follower, receiver=author, status='PENDING')
+        except FollowRequest.DoesNotExist:
+            return HttpResponse("Not Found", status=404)
+
+        # Approve the follow request and create the follower relationship
+        fr.status = 'APPROVED'
+        fr.save()
+
+        Follow.objects.get_or_create(follower=follower, following=author)
+
+        return json_response({'message': 'Follow request approved'}, status=200)
 
 
 @method_decorator(csrf_exempt, name='dispatch')

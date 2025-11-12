@@ -64,7 +64,7 @@ urlpatterns = [
     # Followers API
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/followers/?$', FollowersAPIView.as_view(), name="followers_api"),
     # to support FQID in addition to UUID
-    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/followers/(?P<follower_id>.+)$', 
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/followers/(?P<follower_fqid>.+)$', 
             SingleFollowerAPIView.as_view(), name="single_follower_api"),
     
     # Entries/Posts API 
