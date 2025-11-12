@@ -15,6 +15,7 @@ from .api_views import (
     InboxAPIView, FollowersAPIView, SingleFollowerAPIView, EntriesAPIView,
     SingleEntryAPIView, CommentsAPIView, LikesAPIView, LikedAPIView, ImageEntryAPIView,
     CommentLikesAPIView, FollowingAPIView, SingleFollowingAPIView
+    , FollowRequestsAPIView
 )
 
 app_name = "authors"
@@ -60,6 +61,8 @@ urlpatterns = [
 
     # Inbox API (important)
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/inbox/?$', InboxAPIView.as_view(), name="inbox_api"),
+    # Follow Requests API (local author only)
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/follow_requests/?$', FollowRequestsAPIView.as_view(), name='follow_requests_api'),
     
     # Followers API
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/followers/?$', FollowersAPIView.as_view(), name="followers_api"),

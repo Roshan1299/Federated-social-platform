@@ -691,6 +691,45 @@ class SingleFollowerAPIView(View):
         return json_response({'message': 'Follow request approved'}, status=200)
 
 
+@method_decorator(http_basic_auth_or_session, name='dispatch')
+class FollowRequestsAPIView(View):
+    """
+    GET /api/authors/{AUTHOR_SERIAL}/follow_requests
+    Returns a list of pending follow requests for the specified local author.
+
+    Only the local author (session-authenticated) may call this endpoint.
+    """
+
+    def get(self, request, author_id):
+        # Only the local author may call this endpoint
+        author = get_object_or_404(Author, id=author_id)
+        if not request.user.is_authenticated or str(request.user.id) != str(author_id):
+            return HttpResponse('Forbidden: only the author may view their follow requests', status=403)
+
+        # Find pending follow requests targeting this author
+        fr_qs = FollowRequest.objects.filter(receiver=author, status='PENDING').order_by('-created_at')
+
+        items = []
+        for fr in fr_qs:
+            sender = fr.sender
+            # Build follow-request object according to the project's follow request shape
+            fr_obj = {
+                'type': 'follow',
+                'id': f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/follow_requests/{fr.id}",
+                'actor': build_author_dict(sender, request),
+                'object': build_author_dict(author, request),
+                'status': fr.status,
+            }
+            try:
+                fr_obj['summary'] = f"{sender.displayName} wants to follow {author.displayName}"
+            except Exception:
+                pass
+
+            items.append(fr_obj)
+
+        return json_response({'type': 'follow_requests', 'items': items})
+
+
 @method_decorator(csrf_exempt, name='dispatch')
 @method_decorator(http_basic_auth_or_session, name='dispatch')
 class EntriesAPIView(View):
