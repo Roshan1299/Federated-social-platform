@@ -21,6 +21,8 @@ from .inbox_handlers import (
     handle_like as ih_handle_like,
     handle_follow_request as ih_handle_follow_request,
 )
+import requests
+import urllib.parse
 
 
 def json_response(data, status=200):
@@ -485,6 +487,118 @@ class FollowersAPIView(View):
         }
         
         return json_response(response_data)
+
+
+@method_decorator(http_basic_auth_or_session, name='dispatch')
+class FollowingAPIView(View):
+    """
+    GET /api/authors/{AUTHOR_SERIAL}/following
+    Returns list of authors that AUTHOR_SERIAL is following (local author only)
+    """
+
+    def get(self, request, author_id):
+        # Only the local author may call this endpoint
+        author = get_object_or_404(Author, id=author_id)
+        if not request.user.is_authenticated or str(request.user.id) != str(author_id):
+            return HttpResponse('Forbidden: only the author may view their following list', status=403)
+
+        following_rels = Follow.objects.filter(follower=author)
+        items = [build_author_dict(rel.following, request) for rel in following_rels]
+
+        return json_response({
+            'type': 'following',
+            'items': items
+        })
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(http_basic_auth_or_session, name='dispatch')
+class SingleFollowingAPIView(View):
+    """
+    GET /api/authors/{AUTHOR_SERIAL}/following/{FOREIGN_AUTHOR_FQID}
+    PUT /api/authors/{AUTHOR_SERIAL}/following/{FOREIGN_AUTHOR_FQID} -> generate follow request
+    DELETE /api/authors/{AUTHOR_SERIAL}/following/{FOREIGN_AUTHOR_FQID} -> unfollow
+
+    TODO: Add user/pass for HTTP Basic Auth to remote follow requests
+    """
+
+    def get(self, request, author_id, following_fqid):
+        # Only the local author may call this endpoint
+        author = get_object_or_404(Author, id=author_id)
+        if not request.user.is_authenticated or str(request.user.id) != str(author_id):
+            return HttpResponse('Forbidden: only the author may check following relationships', status=403)
+
+        # Resolve target author by FQID (strict)
+        try:
+            target = _get_author_by_id_or_fqid(author_fqid=following_fqid)
+        except Http404:
+            return HttpResponse('Not Found', status=404)
+
+        is_following = Follow.objects.filter(follower=author, following=target).exists()
+        if is_following:
+            return json_response(build_author_dict(target, request))
+        else:
+            return HttpResponse('Not Found', status=404)
+
+    @method_decorator(csrf_exempt)
+    def put(self, request, author_id, following_fqid):
+        """Generate a follow request from AUTHOR_SERIAL -> FOREIGN_AUTHOR_FQID"""
+        author = get_object_or_404(Author, id=author_id)
+        if not request.user.is_authenticated or str(request.user.id) != str(author_id):
+            return HttpResponse('Forbidden: only the author may create follow requests', status=403)
+
+        # try resolving the remote/local author on our node
+        try:
+            target = _get_author_by_id_or_fqid(author_fqid=following_fqid)
+            # Local or known remote author: create a FollowRequest locally
+            fr, created = FollowRequest.objects.get_or_create(sender=author, receiver=target, defaults={'status': 'PENDING'})
+            return json_response({'message': 'Follow request created' if created else 'Follow request already exists'}, status=201 if created else 200)
+        except Http404:
+            # Target unknown locally -> treat as remote. POST follow activity to remote inbox
+            # Build follow activity payload
+            payload = {
+                'type': 'follow',
+                'actor': build_author_dict(author, request),
+                'object': following_fqid
+            }
+
+            # Parse target URL to find inbox endpoint
+            parsed = urllib.parse.urlparse(following_fqid)
+            base = f"{parsed.scheme}://{parsed.netloc}"
+            # Attempt to extract the remote author's id from path (last segment)
+            path_parts = parsed.path.rstrip('/').split('/')
+            remote_author_id = path_parts[-1] if path_parts else ''
+            inbox_url = f"{base}/api/authors/{remote_author_id}/inbox/"
+
+            try:
+                resp = requests.post(inbox_url, json=payload, timeout=10)
+            except Exception as e:
+                return json_response({'error': f'Failed to send follow request to remote inbox: {str(e)}'}, status=502)
+
+            if resp.status_code in (200, 201):
+                # Create a local stub Author for the remote target so we can track the request
+                remote_author, _ = Author.objects.get_or_create(url=following_fqid, defaults={'username': f'remote_{remote_author_id}', 'displayName': remote_author_id, 'host': base})
+                fr, created = FollowRequest.objects.get_or_create(sender=author, receiver=remote_author, defaults={'status': 'PENDING'})
+                return json_response({'message': 'Follow request sent to remote inbox'}, status=201)
+            else:
+                return json_response({'error': f'Remote inbox responded with {resp.status_code}: {resp.text}'}, status=resp.status_code)
+
+    def delete(self, request, author_id, following_fqid):
+        """Unfollow FOREIGN_AUTHOR_FQID - only author may call"""
+        author = get_object_or_404(Author, id=author_id)
+        if not request.user.is_authenticated or str(request.user.id) != str(author_id):
+            return HttpResponse('Forbidden: only the author may unfollow', status=403)
+
+        try:
+            target = _get_author_by_id_or_fqid(author_fqid=following_fqid)
+        except Http404:
+            return HttpResponse('Not Found', status=404)
+
+        if Follow.objects.filter(follower=author, following=target).exists():
+            Follow.objects.filter(follower=author, following=target).delete()
+            return json_response({'message': 'Unfollowed'}, status=204)
+
+        return HttpResponse('Not Found', status=404)
 
 
 @method_decorator(http_basic_auth_or_session, name='dispatch')

@@ -14,7 +14,7 @@ from .views import (
 from .api_views import (
     InboxAPIView, FollowersAPIView, SingleFollowerAPIView, EntriesAPIView,
     SingleEntryAPIView, CommentsAPIView, LikesAPIView, LikedAPIView, ImageEntryAPIView,
-    CommentLikesAPIView
+    CommentLikesAPIView, FollowingAPIView, SingleFollowingAPIView
 )
 
 app_name = "authors"
@@ -63,9 +63,13 @@ urlpatterns = [
     
     # Followers API
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/followers/?$', FollowersAPIView.as_view(), name="followers_api"),
-    # to support FQID in addition to UUID
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/followers/(?P<follower_fqid>.+)$', 
-            SingleFollowerAPIView.as_view(), name="single_follower_api"),
+        SingleFollowerAPIView.as_view(), name="single_follower_api"),
+    # Following API (local author managing who they follow)
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/following/?$', 
+        FollowingAPIView.as_view(), name="following_api"),
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/following/(?P<following_fqid>.+)$', 
+        SingleFollowingAPIView.as_view(), name="single_following_api"),
     
     # Entries/Posts API 
     # List/create endpoint
