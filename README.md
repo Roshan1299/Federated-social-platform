@@ -172,6 +172,34 @@ curl http://127.0.0.1:8000/api/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/
     "web": "http://127.0.0.1:8000/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/"
 }
 ```
+
+#### Example Request
+```bash
+curl \
+  https://darkblue-xxxxxxxxxxxx.herokuapp.com/api/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/
+```
+
+#### Example Response:
+*  **Code:** `401 Unauthorized`
+```json
+{
+    "detail": "Authentication required"
+}
+```
+
+#### Example Request
+```bash
+curl -u username:password \
+  https://darkblue-xxxxxxxxxxxx.herokuapp.com/api/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/
+```
+#### Example Response:
+*  **Code:** `404 Not Found`
+```json
+{
+    "error": "Author not found."
+}
+```
+
 #### Response Fields:
 
 | Field          | Type   | Description                                                                 | Example                                                              |
@@ -224,7 +252,7 @@ Retrieves the public profile information of all authors.
 
 ```bash
 curl -u username:password \
-  https://127.0.0.1:8000/api/authors/
+  https://darkblue-xxxxxxxxxxxx.herokuapp.com/api/authors/
 ```
 #### Example Response:
 
@@ -251,6 +279,16 @@ curl -u username:password \
     "web": "http://127.0.0.1:8000/authors/2cabd0b3-4cc7-49da-9b42-65bc9c5e6f56/"
   }
 ]
+```
+
+#### Example Request
+```bash
+curl https://darkblue-xxxxxxxxxxxx.herokuapp.com/api/authors/
+```
+#### Example Response:
+*  **Code:** `401 Unauthorized`
+```
+"Authentication required"
 ```
 
 #### Response Fields:
