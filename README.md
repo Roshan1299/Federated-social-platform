@@ -771,6 +771,121 @@ curl -u username:password \
 
 ---
 
+### Following API
+
+#### URL: `GET /api/authors/{AUTHOR_SERIAL}/following`
+
+**Purpose:** Retrieve a list of authors that a local author is following.
+
+**Authentication Required:** Yes (session auth — only the local author may call this endpoint)
+
+**Access Level:** [local]
+
+**URL Parameters:**
+
+| Parameter | Type | Required | Description | Example |
+|-----------|------|----------|-------------|---------|
+| `AUTHOR_SERIAL` | UUID | Yes | UUID of the author whose following list you want | `bb89f943-bd11-475d-9e1e-71ef9f7a914a` |
+
+**Success Response - Example (200 OK):**
+```json
+{
+  "type": "following",
+  "items": [ /* array of author objects (same shape as Author object in Followers response) */ ]
+}
+```
+
+**Error Responses:**
+
+| Status Code | Description |
+|-------------|-------------|
+| 401 Unauthorized | No authentication provided or invalid credentials |
+| 403 Forbidden | Requesting user is not the local author |
+
+---
+
+#### URL: `GET /api/authors/{AUTHOR_SERIAL}/following/{FOREIGN_AUTHOR_FQID}`
+
+**Purpose:** Check if the local author is following a given foreign author. The `FOREIGN_AUTHOR_FQID` must be percent-encoded.
+
+**Authentication Required:** Yes (session auth — only the local author may call this endpoint)
+
+**Success Response:**
+- `200 OK` with the author object if the local author follows the target
+- `404 Not Found` if not following or target not resolvable
+
+---
+
+#### URL: `PUT /api/authors/{AUTHOR_SERIAL}/following/{FOREIGN_AUTHOR_FQID}`
+
+**Purpose:** Create a follow request from the local author to the specified target author. Behavior differs for local vs remote targets:
+- If the target resolves to a local author on this node and is not already followed, a local `FollowRequest` is created with status `PENDING`.
+- If the target resolves to a remote author (different host), the server sends a `follow` activity to the remote author's inbox. The activity's `actor` is the local author object and the `object` is the target author object (full author JSON). On success the local node records a pending `FollowRequest` referencing the remote author record.
+
+**Authentication Required:** Yes (session auth — only the local author may call this endpoint)
+
+**Success Responses:**
+- `201 Created` when a new follow request is created or successfully delivered to remote inbox
+- `200 OK` when a follow request already exists
+
+**Error Responses:**
+- `401 Unauthorized` when not authenticated
+- `403 Forbidden` when acting as a different author
+- `404 Not Found` when the FQID cannot be resolved locally
+- `502 Bad Gateway` when a network error occurs while sending to a remote inbox
+- Any non-2xx response returned from the remote inbox will be forwarded (same status code)
+
+---
+
+#### URL: `DELETE /api/authors/{AUTHOR_SERIAL}/following/{FOREIGN_AUTHOR_FQID}`
+
+**Purpose:** Unfollow a target author. Only the local author may call this endpoint.
+
+**Authentication Required:** Yes (session auth — only the local author may call this endpoint)
+
+**Success Responses:**
+- `204 No Content` when an existing follow relationship is removed
+
+**Error Responses:**
+- `401 Unauthorized` when not authenticated
+- `403 Forbidden` when acting as a different author
+- `404 Not Found` when there is no follow relationship to remove
+
+---
+
+### Follow Requests API
+
+#### URL: `GET /api/authors/{AUTHOR_SERIAL}/follow_requests`
+
+**Purpose:** Return pending follow requests targeting the specified local author.
+
+**Authentication Required:** Yes (session auth — only the local author may call this endpoint)
+
+**Access Level:** [local]
+
+**Success Response - Example (200 OK):**
+```json
+{
+  "type": "follow_requests",
+  "items": [
+    {
+      "id": "<follow-request-id>",
+      "sender": { /* author object for the requester */ },
+      "status": "PENDING",
+      "created_at": "2025-10-17T03:40:00Z"
+    }
+  ]
+}
+```
+
+**Error Responses:**
+
+| Status Code | Description |
+|-------------|-------------|
+| 401 Unauthorized | No authentication provided or invalid credentials |
+| 403 Forbidden | Requesting user is not the local author |
+
+
 #### URL: `GET /api/authors/{AUTHOR_SERIAL}/followers/{FOREIGN_AUTHOR_FQID}`
 
 **Purpose:** Check if a specific foreign author is following another author.
