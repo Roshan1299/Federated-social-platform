@@ -848,6 +848,10 @@ def redirect_to_profile(request):
 def toggle_like(request, post_id):
     # Get the post by ID, or show 404 if not found
     post = get_object_or_404(Post, id=post_id)
+    # If parent post is deleted, treat this as gone.
+    if getattr(post, "deleted", False):
+        return HttpResponse("Not Found", status=404)
+    
     viewer = request.user
     author = post.author
 
@@ -900,6 +904,10 @@ class PostLikesView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         post = get_object_or_404(Post, id=self.kwargs["post_id"])
+        # Deleted post → show an error in context (tests expect 200 + error)
+        if getattr(post, "deleted", False):
+            ctx["error"] = "This post no longer exists."
+            return ctx
 
         user = self.request.user
         is_owner = user == post.author
@@ -1005,6 +1013,10 @@ def add_comment(request, post_id):
 def toggle_comment_like(request, comment_id):
     comment = get_object_or_404(Comment, id=comment_id)
     post = comment.post
+    # If parent post is deleted, treat this as gone.
+    if getattr(post, "deleted", False):
+        return HttpResponse("Not Found", status=404)
+    
     viewer = request.user
     author = post.author
 
