@@ -20,6 +20,7 @@ from .inbox_handlers import (
     handle_comment as ih_handle_comment,
     handle_like as ih_handle_like,
     handle_follow_request as ih_handle_follow_request,
+    reopen_follow_request as reopen_follow_request,
 )
 import requests
 import urllib.parse
@@ -586,12 +587,16 @@ class SingleFollowingAPIView(View):
             if resp.status_code in (200, 201):
                 # Create or reuse the existing target Author record as the receiver
                 fr, created = FollowRequest.objects.get_or_create(sender=author, receiver=target, defaults={'status': 'PENDING'})
-                return json_response({'message': 'Follow request sent to remote inbox'}, status=201)
+                if not created and reopen_follow_request(fr):
+                    return json_response({'message': 'Follow request re-sent'}, status=200)
+                return json_response({'message': 'Follow request sent to remote inbox'}, status=201 if created else 200)
             else:
                 return json_response({'error': f'Remote inbox responded with {resp.status_code}: {resp.text}'}, status=resp.status_code)
 
         # Otherwise target is local to our node: create a FollowRequest locally
         fr, created = FollowRequest.objects.get_or_create(sender=author, receiver=target, defaults={'status': 'PENDING'})
+        if not created and reopen_follow_request(fr):
+            return json_response({'message': 'Follow request re-sent'}, status=200)
         return json_response({'message': 'Follow request created' if created else 'Follow request already exists'}, status=201 if created else 200)
 
     def delete(self, request, author_id, following_fqid):

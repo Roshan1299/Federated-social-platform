@@ -28,6 +28,20 @@ def get_or_create_author(author_data):
     return author
 
 
+def reopen_follow_request(follow_request):
+    """Ensure a FollowRequest is in 'PENDING' state.
+
+    If the provided FollowRequest has a status other than 'PENDING', set
+    it to 'PENDING' and persist the change. Returns True if an update
+    was performed, False otherwise.
+    """
+    if follow_request.status != 'PENDING':
+        follow_request.status = 'PENDING'
+        follow_request.save(update_fields=['status'])
+        return True
+    return False
+
+
 def handle_follow_request(self, recipient, data, request):
     """Handle incoming follow request (incoming ActivityPub-like Follow).
 
@@ -47,6 +61,9 @@ def handle_follow_request(self, recipient, data, request):
         if created:
             return JsonResponse({'message': 'Follow request created'}, status=201)
         else:
+            # If an existing request is present but not pending, reset it to PENDING
+            if reopen_follow_request(follow_request):
+                return JsonResponse({'message': 'Follow request re-opened'}, status=200)
             return JsonResponse({'message': 'Follow request already exists'}, status=200)
 
     except Exception as e:

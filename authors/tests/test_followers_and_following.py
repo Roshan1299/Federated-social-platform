@@ -115,6 +115,41 @@ class SingleFollowingPutTests(TestCase):
         resp = self.client.put(url, content_type='application/json')
         self.assertEqual(resp.status_code, 404)
 
+    def test_refollow_after_denied_reopens_follow_request(self):
+        # Create a previously denied follow request
+        fr = FollowRequest.objects.create(sender=self.follower, receiver=self.local_target, status='DENIED')
+
+        # Sender (follower) re-sends follow request via following PUT
+        self.client.force_login(self.follower)
+        following_fqid = self.local_target.url
+        quoted = urllib.parse.quote(following_fqid, safe='')
+        url = f"/api/authors/{self.follower.id}/following/{quoted}"
+
+        resp = self.client.put(url, content_type='application/json')
+        self.assertIn(resp.status_code, (200, 201))
+
+        fr.refresh_from_db()
+        self.assertEqual(fr.status, 'PENDING')
+
+    def test_refollow_after_approved_reopens_follow_request_and_preserves_follow(self):
+        # Create a previously approved follow request and an active Follow
+        fr = FollowRequest.objects.create(sender=self.follower, receiver=self.local_target, status='APPROVED')
+        Follow.objects.create(follower=self.follower, following=self.local_target)
+
+        # Sender re-sends follow request
+        self.client.force_login(self.follower)
+        following_fqid = self.local_target.url
+        quoted = urllib.parse.quote(following_fqid, safe='')
+        url = f"/api/authors/{self.follower.id}/following/{quoted}"
+
+        resp = self.client.put(url, content_type='application/json')
+        self.assertIn(resp.status_code, (200, 201))
+
+        fr.refresh_from_db()
+        self.assertEqual(fr.status, 'PENDING')
+        # Existing Follow record should still exist
+        self.assertTrue(Follow.objects.filter(follower=self.follower, following=self.local_target).exists())
+
     def test_accept_follow_request_put_approves_and_creates_follow(self):
         # Create a pending follow request: follower -> local_target
         fr = FollowRequest.objects.create(sender=self.follower, receiver=self.local_target, status='PENDING')

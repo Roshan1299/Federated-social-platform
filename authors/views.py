@@ -22,6 +22,7 @@ from django.utils.decorators import method_decorator
 from .authentication import http_basic_auth_or_session
 from django.http import HttpResponse, Http404
 from .models import Image
+from .inbox_handlers import reopen_follow_request
 
 
 def render_post_content(post):
@@ -773,10 +774,8 @@ def follow_author(request, author_id):
 
     if not created:
         # If it exists and was denied or approved before, reset to pending
-        # Chose this method rather than because delete and recreate to preserve history
-        if follow_request.status != 'PENDING':
-            follow_request.status = 'PENDING'
-            follow_request.save()
+        # Chose this method rather than delete-and-recreate to preserve history
+        if reopen_follow_request(follow_request):
             messages.info(request, f"Follow request re-sent to {author_to_follow.displayName}.")
         else:
             messages.info(request, f"Follow request already pending.")
