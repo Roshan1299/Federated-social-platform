@@ -585,11 +585,9 @@ class SingleFollowingAPIView(View):
                 return json_response({'error': f'Failed to send follow request to remote inbox: {str(e)}'}, status=502)
 
             if resp.status_code in (200, 201):
-                # Create or reuse the existing target Author record as the receiver
-                fr, created = FollowRequest.objects.get_or_create(sender=author, receiver=target, defaults={'status': 'PENDING'})
-                if not created and reopen_follow_request(fr):
-                    return json_response({'message': 'Follow request re-sent'}, status=200)
-                return json_response({'message': 'Follow request sent to remote inbox'}, status=201 if created else 200)
+                # Create the Follow relationship immediately (idempotent).
+                follow, created = Follow.objects.get_or_create(follower=author, following=target)
+                return json_response({'message': 'Following created' if created else 'Already following'}, status=201 if created else 200)
             else:
                 return json_response({'error': f'Remote inbox responded with {resp.status_code}: {resp.text}'}, status=resp.status_code)
 

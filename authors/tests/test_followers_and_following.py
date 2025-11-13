@@ -62,9 +62,9 @@ class SingleFollowingPutTests(TestCase):
         self.assertTrue(mock_post.called)
         self.assertEqual(resp.status_code, 201)
 
-        fr = FollowRequest.objects.filter(sender=self.follower, receiver=self.remote_target).first()
-        self.assertIsNotNone(fr)
-        self.assertEqual(fr.status, 'PENDING')
+        # treats the relationship as followed immediately.
+        follow = Follow.objects.filter(follower=self.follower, following=self.remote_target).first()
+        self.assertIsNotNone(follow)
 
     def test_put_unauthenticated_returns_401(self):
         # Do not login

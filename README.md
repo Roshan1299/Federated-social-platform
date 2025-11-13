@@ -820,7 +820,7 @@ curl -u username:password \
 
 **Purpose:** Create a follow request from the local author to the specified target author. Behavior differs for local vs remote targets:
 - If the target resolves to a local author on this node and is not already followed, a local `FollowRequest` is created with status `PENDING`.
-- If the target resolves to a remote author (different host), the server sends a `follow` activity to the remote author's inbox. The activity's `actor` is the local author object and the `object` is the target author object (full author JSON). On success the local node records a pending `FollowRequest` referencing the remote author record.
+- If the target resolves to a remote author (different host), the server sends a `follow` activity to the remote author's inbox. The activity's `actor` is the local author object and the `object` is the target author object (full author JSON). On success the local node records a `Follow` immediately referencing the remote author record.
 
 **Authentication Required:** Yes (session auth — only the local author may call this endpoint)
 
