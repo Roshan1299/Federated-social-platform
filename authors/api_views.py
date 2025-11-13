@@ -547,25 +547,33 @@ class SingleFollowingAPIView(View):
         if not request.user.is_authenticated or str(request.user.id) != str(author_id):
             return HttpResponse('Forbidden: only the author may create follow requests', status=403)
 
-        # try resolving the remote/local author on our node
+        # Resolve the target author strictly by FQID; if not found, return 404
         try:
             target = _get_author_by_id_or_fqid(author_fqid=following_fqid)
-            # Local or known remote author: create a FollowRequest locally
-            fr, created = FollowRequest.objects.get_or_create(sender=author, receiver=target, defaults={'status': 'PENDING'})
-            return json_response({'message': 'Follow request created' if created else 'Follow request already exists'}, status=201 if created else 200)
         except Http404:
-            # Target unknown locally -> treat as remote. POST follow activity to remote inbox
-            # Build follow activity payload
+            return HttpResponse('Not Found', status=404)
+
+        # If the target's host differs from our host, send follow request to the remote inbox
+        local_base = f"{request.scheme}://{request.get_host()}".rstrip('/')
+
+        target_host = None
+        if getattr(target, 'host', None):
+            target_host = target.host.rstrip('/')
+        elif getattr(target, 'url', None):
+            parsed_t = urllib.parse.urlparse(target.url)
+            target_host = f"{parsed_t.scheme}://{parsed_t.netloc}".rstrip('/')
+
+        if target_host and target_host != local_base:
             payload = {
                 'type': 'follow',
                 'actor': build_author_dict(author, request),
-                'object': following_fqid
+                'object': build_author_dict(target, request),
             }
 
-            # Parse target URL to find inbox endpoint
-            parsed = urllib.parse.urlparse(following_fqid)
+            # Build inbox URL from target.url
+            target_fqid = target.url
+            parsed = urllib.parse.urlparse(target_fqid)
             base = f"{parsed.scheme}://{parsed.netloc}"
-            # Attempt to extract the remote author's id from path (last segment)
             path_parts = parsed.path.rstrip('/').split('/')
             remote_author_id = path_parts[-1] if path_parts else ''
             inbox_url = f"{base}/api/authors/{remote_author_id}/inbox/"
@@ -576,12 +584,15 @@ class SingleFollowingAPIView(View):
                 return json_response({'error': f'Failed to send follow request to remote inbox: {str(e)}'}, status=502)
 
             if resp.status_code in (200, 201):
-                # Create a local stub Author for the remote target so we can track the request
-                remote_author, _ = Author.objects.get_or_create(url=following_fqid, defaults={'username': f'remote_{remote_author_id}', 'displayName': remote_author_id, 'host': base})
-                fr, created = FollowRequest.objects.get_or_create(sender=author, receiver=remote_author, defaults={'status': 'PENDING'})
+                # Create or reuse the existing target Author record as the receiver
+                fr, created = FollowRequest.objects.get_or_create(sender=author, receiver=target, defaults={'status': 'PENDING'})
                 return json_response({'message': 'Follow request sent to remote inbox'}, status=201)
             else:
                 return json_response({'error': f'Remote inbox responded with {resp.status_code}: {resp.text}'}, status=resp.status_code)
+
+        # Otherwise target is local to our node: create a FollowRequest locally
+        fr, created = FollowRequest.objects.get_or_create(sender=author, receiver=target, defaults={'status': 'PENDING'})
+        return json_response({'message': 'Follow request created' if created else 'Follow request already exists'}, status=201 if created else 200)
 
     def delete(self, request, author_id, following_fqid):
         """Unfollow FOREIGN_AUTHOR_FQID - only author may call"""

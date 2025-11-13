@@ -1,7 +1,3 @@
-"""
-Updated Inbox Handlers with Origin-based Duplicate Prevention
-This prevents UUID collisions by checking origin fields first.
-"""
 import uuid
 from django.http import JsonResponse
 from django.utils import timezone
