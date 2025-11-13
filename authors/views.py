@@ -949,6 +949,9 @@ class PostLikesView(LoginRequiredMixin, TemplateView):
 @require_POST
 def add_comment(request, post_id):
     post = get_object_or_404(Post, id=post_id)
+    # If the post is marked deleted, treat it as gone
+    if getattr(post, "deleted", False):
+        return HttpResponse("Not Found", status=404)
 
     viewer = request.user
     author = post.author

@@ -28,6 +28,7 @@ Edge cases
 - Unauthenticated users can’t comment or like (redirect to login)
 - Comments with empty content can’t be liked
 - liking a comment that was deleted should give error
+- Adding a comment on a deleted post should be blocked (404).
 """
 from django.test import TestCase, Client
 from django.urls import reverse
@@ -418,3 +419,28 @@ class CommentsAPITests(TestCase):
         url = reverse("authors:toggle_comment_like", kwargs={"comment_id": temp_id})
         resp = self.client.post(url)
         self.assertEqual(resp.status_code, 404)
+    def test_cannot_comment_on_deleted_post(self):
+        """
+        Adding a comment on a deleted post should be blocked (404).
+        """
+        # Make a deleted PUBLIC post owned by Bob
+        deleted_post = Post.objects.create(
+            author=self.bob,
+            title="Dead post",
+            content="nope",
+            contentType="text/plain",
+            visibility="PUBLIC",
+            published=timezone.now(),
+            updated=timezone.now(),
+            deleted=True,  # soft-deleted
+        )
+
+        self.client.force_login(self.alice)
+        url = reverse("authors:add_comment", kwargs={"post_id": deleted_post.id})
+        resp = self.client.post(url, data={"content": "should not be saved"})
+
+        # Expect Not Found and no comment created
+        self.assertEqual(resp.status_code, 404)
+        self.assertFalse(
+            Comment.objects.filter(post=deleted_post, author=self.alice).exists()
+        )
