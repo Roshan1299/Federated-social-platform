@@ -21,6 +21,7 @@ from .api_views import (
 app_name = "authors"
 urlpatterns = [
     # ========== UI Routes (HTML Views) ==========
+    path("explore/", views.ExploreView.as_view(), name="explore"),
     path("accounts/signup/", SignUpView.as_view(), name="signup"),
     path("accounts/profile/", redirect_to_profile, name="redirect_profile"),
     path("authors/<uuid:author_id>/", AuthorProfileView.as_view(), name="author_profile"),

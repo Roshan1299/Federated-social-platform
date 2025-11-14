@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Explore Public Posts{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="stream-header">
+    <div class="header-content">
+      <h1>Explore Public Posts</h1>
+      <p>Discover public posts from everyone in the network.</p>
+    </div>
+  </div>
+
+  {% if posts %}
+    <section class="all-posts-section">
+      <div class="posts-grid">
+        {% for post in posts %}
+          <article class="post-card">
+            <div class="post-header">
+              <div class="post-author">
+                <a href="{% url 'authors:author_profile' author_id=post.author.id %}">
+                  {{ post.author.displayName }}
+                </a>
+              </div>
+              <div class="post-meta">
+                <span class="publish-date">Published {{ post.published|naturaltime }}</span>
+              </div>
+            </div>
+
+            <h3 class="post-title">
+              <a href="{% url 'authors:post_detail' post_id=post.id %}">{{ post.title }}</a>
+            </h3>
+
+            {% if post.image %}
+              <div class="post-image-container">
+                <a href="{% url 'authors:post_detail' post_id=post.id %}">
+                  <img src="{{ post.image.url }}" alt="image for {{ post.title }}" class="post-image">
+                </a>
+              </div>
+            {% endif %}
+            
+            <div class="post-content">
+              {{ post.rendered_content|truncatechars_html:300|safe }}
+            </div>
+
+            <div class="post-actions">
+              <a href="{% url 'authors:post_detail' post_id=post.id %}" class="btn btn-primary">Read More</a>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+
+      {% if is_paginated %}
+        <div class="pagination">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-secondary">Previous</a>
+          {% endif %}
+          <span class="page-info">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}" class="btn btn-secondary">Next</a>
+          {% endif %}
+        </div>
+      {% endif %}
+    </section>
+  {% else %}
+    <div class="empty-state">
+      <h3>No posts available yet</h3>
+      <p>There are no public posts in the network yet.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

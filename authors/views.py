@@ -686,6 +686,26 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
         context["author_id"] = user.id
         return context
 
+
+class ExploreView(ListView):
+    model = Post
+    template_name = "authors/explore.html"
+    context_object_name = "posts"
+    paginate_by = 15
+
+    def get_queryset(self):
+        """Return all public, non-deleted posts from all authors."""
+        queryset = Post.objects.filter(visibility='PUBLIC', deleted=False).order_by('-published')
+        for post in queryset:
+            post.rendered_content = render_post_content(post)
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["title"] = "Explore Public Posts"
+        return context
+
+
 class StreamRedirectView(TemplateView):
     """Redirect view to send user to their personalized stream"""
     def get(self, request, *args, **kwargs):
