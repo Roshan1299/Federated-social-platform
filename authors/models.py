@@ -17,7 +17,13 @@ class Author(AbstractUser):
     displayName = models.CharField(max_length=255)
     github = models.URLField(blank=True, null=True)
     description = models.CharField(max_length=500, blank=True, null=True)
-    profileImage = models.ImageField(blank=True, null=True, upload_to="user_images/") # Store images in media/user_images/
+    profileImage = models.ForeignKey(
+        "Image",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="author_profile_images",
+    )
     last_github_event_id = models.CharField(max_length=255, blank=True, null=True)
 
     def save(self, *args, **kwargs):
@@ -80,7 +86,13 @@ class Post(models.Model):
     source = models.URLField(blank=True, null=True)  # Where post was copied from
     origin = models.URLField(unique=True, blank=True, null=True)  # UNIQUE - canonical URL
     
-    image = models.ImageField(upload_to="post_images/", blank=True, null=True)
+    image = models.ForeignKey(
+        "Image",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="post_images",
+    )
     deleted = models.BooleanField(default=False)
     
     def save(self, *args, **kwargs):

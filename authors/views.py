@@ -198,7 +198,11 @@ class AuthorAPIView(View):
             "host": author.host or f"{request.scheme}://{request.get_host()}",
             "displayName": author.displayName,
             "github": author.github,
-            "profileImage": request.build_absolute_uri(author.profileImage.url) if author.profileImage else None,
+            "profileImage": (
+                request.build_absolute_uri(
+                    reverse('authors:serve_image', args=[author.profileImage.id])
+                ) if author.profileImage else None
+            ),
             "web": f"{request.scheme}://{request.get_host()}{web_url}",
         }
         return JsonResponse(data)
@@ -354,7 +358,7 @@ class PostDetailView(DetailView):
 
         
         # Add image context if image exists
-        context['has_image'] = post.image and post.image.url
+        context['has_image'] = bool(post.image)
         # User will not have option to copy link if post is friends-only
         context['VISIBILITY_FRIENDS'] = "FRIENDS"
 
@@ -589,7 +593,9 @@ class PostAPIView(View):
             "updated": post.updated.isoformat(),
         }
         if post.image:
-            data["image"] = request.build_absolute_uri(post.image.url)
+            data["image"] = request.build_absolute_uri(
+                reverse('authors:serve_image', args=[post.image.id])
+            )
         
         return JsonResponse(data)
     

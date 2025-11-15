@@ -7,9 +7,11 @@
     <div class="profile-header">
       <div class="profile-avatar">
         {% if author.profileImage %}
-          <img src="{{ author.profileImage.url }}" alt="{{ author.displayName }}'s Profile Image" class="profile-img-large">
+          <img src="{% url 'authors:serve_image' author.profileImage.id %}"
+              alt="{{ author.displayName }}'s Profile Image"
+              class="profile-avatar">
         {% else %}
-          <div class="profile-placeholder-large">👤</div>
+          <div class="profile-placeholder">👤</div>
         {% endif %}
       </div>
       
@@ -136,12 +138,14 @@
               </h3>
 
               {% if post.image %}
-                <div class="post-image-preview">
-                  <a href="{% url 'authors:post_detail' post.id %}">
-                    <img src="{{ post.image.url }}" alt="{{ post.title }}" class="post-thumbnail">
-                  </a>
-                </div>
-              {% endif %}
+              <div class="post-image-preview">
+                <a href="{% url 'authors:post_detail' post.id %}">
+                  <img src="{% url 'authors:serve_image' post.image.id %}"
+                      alt="{{ post.title }}"
+                      class="post-thumbnail">
+                </a>
+              </div>
+            {% endif %}
 
               <div class="post-content">
                 {{ post.rendered_content|truncatechars_html:150|safe }}

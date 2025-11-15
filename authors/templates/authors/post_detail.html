@@ -24,17 +24,20 @@
     {% if post.description %}
       <p class="post-description"><strong>Description:</strong> {{ post.description }}</p>
     {% endif %}
-
+  
     <!-- show image if post has one -->
     {% if post.image %}
       <div class="post-detail-image-container">
-        <img src="{{ post.image.url }}" alt="{{ post.title }}" class="post-detail-image">
+        <img src="{% url 'authors:serve_image' post.image.id %}"
+             alt="{{ post.title }}"
+             class="post-detail-image">
       </div>
     {% endif %}
-
+  
     {% if post.content %}
       <div class="post-detail-content">{{ content_html|safe }}</div>
     {% endif %}
+  </section>
 
     <div class="post-actions">
       <span class="like-count">{{ like_count }} like{{ like_count|pluralize }}</span>

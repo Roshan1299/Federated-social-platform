@@ -1,7 +1,5 @@
 {% extends "base.html" %}
-{% load humanize %} 
-    {# For formatting numbers and dates into human readable format
-        Naturaltime filter converts to relative time strings #}
+{% load humanize %}
 
 {% block title %}Author Stream{% endblock %}
 
@@ -19,7 +17,7 @@
       {% endif %}
     </div>
 
-    {# Show posts from followed authors first #}
+    {# Posts from followed authors #}
     {% if followed_data %}
       <section class="followed-posts-section">
         <h2 class="section-title">Posts from authors you follow</h2>
@@ -37,14 +35,19 @@
                   <h4 class="post-title">
                     <a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a>
                   </h4>
-                  <p class="post-meta">
-                    Published {{ post.published|naturaltime }}
-                  </p>
+                  <p class="post-meta">Published {{ post.published|naturaltime }}</p>
                 </div>
 
-                {% if post.image %}
+                {% if post.image_id %}
                   <div class="post-image-container">
-                    <img src="{{ post.image.url }}" alt="{{ post.title }}" class="post-image">
+                    <a href="{% url 'authors:post_detail' post.id %}">
+                      <img
+                        src="{% url 'authors:serve_image' post.image_id %}"
+                        alt="image for {{ post.title }}"
+                        class="post-image"
+                        style="width:100%;height:200px;object-fit:cover;border-radius:10px;"
+                      />
+                    </a>
                   </div>
                 {% endif %}
 
@@ -66,20 +69,29 @@
       </section>
     {% endif %}
 
+    {# All public posts section #}
     {% if posts %}
       <section class="all-posts-section">
         {% if followed_data %}
           <hr class="section-divider">
         {% endif %}
-        
         <h2 class="section-title">All Public Posts</h2>
-        
+
         <div class="posts-grid">
           {% for post in posts %}
             <article class="post-card">
               <div class="post-header">
                 <div class="post-author">
-                  <a href="{% url 'authors:author_profile' author_id=post.author.id %}">
+                  <a href="{% url 'authors:author_profile' post.author.id %}">
+                    {% if post.author.profileImage_id %}
+                      <img
+                        src="{% url 'authors:serve_image' post.author.profileImage_id %}"
+                        alt="{{ post.author.displayName }}"
+                        style="width:28px;height:28px;border-radius:50%;object-fit:cover;margin-right:8px;"
+                      />
+                    {% else %}
+                      <span style="margin-right:8px;">👤</span>
+                    {% endif %}
                     {{ post.author.displayName }}
                   </a>
                 </div>
@@ -92,23 +104,28 @@
               </div>
 
               <h3 class="post-title">
-                <a href="{% url 'authors:post_detail' post_id=post.id %}">{{ post.title }}</a>
+                <a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a>
               </h3>
 
-              {% if post.image %}
+              {% if post.image_id %}
                 <div class="post-image-container">
-                  <a href="{% url 'authors:post_detail' post_id=post.id %}">
-                    <img src="{{ post.image.url }}" alt="image for {{ post.title }}" class="post-image">
+                  <a href="{% url 'authors:post_detail' post.id %}">
+                    <img
+                      src="{% url 'authors:serve_image' post.image_id %}"
+                      alt="image for {{ post.title }}"
+                      class="post-image"
+                      style="width:100%;height:200px;object-fit:cover;border-radius:10px;"
+                    />
                   </a>
                 </div>
               {% endif %}
-              
+
               <div class="post-content">
                 {{ post.rendered_content|truncatechars_html:300|safe }}
               </div>
 
               <div class="post-actions">
-                <a href="{% url 'authors:post_detail' post_id=post.id %}" class="btn btn-primary">Read More</a>
+                <a href="{% url 'authors:post_detail' post.id %}" class="btn btn-primary">Read More</a>
               </div>
             </article>
           {% endfor %}

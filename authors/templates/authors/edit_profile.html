@@ -24,11 +24,13 @@
         <div class="profile-image-section">
           <h3>Profile Picture</h3>
           <div class="profile-image-preview">
-            {% if author.profileImage %}
-              <img src="{{ author.profileImage.url }}" alt="{{ author.displayName }}'s Profile Image" class="current-profile-img">
-            {% else %}
-              <div class="profile-placeholder">👤</div>
-            {% endif %}
+            <div class="form-group">
+              <label for="{{ form.profileImage.id_for_label }}">Select Existing Image:</label>
+              {{ form.profileImage }}
+              <small class="form-hint">
+                Need a new image? <a href="{% url 'authors:upload_image' %}" target="_blank">Upload here</a>, then come back and select it.
+              </small>
+            </div>
           </div>
           
           <div class="form-group">
