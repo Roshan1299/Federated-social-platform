@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Remote Nodes - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2>Remote Nodes</h2>
+            <p>Manage connections to other nodes in the federation</p>
+
+            <div class="mb-3">
+                <a href="{% url 'authors:add_remote_node' %}" class="btn btn-primary">Add Remote Node</a>
+            </div>
+
+            {% if remote_nodes %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Base URL</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for node in remote_nodes %}
+                            <tr>
+                                <td>{{ node.name }}</td>
+                                <td>{{ node.base_url }}</td>
+                                <td>
+                                    {% if node.enabled %}
+                                        <span class="badge bg-success">Enabled</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Disabled</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{% url 'authors:edit_remote_node' node.id %}" class="btn btn-sm btn-outline-primary me-2">Edit</a>
+                                    <form method="post" action="{% url 'authors:delete_remote_node' node.id %}" class="d-inline"
+                                          onsubmit="return confirm('Are you sure you want to remove this remote node connection?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    No remote nodes configured yet. Add a remote node to connect with other federated servers.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

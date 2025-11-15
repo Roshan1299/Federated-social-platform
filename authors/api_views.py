@@ -22,6 +22,11 @@ from .inbox_handlers import (
     handle_follow_request as ih_handle_follow_request,
     reopen_follow_request as reopen_follow_request,
 )
+from .utils.federation import (
+    notify_remote_new_post,
+    notify_remote_edit_post,
+    notify_remote_delete_post,
+)
 import requests
 import urllib.parse
 
@@ -842,14 +847,14 @@ class EntriesAPIView(View):
                 try:
                     # Decode the base64 image
                     image_data = base64.b64decode(content)
-                    
+
                     # Determine file extension
                     ext = 'png'
                     if 'jpeg' in content_type or 'jpg' in content_type:
                         ext = 'jpg'
                     elif 'gif' in content_type:
                         ext = 'gif'
-                    
+
                     # Save to image field
                     from django.core.files.base import ContentFile
                     filename = f"post_{post.id}.{ext}"
@@ -857,7 +862,10 @@ class EntriesAPIView(View):
                 except Exception as e:
                     # If image decoding fails, continue without image
                     pass
-            
+
+            # Notify remote followers about the new post
+            notify_remote_new_post(post)
+
             return json_response(build_post_dict(post, request), status=201)
             
         except json.JSONDecodeError:
@@ -930,7 +938,10 @@ class SingleEntryAPIView(View):
             post.contentType = data.get('contentType', post.contentType)
             post.visibility = data.get('visibility', post.visibility)
             post.save()
-            
+
+            # Notify remote followers about the edited post
+            notify_remote_edit_post(post)
+
             return json_response(build_post_dict(post, request))
             
         except json.JSONDecodeError:
@@ -949,7 +960,10 @@ class SingleEntryAPIView(View):
         
         post.deleted = True
         post.save()
-        
+
+        # Notify remote followers about the deleted post (User Story 2)
+        notify_remote_delete_post(post)
+
         return JsonResponse({'message': 'Post deleted'}, status=204)
 
 

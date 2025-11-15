@@ -8,10 +8,8 @@ from django.core.paginator import Paginator
 from django.views import View
 from django.http import HttpResponse, JsonResponse
 from django.db.models import Q
-from .models import Author, Post, Follow, FollowRequest, Like, Comment, CommentLike
-from .forms import CommentForm
-
-from .forms import AuthorCreationForm, AuthorProfileForm, PostForm
+from .models import Author, Post, Follow, FollowRequest, Like, Comment, CommentLike, RemoteNode
+from .forms import AuthorCreationForm, AuthorProfileForm, PostForm, RemoteNodeForm
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
@@ -23,6 +21,7 @@ from .authentication import http_basic_auth_or_session
 from django.http import HttpResponse, Http404
 from .models import Image
 from .inbox_handlers import reopen_follow_request
+from .utils.federation import notify_remote_delete_post
 
 
 def render_post_content(post):
@@ -288,6 +287,15 @@ class EditPostView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     def get_success_url(self):
         return reverse("authors:post_detail", kwargs={"post_id": self.object.id})
 
+    def form_valid(self, form):
+        # Call the parent form_valid to save the post
+        response = super().form_valid(form)
+
+        # Notify remote followers about the edited post
+        notify_remote_edit_post(self.object)
+
+        return response
+
 
 '''
 Allows deleting a post.
@@ -303,6 +311,10 @@ class DeletePostView(LoginRequiredMixin, UserPassesTestMixin, View):
         if self.request.user == post.author:
             post.deleted = True
             post.save()
+
+            # Notify remote followers about the deleted post (User Story 2)
+            notify_remote_delete_post(post)
+
             return redirect('authors:author_profile', author_id=self.request.user.id)
         return HttpResponse("Unauthorized", status=403)
 
@@ -1105,3 +1117,96 @@ def serve_image(request, image_id):
     response = HttpResponse(img.data, content_type=img.content_type)
     response['Content-Disposition'] = f'inline; filename={img.file_name}'
     return response
+
+
+# Views for Node Admin Management of Remote Nodes
+class RemoteNodeListView(LoginRequiredMixin, ListView):
+    """
+    List all configured remote nodes
+    Only accessible to superusers (node admins)
+    """
+    model = RemoteNode
+    template_name = "authors/remote_nodes_list.html"
+    context_object_name = "remote_nodes"
+
+    def dispatch(self, request, *args, **kwargs):
+        # Only allow superusers (node admins) to access this view
+        if not request.user.is_superuser:
+            return redirect('authors:author_profile', author_id=request.user.id)
+        return super().dispatch(request, *args, **kwargs)
+
+
+class AddRemoteNodeView(LoginRequiredMixin, CreateView):
+    """
+    Add a new remote node to connect with
+    Only accessible to superusers (node admins)
+    """
+    model = RemoteNode
+    form_class = RemoteNodeForm
+    template_name = "authors/add_remote_node.html"
+    success_url = reverse_lazy('authors:remote_nodes_list')
+
+    def dispatch(self, request, *args, **kwargs):
+        # Only allow superusers (node admins) to access this view
+        if not request.user.is_superuser:
+            return redirect('authors:author_profile', author_id=request.user.id)
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        messages.success(self.request, f"Successfully added remote node: {form.instance.name}")
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, "Error adding remote node. Please check the form data.")
+        return super().form_invalid(form)
+
+
+class EditRemoteNodeView(LoginRequiredMixin, UpdateView):
+    """
+    Edit an existing remote node configuration
+    Only accessible to superusers (node admins)
+    """
+    model = RemoteNode
+    form_class = RemoteNodeForm
+    template_name = "authors/edit_remote_node.html"
+    success_url = reverse_lazy('authors:remote_nodes_list')
+    pk_url_kwarg = "node_id"
+
+
+    def dispatch(self, request, *args, **kwargs):
+        # Only allow superusers (node admins) to access this view
+        if not request.user.is_superuser:
+            return redirect('authors:author_profile', author_id=request.user.id)
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        messages.success(self.request, f"Successfully updated remote node: {form.instance.name}")
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, "Error updating remote node. Please check the form data.")
+        return super().form_invalid(form)
+
+
+class DeleteRemoteNodeView(LoginRequiredMixin, View):
+    """
+    Delete a remote node connection
+    Only accessible to superusers (node admins)
+    """
+    def dispatch(self, request, *args, **kwargs):
+        # Only allow superusers (node admins) to access this view
+        if not request.user.is_superuser:
+            return redirect('authors:author_profile', author_id=request.user.id)
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request, node_id):
+        try:
+            # Use integer ID (node_id from URL)
+            node = RemoteNode.objects.get(id=node_id)
+            node_name = node.name
+            node.delete()
+            messages.success(request, f"Successfully removed remote node: {node_name}")
+        except RemoteNode.DoesNotExist:
+            messages.error(request, "Remote node not found.")
+
+        return redirect('authors:remote_nodes_list')

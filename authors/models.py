@@ -265,6 +265,7 @@ class CommentLike(models.Model):
     def __str__(self):
         return f"{self.author.displayName} likes a comment on {self.comment.post.title}"
 
+
 class RemoteNode(models.Model):
     """
     RemoteNode model - stores credentials and connection details for another server.
@@ -282,6 +283,8 @@ class RemoteNode(models.Model):
     username = models.CharField(max_length=255)
     password = models.CharField(max_length=255)
     enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.name} ({self.base_url})"

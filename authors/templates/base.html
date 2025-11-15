@@ -62,7 +62,7 @@
       <div class="nav-right">
         <a href="{% url 'authors:explore' %}" class="nav-explore">Explore</a>
         <a href="{% url 'authors:create_post' %}" class="nav-create-post">Create Post</a>
-  
+
         <!-- Follow Requests link with badge -->
         <a href="{% url 'authors:follow_requests' %}" class="nav-follow-requests">
           Follow Requests
@@ -70,7 +70,12 @@
             <span class="follow-requests-badge">{{ pending_follow_requests_count }}</span>
           {% endif %}
         </a>
-  
+
+        <!-- Node Admin link for superusers -->
+        {% if user.is_superuser %}
+          <a href="{% url 'authors:remote_nodes_list' %}" class="nav-remote-nodes">Manage Nodes</a>
+        {% endif %}
+
         <form action="{% url 'logout' %}" method="post" class="nav-logout-form">
           {% csrf_token %}
           <button type="submit" class="nav-logout-btn">Logout</button>

@@ -1,13 +1,14 @@
 from django.urls import path, re_path
 from . import views
 from .views import (
-    SignUpView, redirect_to_profile, StreamRedirectView, AuthorProfileView, 
-    AuthorsListAPIView, AuthorAPIView, AuthorEditView, CreatePostView, 
-    PostDetailView, EditPostView, DeletePostView, AuthorPostsView, PostAPIView, 
-    AuthorStreamView, follow_author, cancel_follow_request, unfollow_author, 
-    FollowRequest, FollowRequestsView, approve_follow_request, deny_follow_request, 
-    toggle_like, PostLikesView, add_comment, toggle_comment_like, 
-    FollowersListView, FollowingListView, AuthorDeletedPostsAdminView
+    SignUpView, redirect_to_profile, StreamRedirectView, AuthorProfileView,
+    AuthorsListAPIView, AuthorAPIView, AuthorEditView, CreatePostView,
+    PostDetailView, EditPostView, DeletePostView, AuthorPostsView, PostAPIView,
+    AuthorStreamView, follow_author, cancel_follow_request, unfollow_author,
+    FollowRequest, FollowRequestsView, approve_follow_request, deny_follow_request,
+    toggle_like, PostLikesView, add_comment, toggle_comment_like,
+    FollowersListView, FollowingListView, AuthorDeletedPostsAdminView,
+    RemoteNodeListView, AddRemoteNodeView, EditRemoteNodeView, DeleteRemoteNodeView
 )
 
 # Import new API views
@@ -136,4 +137,10 @@ urlpatterns = [
     path("api/posts/<uuid:post_id>/", PostAPIView.as_view(), name="post_api"),
     path('upload_image/', views.upload_image, name='upload_image'),
     path('image/<int:image_id>/', views.serve_image, name='serve_image'),
+
+    # ========== Node Admin Management Routes ==========
+    path('node_admin/remote_nodes/', RemoteNodeListView.as_view(), name='remote_nodes_list'),
+    path('node_admin/remote_nodes/add/', AddRemoteNodeView.as_view(), name='add_remote_node'),
+    path('node_admin/remote_nodes/<int:node_id>/edit/', EditRemoteNodeView.as_view(), name='edit_remote_node'),
+    path('node_admin/remote_nodes/<int:node_id>/delete/', DeleteRemoteNodeView.as_view(), name='delete_remote_node'),
 ]
