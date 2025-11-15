@@ -264,3 +264,25 @@ class CommentLike(models.Model):
 
     def __str__(self):
         return f"{self.author.displayName} likes a comment on {self.comment.post.title}"
+
+class RemoteNode(models.Model):
+    """
+    RemoteNode model - stores credentials and connection details for another server.
+
+    Primary Key: id (AutoField)
+    Unique Identifier: base_url (one row per remote node)
+
+    Used for:
+      - HTTP Basic Auth when sending federation requests
+      - Knowing where to deliver inbox items
+      - Enabling/disabling communication with specific nodes
+    """
+    name = models.CharField(max_length=255)
+    base_url = models.URLField(unique=True)
+    username = models.CharField(max_length=255)
+    password = models.CharField(max_length=255)
+    enabled = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.base_url})"
+
