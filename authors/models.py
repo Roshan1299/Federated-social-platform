@@ -38,6 +38,12 @@ class Author(AbstractUser):
             self.host = base_url
             # Save again to persist url/host
             super().save(update_fields=['url', 'host'])
+    
+    def is_remote(self) -> bool:
+        """Determine if this author is remote based on their host."""
+        local_node = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+        author_host = (self.host or "").rstrip("/")
+        return (author_host != "" and author_host != local_node)
 
 
 class Image(models.Model):
@@ -60,11 +66,6 @@ class Post(models.Model):
     CONTENT_TYPE_CHOICES = [
         ('text/plain', 'Plain Text'),
         ('text/markdown', 'Markdown/ CommonMark'),
-        ('image/png', 'Image/PNG'),
-        ('image/jpeg', 'Image/JPEG'),
-        ('image/gif', 'Image/GIF'),
-        ('image/bmp', 'Image/BMP'),
-        ('image/webp', 'Image/WEBP'),
     ]
     
     VISIBILITY_CHOICES = [
@@ -274,7 +275,6 @@ class RemoteNode(models.Model):
     Unique Identifier: base_url (one row per remote node)
 
     Used for:
-      - HTTP Basic Auth when sending federation requests
       - Knowing where to deliver inbox items
       - Enabling/disabling communication with specific nodes
     """

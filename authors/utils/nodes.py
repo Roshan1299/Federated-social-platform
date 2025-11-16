@@ -1,55 +1,45 @@
 """
-Tools for sending data to remote nodes.
+connect to remote nodes with url, username, and password.
 
-Remote requests:
-- always return True/False
-- ignore unknown or unreachable nodes
+- When we send posts/comments/likes to that node:
+    1. We use the BASE URL to find that node in our database
+    2. We get the stored USERNAME + PASSWORD for that node
+    3. We log in using Basic Auth (username + password)
+    4. We send JSON data to the node's /inbox URL
+
+If the login is correct → the remote node accepts the data.
+If the login is wrong → the remote node rejects the data.
 """
-
-
 import requests
 from authors.models import RemoteNode
 
-
+# Looks up remote node login information
 def get_auth_for_base(base_url: str):
-    """
-    Look up stored authentication credentials for a remote node.
-
-    Parameters:
-        base_url (str): The base URL of the remote node.
-
-    Returns:
-        tuple(username, password) if found,
-        None if the node is not registered or disabled.
-    """
-    base = base_url.rstrip("/")  # normalize
-
+    # Normalize the base URL so matching works
+    base = base_url.rstrip("/")
+    # Look up remote node login info in our DB
+    # Checking if we know this node
     try:
         node = RemoteNode.objects.get(base_url__icontains=base, enabled=True)
+        # Return username and password if we found this node
         return (node.username, node.password)
+    # Return none if not found
     except RemoteNode.DoesNotExist:
         return None
 
 
 def remote_post(url, payload, base_url):
-    """
-    Send JSON data to a remote node's inbox using HTTP Basic Auth.
-
-    This function NEVER throws an exception.
-    It returns:
-        True  → request was sent successfully (status 200–299)
-        False → unknown node, network failure, timeout, or bad status code
-
-    Parameters:
-        url (str): Remote inbox URL
-        payload (dict): Data to send
-        base_url (str): Remote node base URL used to find credentials
-    """
+    # Get username and password for this remote node
     auth = get_auth_for_base(base_url)
 
+    # If we do not have a RemoteNode saved for this BASE URL
+    # then we cannot connect to that remote node
     if auth is None:
-        # We don't know this node → silently fail
         return False
+
+    # Try connecting to remote node using url, username, and password
+    # url = the inbox URL
+    # auth = username and password
 
     try:
         response = requests.post(
@@ -58,8 +48,9 @@ def remote_post(url, payload, base_url):
             auth=auth,
             timeout=10
         )
+        # Connection was successful if we got a 300 > status code
         return response.status_code < 300
 
     except Exception:
-        # Network errors, timeouts, SSL errors, etc.
+        # Any network or server error means we could not connect
         return False
