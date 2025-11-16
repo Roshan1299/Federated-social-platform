@@ -7,6 +7,8 @@ from functools import wraps
 from django.http import JsonResponse, HttpResponse
 from django.contrib.auth import authenticate
 from django.conf import settings
+from django.shortcuts import get_object_or_404
+from authors.models import Author, RemoteNode
 
 
 def http_basic_auth_required(view_func):
@@ -115,14 +117,26 @@ def http_basic_auth_or_session(view_func):
             
             # Authenticate user
             user = authenticate(request, username=username, password=password)
-            
+
             if user is None:
                 return HttpResponse(
                     'Invalid credentials',
                     status=401,
                     headers={'WWW-Authenticate': 'Basic realm="API"'}
                 )
-            
+            if not isinstance(user, Author):
+                user = Author.objects.get(id=user.pk)
+
+            if (user.is_remote()):
+                # Check if their node is active
+                remote_user_node = get_object_or_404(RemoteNode, base_url__icontains=user.host) 
+                if not remote_user_node.enabled:
+                    return HttpResponse(
+                        'Remote node is disabled',
+                        status=401,
+                        headers={'WWW-Authenticate': 'Basic realm="API"'}
+                    )
+
             # Set the authenticated user on the request
             request.user = user
             try:

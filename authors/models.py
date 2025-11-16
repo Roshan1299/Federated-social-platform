@@ -38,6 +38,12 @@ class Author(AbstractUser):
             self.host = base_url
             # Save again to persist url/host
             super().save(update_fields=['url', 'host'])
+    
+    def is_remote(self) -> bool:
+        """Determine if this author is remote based on their host."""
+        local_node = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+        author_host = (self.host or "").rstrip("/")
+        return (author_host != "" and author_host != local_node)
 
 
 class Image(models.Model):
