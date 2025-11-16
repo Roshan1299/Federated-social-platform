@@ -2,7 +2,7 @@ from django.urls import path, re_path
 from . import views
 from .views import (
     SignUpView, redirect_to_profile, StreamRedirectView, AuthorProfileView,
-    AuthorsListAPIView, AuthorAPIView, AuthorEditView, CreatePostView,
+    AuthorEditView, CreatePostView,
     PostDetailView, EditPostView, DeletePostView, AuthorPostsView, PostAPIView,
     AuthorStreamView, follow_author, cancel_follow_request, unfollow_author,
     FollowRequest, FollowRequestsView, approve_follow_request, deny_follow_request,
@@ -14,7 +14,7 @@ from .views import (
 
 # Import new API views
 from .api_views import (
-    InboxAPIView, FollowersAPIView, SingleFollowerAPIView, EntriesAPIView,
+    InboxAPIView, FollowersAPIView, SingleFollowerAPIView, EntriesAPIView, AuthorsListAPIView, AuthorAPIView,
     SingleEntryAPIView, CommentsAPIView, LikesAPIView, LikedAPIView, ImageEntryAPIView,
     CommentLikesAPIView, FollowingAPIView, SingleFollowingAPIView
     , FollowRequestsAPIView
