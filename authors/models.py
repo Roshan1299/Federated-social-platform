@@ -60,11 +60,6 @@ class Post(models.Model):
     CONTENT_TYPE_CHOICES = [
         ('text/plain', 'Plain Text'),
         ('text/markdown', 'Markdown/ CommonMark'),
-        ('image/png', 'Image/PNG'),
-        ('image/jpeg', 'Image/JPEG'),
-        ('image/gif', 'Image/GIF'),
-        ('image/bmp', 'Image/BMP'),
-        ('image/webp', 'Image/WEBP'),
     ]
     
     VISIBILITY_CHOICES = [
