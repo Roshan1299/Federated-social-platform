@@ -1,12 +1,3 @@
-"""
-Federation fan-out helpers.
-
-These functions:
-- Find remote followers of an author
-- Build JSON payloads for posts / comments / likes
-- Send them to remote inboxes using remote_post
-"""
-
 from django.conf import settings
 
 from authors.models import Follow, RemoteNode, Post, Comment, Like

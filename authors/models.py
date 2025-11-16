@@ -275,7 +275,6 @@ class RemoteNode(models.Model):
     Unique Identifier: base_url (one row per remote node)
 
     Used for:
-      - HTTP Basic Auth when sending federation requests
       - Knowing where to deliver inbox items
       - Enabling/disabling communication with specific nodes
     """
