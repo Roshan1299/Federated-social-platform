@@ -272,11 +272,7 @@ class CreatePostView(CreateView):
         response = super().form_valid(form)
 
         # Notify remote followers about this new post
-        try:
-            notify_remote_new_post(self.object)
-        except Exception:
-            # federation failures should not block local post creation
-            pass
+        notify_remote_new_post(self.object)
 
         return response
     
@@ -326,8 +322,8 @@ class DeletePostView(LoginRequiredMixin, UserPassesTestMixin, View):
             post.deleted = True
             post.save()
 
-            # Notify remote followers and friends about the deleted post
-            send_to_remote_inboxes(post.author, {"type": "delete", "id": post.origin, "author": post.author.url})
+            # Notify remote followers about the deleted post
+            notify_remote_delete_post(post)
 
             return redirect('authors:author_profile', author_id=self.request.user.id)
         return HttpResponse("Unauthorized", status=403)
@@ -337,6 +333,7 @@ class DeletePostView(LoginRequiredMixin, UserPassesTestMixin, View):
         if self.request.user == post.author:
             return render(request, "authors/delete_post.html", {"post": post})
         return HttpResponse("Unauthorized", status=403)
+    
 
 class PostDetailView(DetailView):
     model = Post
