@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}Federation Guide{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Connecting with Other Nodes</h1>
+    
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="row">
+        <div class="col-md-8">
+            <h2>How to Connect Your Node</h2>
+            
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Step 1: Share Your Node Information</h5>
+                    <p class="card-text">
+                        To connect with another node, you need to exchange information with your connection partner:
+                    </p>
+                    <ul>
+                        <li><strong>Your Base URL:</strong> {{ base_url }}</li>
+                        <li><strong>Service Username:</strong> The username you created for node-to-node communication</li>
+                        <li><strong>Service Password:</strong> The password for the service account</li>
+                    </ul>
+                    <p>They will need this information to add your node to their system.</p>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Step 2: Add Their Node</h5>
+                    <p class="card-text">
+                        Your connection partner should give you their information. Add their node to your system:
+                    </p>
+                    <ol>
+                        <li>Go to <a href="{% url 'authors:configure_remote_node' %}">Configure Remote Node</a></li>
+                        <li>Enter their base URL, service username, and password</li>
+                        <li>Click "Add Remote Node"</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Step 3: Follow Each Other</h5>
+                    <p class="card-text">
+                        Once both nodes are connected, you can follow each other:
+                    </p>
+                    <ol>
+                        <li>Go to the <a href="{% url 'authors:explore' %}">Explore Page</a></li>
+                        <li>Use the "Follow a Remote Author" form</li>
+                        <li>Enter the full API URL of the person you want to follow</li>
+                        <li>Format: <code>https://their-node.herokuapp.com/api/authors/&lt;uuid&gt;/</code></li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Step 4: Approve Follow Requests</h5>
+                    <p class="card-text">
+                        When someone follows you from another node, you'll need to approve it:
+                    </p>
+                    <ol>
+                        <li>Check your <a href="{% url 'authors:follow_requests' %}">Follow Requests</a> page</li>
+                        <li>Find requests from remote users</li>
+                        <li>Click "Approve" to accept the follow request</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <h3>Your Node Information</h3>
+            <div class="card">
+                <div class="card-body">
+                    <p><strong>Current User:</strong> {{ current_user.username }}</p>
+                    <p><strong>Display Name:</strong> {{ current_user.displayName }}</p>
+                    <p><strong>Host:</strong> {{ current_user.host|default:"Not set" }}</p>
+                    <p><strong>URL:</strong> {{ current_user.url|default:"Not set" }}</p>
+                    
+                    <hr>
+                    <h5>Connected Nodes</h5>
+                    {% if remote_nodes %}
+                        <ul class="list-group">
+                            {% for node in remote_nodes %}
+                                <li class="list-group-item">
+                                    <strong>{{ node.name }}</strong><br>
+                                    <small>{{ node.base_url }}</small>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-muted">No remote nodes configured</p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="mt-4">
+                <a href="{% url 'authors:node_config' %}" class="btn btn-primary w-100 mb-2">Configure Node</a>
+                <a href="{% url 'authors:configure_remote_node' %}" class="btn btn-success w-100 mb-2">Add Remote Node</a>
+                <a href="{% url 'authors:explore' %}" class="btn btn-info w-100">Explore Page</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <h3>Troubleshooting Tips</h3>
+            <div class="card">
+                <div class="card-body">
+                    <ul>
+                        <li><strong>Connection Issues:</strong> Make sure both nodes have each other added as remote nodes with correct credentials</li>
+                        <li><strong>Follow Requests Not Working:</strong> Verify that the service accounts exist and have correct passwords</li>
+                        <li><strong>Posts Not Showing:</strong> Check that follow requests have been approved and both nodes are properly configured</li>
+                        <li><strong>Need Help:</strong> Contact your connection partner to verify all configuration details match on both sides</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

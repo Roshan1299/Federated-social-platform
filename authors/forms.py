@@ -1,3 +1,4 @@
+import re
 from django import forms
 from django.forms import ModelForm
 from django.contrib.auth.forms import UserCreationForm
@@ -53,47 +54,74 @@ class CommentForm(ModelForm):
         fields = ["content"]
 
 class RemoteNodeForm(forms.ModelForm):
-    """
-    Form for adding/editing remote nodes
-    """
-    password = forms.CharField(
-        widget=forms.PasswordInput(),
-        help_text="Password for HTTP Basic Auth when connecting to this remote node",
-        required=False  # Allow empty for updates
-    )
-
     class Meta:
         model = RemoteNode
-        fields = ['name', 'base_url', 'username', 'password', 'enabled']
+        fields = ['name', 'base_url', 'username', 'password']
         widgets = {
-            'base_url': forms.URLInput(attrs={'placeholder': 'e.g., https://example.com'}),
-            'username': forms.TextInput(attrs={'placeholder': 'Username for remote node auth'}),
-            'name': forms.TextInput(attrs={'placeholder': 'Friendly name for this node'}),
+            'password': forms.PasswordInput(),
         }
-
-    def __init__(self, *args, **kwargs):
-        # Store whether this is an update form
-        super().__init__(*args, **kwargs)
-        if self.instance and self.instance.pk:
-            # For updates, make password optional
-            self.fields['password'].help_text = "Leave blank to keep the current password"
 
     def clean_base_url(self):
         base_url = self.cleaned_data.get('base_url')
         if base_url:
-            # Ensure the URL ends with a slash for consistency
+            # Ensure URL ends with a slash
             if not base_url.endswith('/'):
                 base_url += '/'
+            # Validate URL format
+            if not re.match(r'^https?://[^\s/$.?#].[^\s]*$', base_url):
+                raise forms.ValidationError('Please enter a valid URL.')
         return base_url
 
-    def save(self, commit=True):
-        instance = super().save(commit=False)
+    def clean(self):
+        cleaned_data = super().clean()
+        base_url = cleaned_data.get('base_url')
+        username = cleaned_data.get('username')
+        password = cleaned_data.get('password')
 
-        # Only update password if it's provided in the form
-        password = self.cleaned_data.get('password')
-        if password:  # Only update password if it was provided
-            instance.password = password
+        # Test the connection before saving
+        if base_url and username and password:
+            try:
+                # Test basic auth connection
+                import requests
+                from django.conf import settings
+                test_url = f"{base_url.rstrip('/')}/api/authors/"
+                response = requests.get(test_url, auth=(username, password), timeout=10)
+                if response.status_code != 200:
+                    raise forms.ValidationError(
+                        f"Could not connect to remote node. Status code: {response.status_code}"
+                    )
+            except requests.exceptions.RequestException:
+                raise forms.ValidationError(
+                    "Could not connect to the remote node. Please check the URL and credentials."
+                )
 
-        if commit:
-            instance.save()
-        return instance
+        return cleaned_data
+
+
+class NodeConfigurationForm(forms.Form):
+    """
+    Form to help users configure their node properly
+    """
+    base_url = forms.URLField(
+        label="Your Node Base URL",
+        help_text="Your Heroku app URL (e.g., https://your-app-name.herokuapp.com/)",
+        widget=forms.URLInput(attrs={'class': 'form-control', 'placeholder': 'https://your-app-name.herokuapp.com/'})
+    )
+    
+    service_username = forms.CharField(
+        label="Service Username",
+        help_text="Username for node-to-node communication",
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'node_service'})
+    )
+    
+    service_password = forms.CharField(
+        label="Service Password",
+        help_text="Password for node-to-node communication",
+        widget=forms.PasswordInput(attrs={'class': 'form-control'})
+    )
+    
+    def clean_base_url(self):
+        base_url = self.cleaned_data.get('base_url')
+        if base_url and not base_url.endswith('/'):
+            base_url += '/'
+        return base_url

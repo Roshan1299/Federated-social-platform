@@ -71,9 +71,11 @@
           {% endif %}
         </a>
 
-        <!-- Node Admin link for superusers -->
+        <!-- Node Admin links for superusers -->
         {% if user.is_superuser %}
-          <a href="{% url 'authors:remote_nodes_list' %}" class="nav-remote-nodes">Manage Nodes</a>
+          <a href="{% url 'authors:node_config' %}" class="nav-node-config">Node Config</a>
+          <a href="{% url 'authors:configure_remote_node' %}" class="nav-remote-nodes">Add Remote Node</a>
+          <a href="{% url 'authors:federation_guide' %}" class="nav-federation-guide">Federation Guide</a>
         {% endif %}
 
         <form action="{% url 'logout' %}" method="post" class="nav-logout-form">

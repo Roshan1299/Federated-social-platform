@@ -9,7 +9,7 @@ from django.views import View
 from django.http import HttpResponse, JsonResponse
 from django.db.models import Q
 from .models import Author, Post, Follow, FollowRequest, Like, Comment, CommentLike, RemoteNode
-from .forms import AuthorCreationForm, AuthorProfileForm, PostForm, RemoteNodeForm
+from .forms import AuthorCreationForm, AuthorProfileForm, PostForm, RemoteNodeForm, NodeConfigurationForm
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
@@ -19,6 +19,7 @@ from django.views.decorators.http import require_POST
 from django.utils.decorators import method_decorator
 from .authentication import http_basic_auth_or_session
 from django.http import HttpResponse, Http404
+from django.conf import settings
 from .models import Image
 from .inbox_handlers import reopen_follow_request
 from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post
@@ -864,6 +865,21 @@ class FollowRemoteAuthorView(LoginRequiredMixin, View):
         return redirect("authors:author_stream", author_id=author_id)
 
 
+class FederationGuideView(LoginRequiredMixin, View):
+    """
+    A guide page that explains how to connect with other nodes
+    """
+    template_name = "authors/federation_guide.html"
+
+    def get(self, request):
+        context = {
+            'current_user': request.user,
+            'remote_nodes': RemoteNode.objects.all(),
+            'base_url': getattr(settings, 'BASE_URL', request.build_absolute_uri('/').rstrip('/')),
+        }
+        return render(request, self.template_name, context)
+
+
 
 @login_required
 def redirect_to_profile(request):
@@ -1105,6 +1121,106 @@ def serve_image(request, image_id):
     response = HttpResponse(img.data, content_type=img.content_type)
     response['Content-Disposition'] = f'inline; filename={img.file_name}'
     return response
+
+
+class NodeConfigurationView(LoginRequiredMixin, UserPassesTestMixin, View):
+    """
+    A view to help users configure their node for federation
+    """
+    template_name = "authors/node_configuration.html"
+
+    def test_func(self):
+        # Only allow superusers (node admins) to access this view
+        return self.request.user.is_superuser
+
+    def get(self, request):
+        # Pre-populate the form with current settings if available
+        initial_data = {}
+        if hasattr(settings, 'BASE_URL'):
+            initial_data['base_url'] = settings.BASE_URL
+
+        form = NodeConfigurationForm(initial=initial_data)
+
+        context = {
+            'form': form,
+            'current_config': {
+                'base_url': getattr(settings, 'BASE_URL', ''),
+                'service_username': request.user.username if hasattr(request, 'user') else '',
+                'remote_nodes': RemoteNode.objects.all()
+            }
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request):
+        form = NodeConfigurationForm(request.POST)
+
+        if form.is_valid():
+            # Save configuration
+            base_url = form.cleaned_data['base_url']
+            service_username = form.cleaned_data['service_username']
+            service_password = form.cleaned_data['service_password']
+
+            # Create or update the service user
+            service_user, created = Author.objects.get_or_create(username=service_username)
+            service_user.set_password(service_password)
+            service_user.displayName = f"Node Service User ({service_username})"
+            service_user.save()
+
+            # Update current user's host and url
+            current_user = request.user
+            current_user.host = base_url.rstrip("/")
+            current_user.url = f"{base_url.rstrip('/')}/api/authors/{current_user.id}/"
+            current_user.save(update_fields=["host", "url"])
+
+            messages.success(request, f"Node configuration updated successfully! Service user '{service_username}' created/updated.")
+            return redirect('authors:node_config')
+        else:
+            messages.error(request, "Please correct the errors below.")
+
+        context = {
+            'form': form,
+            'current_config': {
+                'base_url': getattr(settings, 'BASE_URL', ''),
+                'service_username': request.user.username if hasattr(request, 'user') else '',
+                'remote_nodes': RemoteNode.objects.all()
+            }
+        }
+        return render(request, self.template_name, context)
+
+
+class ConfigureRemoteNodeView(LoginRequiredMixin, UserPassesTestMixin, View):
+    """
+    A view to help users add remote nodes through the UI
+    """
+    template_name = "authors/configure_remote_node.html"
+
+    def test_func(self):
+        # Only allow superusers (node admins) to access this view
+        return self.request.user.is_superuser
+
+    def get(self, request):
+        form = RemoteNodeForm()
+        context = {
+            'form': form,
+            'remote_nodes': RemoteNode.objects.all()
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request):
+        form = RemoteNodeForm(request.POST)
+
+        if form.is_valid():
+            remote_node = form.save()
+            messages.success(request, f"Remote node '{remote_node.name}' added successfully!")
+            return redirect('authors:configure_remote_node')
+        else:
+            messages.error(request, "Please correct the errors below.")
+
+        context = {
+            'form': form,
+            'remote_nodes': RemoteNode.objects.all()
+        }
+        return render(request, self.template_name, context)
 
 
 # Views for Node Admin Management of Remote Nodes
