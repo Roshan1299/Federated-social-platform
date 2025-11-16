@@ -8,7 +8,8 @@ from .views import (
     FollowRequest, FollowRequestsView, approve_follow_request, deny_follow_request,
     toggle_like, PostLikesView, add_comment, toggle_comment_like,
     FollowersListView, FollowingListView, AuthorDeletedPostsAdminView,
-    RemoteNodeListView, AddRemoteNodeView, EditRemoteNodeView, DeleteRemoteNodeView
+    RemoteNodeListView, AddRemoteNodeView, EditRemoteNodeView, DeleteRemoteNodeView,
+    FollowRemoteAuthorView,
 )
 
 # Import new API views
@@ -38,6 +39,9 @@ urlpatterns = [
     path("authors/<uuid:author_id>/followers/", FollowersListView.as_view(), name="followers_list"),
     path("authors/<uuid:author_id>/following/", FollowingListView.as_view(), name="following_list"),
     path("authors/<uuid:author_id>/deleted_posts/", AuthorDeletedPostsAdminView.as_view(), name="author_deleted_posts_admin"),
+
+    # Follow Remote Author UI route
+    path("authors/<uuid:author_id>/follow_remote/", FollowRemoteAuthorView.as_view(), name="follow_remote_author"),
 
 
     path("authors/follow_request/<int:request_id>/approve/", approve_follow_request, name="approve_follow_request"),

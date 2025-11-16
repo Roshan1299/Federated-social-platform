@@ -22,6 +22,9 @@ from django.http import HttpResponse, Http404
 from .models import Image
 from .inbox_handlers import reopen_follow_request
 from .utils.federation import notify_remote_delete_post
+import uuid
+import urllib.parse
+from .api_views import SingleFollowingAPIView
 
 
 def render_post_content(post):
@@ -721,6 +724,11 @@ class ExploreView(ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["title"] = "Explore Public Posts"
+
+        # Include current author's id for the follow-remote form
+        if self.request.user.is_authenticated:
+            context["current_author_id"] = self.request.user.id
+
         return context
 
 
@@ -877,6 +885,77 @@ def deny_follow_request(request, request_id):
     messages.warning(request, f"You denied {follow_request.sender.displayName}'s follow request.")
     return redirect('authors:follow_requests')
     
+
+class FollowRemoteAuthorView(LoginRequiredMixin, View):
+    """
+    Let a local author follow a remote author by pasting the remote author's FQID/URL.
+    Uses the same logic as SingleFollowingAPIView.put to send a Follow to the remote inbox.
+    """
+    template_name = "authors/follow_remote_author.html"
+
+    def get(self, request, author_id):
+        # Only allow a user to open this page for themselves
+        if str(request.user.id) != str(author_id):
+            return HttpResponse("Forbidden", status=403)
+        return render(request, self.template_name, {})
+
+    def post(self, request, author_id):
+        # Only allow a user to submit for themselves
+        if str(request.user.id) != str(author_id):
+            return HttpResponse("Forbidden", status=403)
+
+        remote_author_url = (request.POST.get("remote_author_url") or "").strip()
+        if not remote_author_url:
+            messages.error(request, "Please enter a remote author URL.")
+            return redirect("authors:follow_remote_author", author_id=author_id)
+
+        # Very basic URL sanity check
+        try:
+            parsed = urllib.parse.urlparse(remote_author_url)
+        except Exception:
+            parsed = None
+
+        if not parsed or not parsed.scheme or not parsed.netloc:
+            messages.error(request, "That doesn't look like a valid URL.")
+            return redirect("authors:follow_remote_author", author_id=author_id)
+
+        # If this URL already matches a local Author, just reuse it,
+        # otherwise create a stub remote Author.
+        author_defaults = {
+            "username": f"remote_{uuid.uuid4().hex[:8]}",
+            "displayName": remote_author_url,  # you can customize later
+            "host": f"{parsed.scheme}://{parsed.netloc}",
+        }
+        remote_author, created = Author.objects.get_or_create(
+            url=remote_author_url,
+            defaults=author_defaults,
+        )
+
+        # Reuse the existing API logic to send the Follow request to the remote inbox.
+        # This runs SingleFollowingAPIView.put with the current request object.
+        api_view = SingleFollowingAPIView()
+        api_response = api_view.put(
+            request,
+            author_id=str(author_id),
+            following_fqid=remote_author_url,
+        )
+
+        if 200 <= api_response.status_code < 300:
+            # Your SingleFollowingAPIView returns 200 or 201 on success
+            messages.success(request, "Follow request sent to remote author.")
+        else:
+            # Try to extract error message if JSON, otherwise generic
+            error_msg = getattr(api_response, "content", b"").decode(errors="ignore")
+            messages.error(
+                request,
+                f"Failed to follow remote author (status {api_response.status_code}). {error_msg}",
+            )
+
+        # Redirect back to their stream or following list
+        return redirect("authors:author_stream", author_id=author_id)
+
+
+
 @login_required
 def redirect_to_profile(request):
     return redirect('authors:author_profile', author_id=request.user.id)

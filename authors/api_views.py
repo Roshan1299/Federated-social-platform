@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.core.paginator import Paginator
 from django.db.models import Q
-from .models import Author, Post, Follow, FollowRequest, Like, Comment, CommentLike
+from .models import Author, Post, Follow, FollowRequest, Like, Comment, CommentLike, RemoteNode
 from .authentication import http_basic_auth_or_session, http_basic_auth_required
 from .inbox_handlers import (
     handle_post as ih_handle_post,
@@ -569,6 +569,7 @@ class SingleFollowingAPIView(View):
             parsed_t = urllib.parse.urlparse(target.url)
             target_host = f"{parsed_t.scheme}://{parsed_t.netloc}".rstrip('/')
 
+        '''
         if target_host and target_host != local_base:
             payload = {
                 'type': 'follow',
@@ -595,12 +596,68 @@ class SingleFollowingAPIView(View):
                 return json_response({'message': 'Following created' if created else 'Already following'}, status=201 if created else 200)
             else:
                 return json_response({'error': f'Remote inbox responded with {resp.status_code}: {resp.text}'}, status=resp.status_code)
+        '''
+        
+        if target_host and target_host != local_base:
+            # Look up RemoteNode configuration for this host
+            # RemoteNode.base_url is stored with a trailing slash (see RemoteNodeForm.clean_base_url)
+            remote_node = None
+            for node in RemoteNode.objects.filter(enabled=True):
+                node_base = node.base_url.rstrip('/')
+                if node_base == target_host:
+                    remote_node = node
+                    break
+
+            if remote_node is None:
+                return json_response(
+                    {'error': f'No RemoteNode configured for host {target_host}'},
+                    status=502
+                )
+
+            payload = {
+                'type': 'follow',
+                'actor': build_author_dict(author, request),
+                'object': build_author_dict(target, request),
+            }
+
+            # Build inbox URL from target.url
+            target_fqid = target.url
+            parsed = urllib.parse.urlparse(target_fqid)
+            base = f"{parsed.scheme}://{parsed.netloc}"
+            path_parts = parsed.path.rstrip('/').split('/')
+            remote_author_id = path_parts[-1] if path_parts else ''
+            inbox_url = f"{base}/api/authors/{remote_author_id}/inbox/"
+
+            # Use HTTP Basic Auth with the configured RemoteNode credentials
+            auth = (remote_node.username, remote_node.password) if remote_node.username and remote_node.password else None
+
+            try:
+                resp = requests.post(inbox_url, json=payload, auth=auth, timeout=10)
+            except Exception as e:
+                return json_response(
+                    {'error': f'Failed to send follow request to remote inbox: {str(e)}'},
+                    status=502
+                )
+
+            if resp.status_code in (200, 201):
+                # Create the Follow relationship immediately (idempotent).
+                follow, created = Follow.objects.get_or_create(follower=author, following=target)
+                return json_response(
+                    {'message': 'Following created' if created else 'Already following'},
+                    status=201 if created else 200
+                )
+            else:
+                return json_response(
+                    {'error': f'Remote inbox responded with {resp.status_code}: {resp.text}'},
+                    status=resp.status_code
+                )
 
         # Otherwise target is local to our node: create a FollowRequest locally
         fr, created = FollowRequest.objects.get_or_create(sender=author, receiver=target, defaults={'status': 'PENDING'})
         if not created and reopen_follow_request(fr):
             return json_response({'message': 'Follow request re-sent'}, status=200)
         return json_response({'message': 'Follow request created' if created else 'Follow request already exists'}, status=201 if created else 200)
+
 
     def delete(self, request, author_id, following_fqid):
         """Unfollow FOREIGN_AUTHOR_FQID - only author may call"""
