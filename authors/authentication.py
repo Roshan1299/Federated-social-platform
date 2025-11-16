@@ -62,7 +62,7 @@ def http_basic_auth_required(view_func):
                 if not remote_user_node.enabled:
                     return HttpResponse(
                         'Remote node is disabled',
-                        status=401,
+                        status=403, # 403 Forbidden for disabled nodes
                         headers={'WWW-Authenticate': 'Basic realm="API"'}
                     )
 
@@ -145,7 +145,7 @@ def http_basic_auth_or_session(view_func):
                 if not remote_user_node.enabled:
                     return HttpResponse(
                         'Remote node is disabled',
-                        status=401,
+                        status=403, # 403 Forbidden for disabled nodes
                         headers={'WWW-Authenticate': 'Basic realm="API"'}
                     )
 
