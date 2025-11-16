@@ -85,14 +85,36 @@ class RemoteNodeForm(forms.ModelForm):
                 import requests
                 from django.conf import settings
                 test_url = f"{base_url.rstrip('/')}/api/authors/"
-                response = requests.get(test_url, auth=(username, password), timeout=10)
-                if response.status_code != 200:
+
+                # Make the request with a reasonable timeout
+                response = requests.get(
+                    test_url,
+                    auth=(username, password),
+                    timeout=15,
+                    headers={'User-Agent': 'SocialDistribution/1.0'}
+                )
+
+                # Accept success (200) and authentication required (401) as valid responses
+                # 200 = connection successful
+                # 401 = authentication required (but connection worked)
+                # 403 = forbidden (but connection worked)
+                # 404 = resource not found (but connection worked)
+                if response.status_code not in [200, 401, 403, 404]:
                     raise forms.ValidationError(
-                        f"Could not connect to remote node. Status code: {response.status_code}"
+                        f"Could not connect to remote node. Status code: {response.status_code}. "
+                        f"Make sure the node is running and credentials are correct."
                     )
-            except requests.exceptions.RequestException:
+            except requests.exceptions.Timeout:
                 raise forms.ValidationError(
-                    "Could not connect to the remote node. Please check the URL and credentials."
+                    "Connection to the remote node timed out. Please check the URL and try again."
+                )
+            except requests.exceptions.ConnectionError:
+                raise forms.ValidationError(
+                    "Could not connect to the remote node. Please verify the URL is correct and the node is accessible."
+                )
+            except requests.exceptions.RequestException as e:
+                raise forms.ValidationError(
+                    f"Could not connect to the remote node: {str(e)}"
                 )
 
         return cleaned_data

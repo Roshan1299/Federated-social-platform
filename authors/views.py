@@ -1172,6 +1172,10 @@ class NodeConfigurationView(LoginRequiredMixin, UserPassesTestMixin, View):
             current_user.url = f"{base_url.rstrip('/')}/api/authors/{current_user.id}/"
             current_user.save(update_fields=["host", "url"])
 
+            # Update session to prevent logout
+            from django.contrib.auth import update_session_auth_hash
+            update_session_auth_hash(request, current_user)
+
             messages.success(request, f"Node configuration updated successfully! Service user '{service_username}' created/updated.")
             return redirect('authors:node_config')
         else:
