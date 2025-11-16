@@ -53,7 +53,19 @@ def http_basic_auth_required(view_func):
                     status=401,
                     headers={'WWW-Authenticate': 'Basic realm="API"'}
                 )
-            
+            if not isinstance(user, Author):
+                user = Author.objects.get(id=user.pk)
+
+            if (user.is_remote()):
+                # Check if their node is active
+                remote_user_node = get_object_or_404(RemoteNode, base_url__icontains=user.host) 
+                if not remote_user_node.enabled:
+                    return HttpResponse(
+                        'Remote node is disabled',
+                        status=401,
+                        headers={'WWW-Authenticate': 'Basic realm="API"'}
+                    )
+
             # Set the authenticated user on the request and mark that this
             # request was authenticated via HTTP Basic Auth. Views can use
             # `getattr(request, 'is_basic_auth', False)` to detect node-to-node
