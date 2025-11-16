@@ -272,11 +272,7 @@ class CreatePostView(CreateView):
         response = super().form_valid(form)
 
         # Notify remote followers about this new post
-        try:
-            notify_remote_new_post(self.object)
-        except Exception:
-            # federation failures should not block local post creation
-            pass
+        notify_remote_new_post(self.object)
 
         return response
     
