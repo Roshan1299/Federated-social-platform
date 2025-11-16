@@ -1331,3 +1331,94 @@ class ImageEntryAPIView(View):
             content_type = 'image/gif'
         
         return HttpResponse(image_data, content_type=content_type)
+
+@method_decorator(http_basic_auth_or_session, name='dispatch')
+class AuthorAPIView(View):
+    def get(self, request, author_id=None, author_fqid=None):
+        """Get author by UUID or FQID"""
+        identifier = author_fqid or author_id
+        
+        # Try UUID first
+        try:
+            author = Author.objects.get(id=identifier)
+        except (Author.DoesNotExist, ValueError, Exception):
+            # Fall back to FQID - try with and without trailing slash
+            try:
+                author = Author.objects.get(url=identifier)
+            except Author.DoesNotExist:
+                try:
+                    # Try with trailing slash added
+                    author = Author.objects.get(url=identifier + '/')
+                except Author.DoesNotExist:
+                    try:
+                        # Try with trailing slash removed
+                        author = Author.objects.get(url=identifier.rstrip('/'))
+                    except Author.DoesNotExist:
+                        return JsonResponse({"error": "Author not found"}, status=404)
+        
+        web_url = reverse('authors:author_profile', kwargs={'author_id': author.id})
+        author_id_url = author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/"
+        data = {
+            "type": "author",
+            "id": author_id_url,
+            "host": author.host or f"{request.scheme}://{request.get_host()}",
+            "displayName": author.displayName,
+            "github": author.github,
+            "profileImage": (
+                request.build_absolute_uri(
+                    reverse('authors:serve_image', args=[author.profileImage.id])
+                ) if author.profileImage else None
+            ),
+            "web": f"{request.scheme}://{request.get_host()}{web_url}",
+        }
+        return JsonResponse(data)
+
+'''
+AuthorsListAPIView: returns a JSON list of all authors.
+Same format as AuthorAPIView but for multiple authors.
+GET requests only.
+'''
+@method_decorator(http_basic_auth_or_session, name='dispatch')
+class AuthorsListAPIView(View):
+    def get(self, request):
+        # Pagination parameters
+        try:
+            page_num = int(request.GET.get('page', 1))
+        except ValueError:
+            page_num = 1
+
+        try:
+            page_size = int(request.GET.get('size', 10))
+        except ValueError:
+            page_size = 10
+
+        # Base queryset and ordering
+        authors_qs = Author.objects.all().order_by('displayName')
+
+        paginator = Paginator(authors_qs, page_size)
+        page_obj = paginator.get_page(page_num)
+
+        items = []
+        for author in page_obj:
+            web_url = reverse('authors:author_profile', kwargs={'author_id': author.id})
+            author_id_url = author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/"
+            items.append({
+                "type": "author",
+                "id": author_id_url,
+                "host": author.host or f"{request.scheme}://{request.get_host()}",
+                "displayName": author.displayName,
+                "github": author.github,
+                "profileImage": request.build_absolute_uri(author.profileImage.url) if author.profileImage else None,
+                "web": f"{request.scheme}://{request.get_host()}{web_url}",
+            })
+
+        response_data = {
+            "type": "authors",
+            "items": items,
+            "page": page_obj.number,
+            "size": page_size,
+            "count": paginator.count,
+            "num_pages": paginator.num_pages,
+        }
+
+        return JsonResponse(response_data, safe=False, json_dumps_params={'indent': 2})
