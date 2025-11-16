@@ -19,47 +19,48 @@ from authors.models import Follow, RemoteNode, Post, Comment, Like
 from authors.utils.nodes import remote_post
 
 
-def get_remote_followers(author):
+def get_remote_followers_and_friends(author):
     """
-    Get a list of (RemoteNode, remote_follower_author) tuples for
-    remote followers of the given author.
+    Get a list of (RemoteNode, remote_author) tuples for remote followers 
+    and friends of the given author.
 
     Logic:
-        - Find all Follow rows where following = author
-        - If follower.host != our BASE_URL -> treat as remote
-        - Match follower.host to a RemoteNode by base_url
+        - Find all Follow rows where following = author (followers)
+        - Find all Follow rows where follower = author (following)
+        - A "friend" is a mutual follow (A follows B and B follows A)
+        - If a follower/friend's host != our BASE_URL -> treat as remote
+        - Match the remote host to a RemoteNode by base_url
     """
     local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
-    results = []
+    results = {}  # Use a dict to avoid duplicates
 
-    followers = (
-        Follow.objects
-        .filter(following=author)
-        .select_related("follower")
-    )
-
+    # Get followers
+    followers = Follow.objects.filter(following=author).select_related("follower")
     for f in followers:
         follower = f.follower
         follower_host = (follower.host or "").rstrip("/")
-        if not follower_host:
-            continue
+        if follower_host and follower_host != local_host:
+            try:
+                node = RemoteNode.objects.get(base_url__icontains=follower_host, enabled=True)
+                results[follower.id] = (node, follower)
+            except RemoteNode.DoesNotExist:
+                continue
 
-        if follower_host == local_host:
-            # local follower -> not handled here
-            continue
-
-        try:
-            node = RemoteNode.objects.get(
-                base_url__icontains=follower_host,
-                enabled=True,
-            )
-        except RemoteNode.DoesNotExist:
-            # No credentials/config for this remote host
-            continue
-
-        results.append((node, follower))
-
-    return results
+    # Get friends (mutual follows)
+    following = Follow.objects.filter(follower=author).select_related("following")
+    for f in following:
+        followed_author = f.following
+        # Check for mutual follow
+        if Follow.objects.filter(follower=followed_author, following=author).exists():
+            followed_host = (followed_author.host or "").rstrip("/")
+            if followed_host and followed_host != local_host:
+                try:
+                    node = RemoteNode.objects.get(base_url__icontains=followed_host, enabled=True)
+                    results[followed_author.id] = (node, followed_author)
+                except RemoteNode.DoesNotExist:
+                    continue
+    
+    return list(results.values())
 
 
 def inbox_url_for_remote(node: RemoteNode, remote_author_url: str) -> str:
@@ -144,19 +145,19 @@ def build_like_payload(like: Like) -> dict:
     }
 
 
-def send_to_remote_followers(author, payload: dict):
+def send_to_remote_inboxes(author, payload: dict):
     """
-    Send the given payload to every remote follower's inbox.
+    Send the given payload to every remote follower and friend's inbox.
 
-    For each remote follower:
+    For each remote follower/friend:
         - Build inbox URL for that follower on their node
         - Call remote_post(url, payload, base_url=node.base_url)
     """
-    node_follower_pairs = get_remote_followers(author)
+    recipients = get_remote_followers_and_friends(author)
 
-    for node, remote_follower in node_follower_pairs:
-        # Build inbox URL using the remote follower's canonical author URL
-        inbox_url = inbox_url_for_remote(node, remote_follower.url)
+    for node, remote_author in recipients:
+        # Build inbox URL using the remote author's canonical author URL
+        inbox_url = inbox_url_for_remote(node, remote_author.url)
 
         # Fire-and-forget; if a remote node fails, local behaviour is unaffected
         try:
@@ -177,19 +178,19 @@ def send_to_remote_followers(author, payload: dict):
 def notify_remote_new_post(post: Post):
     """
     Called when a post is created.
-    Sends the post JSON to all remote followers.
+    Sends the post JSON to all remote followers and friends.
     """
     payload = build_post_payload(post)
-    send_to_remote_followers(post.author, payload)
+    send_to_remote_inboxes(post.author, payload)
 
 
 def notify_remote_edit_post(post: Post):
     """
     Called when a post is edited.
-    Re-sends the updated post JSON to all remote followers.
+    Re-sends the updated post JSON to all remote followers and friends.
     """
     payload = build_post_payload(post)
-    send_to_remote_followers(post.author, payload)
+    send_to_remote_inboxes(post.author, payload)
 
 
 def notify_remote_delete_post(post: Post):
@@ -202,22 +203,22 @@ def notify_remote_delete_post(post: Post):
         "id": post.origin,
         "author": post.author.url,
     }
-    send_to_remote_followers(post.author, payload)
+    send_to_remote_inboxes(post.author, payload)
 
 
 def notify_remote_comment(comment: Comment):
     """
     Called when a comment is created.
-    Sends the comment JSON to remote followers.
+    Sends the comment JSON to remote followers and friends.
     """
     payload = build_comment_payload(comment)
-    send_to_remote_followers(comment.author, payload)
+    send_to_remote_inboxes(comment.author, payload)
 
 
 def notify_remote_like(like: Like):
     """
     Called when a like is created.
-    Sends the like JSON to remote followers.
+    Sends the like JSON to remote followers and friends.
     """
     payload = build_like_payload(like)
-    send_to_remote_followers(like.author, payload)
+    send_to_remote_inboxes(like.author, payload)

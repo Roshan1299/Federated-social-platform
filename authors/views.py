@@ -305,7 +305,7 @@ class EditPostView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
         # Call the parent form_valid to save the post
         response = super().form_valid(form)
 
-        # Notify remote followers about the edited post
+        # Notify remote followers and friends about the edited post
         notify_remote_edit_post(self.object)
 
         return response
@@ -326,8 +326,8 @@ class DeletePostView(LoginRequiredMixin, UserPassesTestMixin, View):
             post.deleted = True
             post.save()
 
-            # Notify remote followers about the deleted post (User Story 2)
-            notify_remote_delete_post(post)
+            # Notify remote followers and friends about the deleted post
+            send_to_remote_inboxes(post.author, {"type": "delete", "id": post.origin, "author": post.author.url})
 
             return redirect('authors:author_profile', author_id=self.request.user.id)
         return HttpResponse("Unauthorized", status=403)
@@ -440,22 +440,13 @@ class PostDetailView(DetailView):
         )
 
   
-        if user == author:
+        if can_interact:
             comments_qs = post.comments.all()
-        elif post.visibility == 'PUBLIC':
-            comments_qs = post.comments.all()
-        elif post.visibility == 'PUBLIC_UNLISTED':
-            if is_follower:
-                comments_qs = post.comments.all()
-            else:
-                comments_qs = post.comments.filter(author=user)
-        elif post.visibility == 'FRIENDS':
-            if is_friend:
-                comments_qs = post.comments.all()
-            else:
-                comments_qs = post.comments.filter(author=user)
         else:
-            comments_qs = post.comments.filter(author=user)
+            if user.is_authenticated:
+                comments_qs = post.comments.filter(author=user)
+            else:
+                comments_qs = post.comments.none()
 
 
         comments = (

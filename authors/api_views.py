@@ -1167,7 +1167,7 @@ class LikesAPIView(View):
             "page": page_num,
             "size": page_size,
             "count": paginator.count,
-            "src": src
+            "items": src
         }
 
         return JsonResponse(response_data)
@@ -1209,7 +1209,7 @@ class CommentLikesAPIView(View):
             "page": page_num,
             "size": page_size,
             "count": paginator.count,
-            "src": src
+            "items": src
         }
 
         return JsonResponse(response_data)
@@ -1292,7 +1292,7 @@ class LikedAPIView(View):
                 "page": page_num,
                 "size": page_size,
                 "count": paginator.count,
-                "src": list(page_obj)
+                "items": list(page_obj)
             }
 
             return JsonResponse(response_data)
