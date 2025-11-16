@@ -21,7 +21,7 @@ from .authentication import http_basic_auth_or_session
 from django.http import HttpResponse, Http404
 from .models import Image
 from .inbox_handlers import reopen_follow_request
-from .utils.federation import notify_remote_delete_post
+from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post
 import uuid
 import urllib.parse
 from .api_views import SingleFollowingAPIView
@@ -267,7 +267,18 @@ class CreatePostView(CreateView):
     def form_valid(self, form):
         # Set the author to the current user
         form.instance.author = self.request.user
-        return super().form_valid(form)
+
+        # Let the generic view save the post first
+        response = super().form_valid(form)
+
+        # Notify remote followers about this new post
+        try:
+            notify_remote_new_post(self.object)
+        except Exception:
+            # federation failures should not block local post creation
+            pass
+
+        return response
     
     def get_success_url(self):
         return reverse('authors:author_profile', kwargs={'author_id': self.request.user.id})

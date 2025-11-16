@@ -13,39 +13,53 @@ from authors.models import Follow, RemoteNode, Post, Comment, Like
 from authors.utils.nodes import remote_post
 
 
+from django.conf import settings
+
+from authors.models import Follow, RemoteNode, Post, Comment, Like
+from authors.utils.nodes import remote_post
+
+
 def get_remote_followers(author):
     """
-    Get a list of RemoteNode objects for remote followers of the given author.
+    Get a list of (RemoteNode, remote_follower_author) tuples for
+    remote followers of the given author.
 
     Logic:
         - Find all Follow rows where following = author
-        - Check follower.host
-        - If follower.host != our BASE_URL, they are remote
+        - If follower.host != our BASE_URL -> treat as remote
         - Match follower.host to a RemoteNode by base_url
     """
     local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
-    remote_nodes = []
+    results = []
 
-    # All followers of this author
-    followers = Follow.objects.filter(following=author).select_related("follower")
+    followers = (
+        Follow.objects
+        .filter(following=author)
+        .select_related("follower")
+    )
 
     for f in followers:
         follower = f.follower
-        # Only treat as remote if host is set and different from local host
-        if follower.host:
-            follower_host = follower.host.rstrip("/")
-            if follower_host != local_host:
-                try:
-                    node = RemoteNode.objects.get(
-                        base_url__icontains=follower_host,
-                        enabled=True,
-                    )
-                    remote_nodes.append(node)
-                except RemoteNode.DoesNotExist:
-                    # We don't have credentials for this host
-                    continue
+        follower_host = (follower.host or "").rstrip("/")
+        if not follower_host:
+            continue
 
-    return remote_nodes
+        if follower_host == local_host:
+            # local follower -> not handled here
+            continue
+
+        try:
+            node = RemoteNode.objects.get(
+                base_url__icontains=follower_host,
+                enabled=True,
+            )
+        except RemoteNode.DoesNotExist:
+            # No credentials/config for this remote host
+            continue
+
+        results.append((node, follower))
+
+    return results
 
 
 def inbox_url_for_remote(node: RemoteNode, remote_author_url: str) -> str:
@@ -134,20 +148,26 @@ def send_to_remote_followers(author, payload: dict):
     """
     Send the given payload to every remote follower's inbox.
 
-    For each RemoteNode:
-        - Build inbox URL for this author
+    For each remote follower:
+        - Build inbox URL for that follower on their node
         - Call remote_post(url, payload, base_url=node.base_url)
     """
-    nodes = get_remote_followers(author)
+    node_follower_pairs = get_remote_followers(author)
 
-    for node in nodes:
-        inbox_url = inbox_url_for_remote(node, author.url)
-        # We don't care about the return value here; failure is non-fatal
-        remote_post(
-            url=inbox_url,
-            payload=payload,
-            base_url=node.base_url,
-        )
+    for node, remote_follower in node_follower_pairs:
+        # Build inbox URL using the remote follower's canonical author URL
+        inbox_url = inbox_url_for_remote(node, remote_follower.url)
+
+        # Fire-and-forget; if a remote node fails, local behaviour is unaffected
+        try:
+            remote_post(
+                url=inbox_url,
+                payload=payload,
+                base_url=node.base_url,
+            )
+        except Exception:
+            # Don't crash if a remote node is down
+            continue
 
 
 # ---------------------------------------------------------------------
