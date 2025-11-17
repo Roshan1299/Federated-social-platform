@@ -1,85 +1,65 @@
+# authors/utils/remote_read.py
+
+import logging
 import requests
-from urllib.parse import urlparse
+from django.conf import settings
+from authors.models import Comment, Post
+from authors.inbox_handlers import get_or_create_author
 
-from authors.utils.nodes import get_auth_for_base
+logger = logging.getLogger(__name__)
 
-
-def _get_base_url_from_origin(origin: str) -> str:
+def sync_remote_comments_for_post(post: Post):
     """
-    Take a full origin URL and return the base node URL.
+    Fetch comments for this post from the remote node
+    and STORE them as local Comment rows.
 
-    Example:
-      origin = "https://team-green.herokuapp.com/api/authors/123/posts/abc/"
-      -> "https://team-green.herokuapp.com"
+    After this runs, post.comments.all() will include
+    both local and remote comments (as long as the remote
+    node exposes them via its /comments endpoint).
     """
+    origin = (post.origin or "").rstrip("/")
     if not origin:
-        return ""
+        return
 
-    parsed = urlparse(origin)
-    if not parsed.scheme or not parsed.netloc:
-        return ""
-
-    return f"{parsed.scheme}://{parsed.netloc}"
-
-
-def fetch_remote_comments_for_post(post):
-    """
-    Read-only helper: fetch comments directly from the REMOTE node.
-
-    - Uses post.origin to build "<origin>/comments/"
-    - Looks up username/password for that remote node
-    - Does GET with Basic Auth
-    - Returns a *simple list of dicts* ready for the template
-
-    This does NOT write to our database.
-    """
-    origin = (post.origin or "").strip()
-    if not origin:
-        return []
-
-    # Remote endpoint we expect:
-    #   GET <post.origin>/comments/
-    comments_url = origin.rstrip("/") + "/comments/"
-
-    # Figure out which remote node this origin belongs to
-    base_url = _get_base_url_from_origin(origin)
-    if not base_url:
-        return []
-
-    # Get (username, password) for this remote node
-    auth = get_auth_for_base(base_url)
+    # Typical remote comments endpoint: <post-origin>/comments
+    url = origin + "/comments"
 
     try:
-        resp = requests.get(
-            comments_url,
-            auth=auth,      # can be None; requests handles that
-            timeout=10,
-        )
-    except Exception:
-        # Network / DNS / SSL / timeout issues
-        return []
+        resp = requests.get(url, timeout=5)
+        if resp.status_code != 200:
+            logger.warning("Remote comments fetch failed: %s %s", resp.status_code, url)
+            return
 
-    if resp.status_code >= 300:
-        return []
-
-    try:
         data = resp.json()
-    except Exception:
-        return []
+        items = data.get("items") if isinstance(data, dict) else data
 
-    # Most 404 starter code uses something like:
-    # { "type": "comments", "items": [ ... ] }
-    items = data.get("items") or data.get("comments") or []
+        if not isinstance(items, list):
+            return
 
-    normalized = []
-    for item in items:
-        author_obj = item.get("author", {}) or {}
+        for c in items:
+            try:
+                comment_origin = c.get("id") or c.get("origin")
+                if not comment_origin:
+                    continue
 
-        normalized.append({
-            "author_display": author_obj.get("displayName") or "Remote Author",
-            "author_url": author_obj.get("id") or author_obj.get("url") or "",
-            "content": item.get("comment") or item.get("content", ""),
-            "published": item.get("published") or "",
-        })
+                # Build / reuse author (stub) for remote commenter
+                author_data = c.get("author") or {}
+                author = get_or_create_author(author_data)
 
-    return normalized
+                content = c.get("comment") or c.get("content", "")
+
+                # Upsert: if we already have this origin, update content; else create
+                Comment.objects.update_or_create(
+                    origin=comment_origin,
+                    defaults={
+                        "post": post,
+                        "author": author,
+                        "content": content,
+                    },
+                )
+            except Exception as inner:
+                logger.warning("Failed to sync one remote comment: %s", inner)
+
+    except Exception as e:
+        logger.exception("Error syncing remote comments: %s", e)
+        return

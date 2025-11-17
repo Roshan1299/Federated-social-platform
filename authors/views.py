@@ -33,7 +33,7 @@ import requests
 import logging
 from django.conf import settings
 from .api_views import SingleFollowingAPIView
-from authors.utils.remote_read import fetch_remote_comments_for_post
+from authors.utils.remote_read import sync_remote_comments_for_post
 from authors.utils.federation import send_comment_to_post_owner, send_like_to_post_owner, send_comment_like_to_post_owner
 
 
@@ -309,7 +309,14 @@ class PostDetailView(DetailView):
         user = self.request.user
         author = post.author
 
-                # relationship checks
+        local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+        post_host = (post.author.host or "").rstrip("/")
+
+        # If the post's author lives on a remote node, pull their comments into our DB
+        if post_host and post_host != local_host:
+            sync_remote_comments_for_post(post) 
+            
+        # relationship checks
         is_follower = user.is_authenticated and Follow.objects.filter(
             follower=user, following=author
         ).exists()
@@ -373,22 +380,15 @@ class PostDetailView(DetailView):
                 .prefetch_related("likes")
                 .all()
         )
-
-        context["comments"] = comments
-
-        logger = logging.getLogger(__name__)
-        local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
-        post_host = (post.author.host or "").rstrip("/")
-
-        remote_comments = []
-        if post_host and post_host != local_host:
-            try:
-                remote_comments = fetch_remote_comments_for_post(post)
-            except Exception as e:
-                logger.warning("Failed to fetch remote comments for %s: %s", post.origin, e)
-                remote_comments = []
-
-        context["remote_comments"] = remote_comments
+        # liked_by_me + username_display as before
+        if user.is_authenticated:
+            liked_comment_ids = set(
+                CommentLike.objects
+                .filter(author=user, comment__in=comments)
+                .values_list("comment_id", flat=True)
+            )
+        else:
+            liked_comment_ids = set()
 
         def compute_username_display(author):
             # Try the Django username first

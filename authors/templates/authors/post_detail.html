@@ -121,30 +121,8 @@
     {% else %}
       <p class="no-comments">No comments yet.</p>
     {% endif %}
-
-    {% if remote_comments %}
-      <h4>Remote comments</h4>
-      {% for rc in remote_comments %}
-        <div class="comment-card">
-          <div class="comment-header">
-            {% if rc.author_url %}
-              <a href="{{ rc.author_url }}" class="comment-author" target="_blank" rel="noopener">
-                {{ rc.author_display }}
-              </a>
-            {% else %}
-              <span class="comment-author">{{ rc.author_display }}</span>
-            {% endif %}
-            <span class="comment-date">{{ rc.published }}</span>
-          </div>
-          <div class="comment-content">
-            {{ rc.content|linebreaksbr }}
-          </div>
-          <div class="comment-actions">
-            <span>Remote comment (read-only)</span>
-          </div>
-        </div>
-      {% endfor %}
-    {% endif %}
+  </section>
+</div>
 
 
 <!-- 📋 Copy Link Script -->
