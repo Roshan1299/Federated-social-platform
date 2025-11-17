@@ -24,8 +24,13 @@ from .inbox_handlers import reopen_follow_request
 from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post
 import uuid
 import urllib.parse
+import requests
+from django.conf import settings
 from .api_views import SingleFollowingAPIView
-
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import authenticate
+from .models import Image
+from .forms import ImageUploadForm
 
 def render_post_content(post):
     ''' Rendered HTML for markdown/plain posts. '''
@@ -1084,17 +1089,50 @@ def toggle_comment_like(request, comment_id):
 
     return redirect('authors:post_detail', post_id=post.id)
 
+def push_image_to_remote_nodes(image_obj):
+    """
+    Push the uploaded image to all connected remote nodes (federation).
+    Reads remote nodes from settings.REMOTE_NODES.
+    """
+    REMOTE_NODES = getattr(settings, "REMOTE_NODES", [])
+    for node in REMOTE_NODES:
+        try:
+            # Each remote node should have a public endpoint to receive images
+            url = f"{node['host'].rstrip('/')}/api/images/"
+            headers = {
+                "Content-Type": image_obj.content_type,
+                "Authorization": f"Basic {node['auth']}",
+            }
+
+            response = requests.post(url, headers=headers, data=image_obj.data)
+
+            if response.status_code in (200, 201):
+                print(f"✅ Successfully pushed image to {node['host']}")
+            else:
+                print(f"⚠️ Failed to push image to {node['host']} (status {response.status_code})")
+
+        except Exception as e:
+            print(f"❌ Error pushing image to {node['host']}: {e}")
+
+
+
 def upload_image(request):
-    if request.method == 'POST' and request.FILES.get('image'):
-        img_file = request.FILES['image']
-        image = Image.objects.create(
-            file_name=img_file.name,
-            content_type=img_file.content_type,
-            data=img_file.read()
-        )
-        messages.success(request, f"Image uploaded successfully! ID: {image.id}")
-        return redirect('authors:serve_image', image_id=image.id)
-    return render(request, 'authors/upload_image.html')
+    if request.method == "POST":
+        form = ImageUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            image_file = request.FILES["image"]
+            image = Image.objects.create(
+                file_name=image_file.name,
+                content_type=image_file.content_type,
+                data=image_file.read(),
+            )
+            print(f"✅ Uploaded image {image.id}")
+            # Redirect back to edit profile after upload
+            return redirect("authors:edit_profile", request.user.id)
+    else:
+        form = ImageUploadForm()
+
+    return render(request, "authors/upload_image.html", {"form": form})
 
 def serve_image(request, image_id):
     try:
@@ -1106,6 +1144,37 @@ def serve_image(request, image_id):
     response['Content-Disposition'] = f'inline; filename={img.file_name}'
     return response
 
+@csrf_exempt
+def receive_remote_image(request):
+    """
+    Receives an image pushed from a remote node.
+    """
+    if request.method != "POST":
+        return HttpResponse("Method Not Allowed", status=405)
+
+    # --- Authenticate remote node ---
+    if "HTTP_AUTHORIZATION" not in request.META:
+        return HttpResponse("Unauthorized", status=401)
+
+    auth_header = request.META["HTTP_AUTHORIZATION"].replace("Basic ", "")
+    import base64
+    username, password = base64.b64decode(auth_header).decode().split(":", 1)
+    user = authenticate(username=username, password=password)
+    if not user:
+        return HttpResponse("Unauthorized", status=401)
+
+    # --- Save the image ---
+    content_type = request.headers.get("Content-Type", "application/octet-stream")
+    file_name = request.headers.get("X-Filename", f"remote_{uuid.uuid4().hex[:8]}.bin")
+    data = request.body
+
+    image = Image.objects.create(
+        file_name=file_name,
+        content_type=content_type,
+        data=data
+    )
+    print(f"✅ Received remote image {image.id} from {username}")
+    return JsonResponse({"status": "ok", "image_id": image.id}, status=201)
 
 # Views for Node Admin Management of Remote Nodes
 class RemoteNodeListView(LoginRequiredMixin, ListView):

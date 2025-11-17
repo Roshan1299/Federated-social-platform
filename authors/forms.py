@@ -2,6 +2,7 @@ from django import forms
 from django.forms import ModelForm
 from django.contrib.auth.forms import UserCreationForm
 from .models import Author, Post, Comment, Image, RemoteNode
+from .models import Image
 
 class AuthorCreationForm(UserCreationForm):
     class Meta(UserCreationForm.Meta):
@@ -97,3 +98,11 @@ class RemoteNodeForm(forms.ModelForm):
         if commit:
             instance.save()
         return instance
+
+
+class ImageUploadForm(forms.ModelForm):
+    image = forms.ImageField(required=True, label="Select an image")
+
+    class Meta:
+        model = Image
+        fields = []
