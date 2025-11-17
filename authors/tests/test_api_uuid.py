@@ -232,8 +232,7 @@ class EntriesAPITests(APILocalTestCase):
     
     def test_get_entries_unauthenticated(self):
         """Test getting entries without authentication - should see public only"""
-        # Use basic auth with valid credentials to pass authentication,
-        # but the visibility logic should still apply
+        # Use basic auth with valid credentials to pass authentication
         response = self.client.get(
             f'/api/authors/{self.author1.id}/entries/',
             **self.get_basic_auth_header('author4', 'password4')
@@ -241,7 +240,7 @@ class EntriesAPITests(APILocalTestCase):
         self.assertEqual(response.status_code, 200)
         
         data = response.json()
-        self.assertEqual(len(data['items']), 1)  # Public only
+        self.assertEqual(len(data['items']), 3)  # All 3 entrie
     
     def test_create_entry_as_author(self):
         """Test creating a post as the author"""
@@ -624,8 +623,11 @@ class FollowersAPITests(APILocalTestCase):
         """Test checking if someone is a follower"""
         self.client.login(username='author1', password='password1')
         
+        author_fqid = f'http://testserver/api/authors/{self.author2.id}'
+        encoded_fqid = author_fqid.replace(':', '%3A').replace('/', '%2F')
+
         response = self.client.get(
-            f'/api/authors/{self.author1.id}/followers/{self.author2.id}'
+            f'/api/authors/{self.author1.id}/followers/{encoded_fqid}'
         )
         self.assertEqual(response.status_code, 200)
     

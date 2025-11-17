@@ -118,13 +118,13 @@ urlpatterns = [
     re_path(r'^api/entries/(?P<entry_fqid>.+)/likes$', LikesAPIView.as_view(), name="entry_fqid_likes_api"),
     re_path(r'^api/entries/(?P<entry_fqid>.+)$', SingleEntryAPIView.as_view(), name="entry_fqid_api"),
     
+    # Comment Likes with FQID - MUST come before general comment FQID route
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments/(?P<comment_fqid>.+)/likes$', 
+            CommentLikesAPIView.as_view(), name="comment_fqid_likes_api"),
+    
     # Comment with FQID in path
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments?/(?P<comment_fqid>.+)$', 
         CommentsAPIView.as_view(), name="remote_comment_api"),
-    
-    # Comment Likes with FQID
-    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments/(?P<comment_fqid>.+)/likes$', 
-            CommentLikesAPIView.as_view(), name="comment_fqid_likes_api"),
     
     # Commented API with FQID
     re_path(r'^api/authors/(?P<author_fqid>.+)/commented$', CommentsAPIView.as_view(), name="author_fqid_commented_api"),
