@@ -6,9 +6,6 @@ from django.contrib.auth.forms import UserCreationForm
 from .models import Author, Post, Comment, Image, RemoteNode
 
 
-# ------------------------------------------------
-# Author Creation
-# ------------------------------------------------
 class AuthorCreationForm(UserCreationForm):
     class Meta(UserCreationForm.Meta):
         model = Author
@@ -28,9 +25,6 @@ class AuthorProfileForm(ModelForm):
         fields = ('displayName', 'github', 'profileImage', 'description')
 
 
-# ------------------------------------------------
-# Post Create/Edit Form
-# ------------------------------------------------
 class PostForm(ModelForm):
     image = forms.ModelChoiceField(
         queryset=Image.objects.all().order_by('-id'),
@@ -51,9 +45,6 @@ class PostForm(ModelForm):
         }
 
 
-# ------------------------------------------------
-# Comments
-# ------------------------------------------------
 class CommentForm(ModelForm):
     content = forms.CharField(
         label="",
@@ -69,9 +60,6 @@ class CommentForm(ModelForm):
         fields = ["content"]
 
 
-# ------------------------------------------------
-# Remote Node Form (Admin)
-# ------------------------------------------------
 class RemoteNodeForm(forms.ModelForm):
     class Meta:
         model = RemoteNode
@@ -123,9 +111,6 @@ class RemoteNodeForm(forms.ModelForm):
         return cleaned_data
 
 
-# ------------------------------------------------
-# Node Configuration Form
-# ------------------------------------------------
 class NodeConfigurationForm(forms.Form):
     base_url = forms.URLField(
         label="Your Node Base URL",
@@ -150,9 +135,6 @@ class NodeConfigurationForm(forms.Form):
         return base_url
 
 
-# ------------------------------------------------
-# Image Upload (Standalone Page)
-# ------------------------------------------------
 class ImageUploadForm(forms.ModelForm):
     """
     Used ONLY for /authors/upload_image/.
