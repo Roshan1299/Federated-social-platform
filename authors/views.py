@@ -26,7 +26,7 @@ from django.contrib.auth import authenticate
 from .forms import ImageUploadForm
 from .models import Image
 from .inbox_handlers import reopen_follow_request
-from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post
+from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post, notify_remote_comment
 import uuid
 import urllib.parse
 import requests
@@ -1120,12 +1120,18 @@ def add_comment(request, post_id):
         content=content_text,
     )
     # If this post belongs to a REMOTE node, notify that node
+    messages.success(request, "Comment posted!")
+
+    # federation logic
     local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
     post_host = (post.author.host or "").rstrip("/")
 
     if post_host and post_host != local_host:
+        # Commenting on a REMOTE post → send to remote node that owns the post
         send_comment_to_post_owner(comment)
-    messages.success(request, "Comment posted!")
+    else:
+        # Commenting on a LOCAL post → send to all remote followers so THEY see it
+        notify_remote_comment(comment)
     return redirect('authors:post_detail', post_id=post.id)
 
 
