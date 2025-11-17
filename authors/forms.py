@@ -56,9 +56,10 @@ class CommentForm(ModelForm):
 class RemoteNodeForm(forms.ModelForm):
     class Meta:
         model = RemoteNode
-        fields = ['name', 'base_url', 'username', 'password']
+        fields = ['name', 'base_url', 'username', 'password', 'enabled']
         widgets = {
             'password': forms.PasswordInput(),
+            'enabled': forms.CheckboxInput(),
         }
 
     def clean_base_url(self):
