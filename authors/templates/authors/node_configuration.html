@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Node Configuration{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Node Configuration for Federation</h2>
+    
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="row">
+        <div class="col-md-8">
+            <h3>Configure Your Node</h3>
+            <form method="post">
+                {% csrf_token %}
+                
+                <div class="mb-3">
+                    <label for="{{ form.base_url.id_for_label }}" class="form-label">{{ form.base_url.label }}</label>
+                    {{ form.base_url }}
+                    <div class="form-text">{{ form.base_url.help_text }}</div>
+                    {% if form.base_url.errors %}
+                        <div class="text-danger">{{ form.base_url.errors }}</div>
+                    {% endif %}
+                </div>
+                
+                <div class="mb-3">
+                    <label for="{{ form.service_username.id_for_label }}" class="form-label">{{ form.service_username.label }}</label>
+                    {{ form.service_username }}
+                    <div class="form-text">{{ form.service_username.help_text }}</div>
+                    {% if form.service_username.errors %}
+                        <div class="text-danger">{{ form.service_username.errors }}</div>
+                    {% endif %}
+                </div>
+                
+                <div class="mb-3">
+                    <label for="{{ form.service_password.id_for_label }}" class="form-label">{{ form.service_password.label }}</label>
+                    {{ form.service_password }}
+                    <div class="form-text">{{ form.service_password.help_text }}</div>
+                    {% if form.service_password.errors %}
+                        <div class="text-danger">{{ form.service_password.errors }}</div>
+                    {% endif %}
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Save Configuration</button>
+            </form>
+        </div>
+        
+        <div class="col-md-4">
+            <h3>Current Configuration</h3>
+            <div class="card">
+                <div class="card-body">
+                    <p><strong>Base URL:</strong> {{ current_config.base_url|default:"Not set" }}</p>
+                    <p><strong>Current User:</strong> {{ user.username }}</p>
+                    <p><strong>Current User Host:</strong> {{ user.host|default:"Not set" }}</p>
+                    <p><strong>Current User URL:</strong> {{ user.url|default:"Not set" }}</p>
+                    
+                    <hr>
+                    <h4>Connected Remote Nodes</h4>
+                    {% if current_config.remote_nodes %}
+                        <ul class="list-group">
+                            {% for node in current_config.remote_nodes %}
+                                <li class="list-group-item">{{ node.name }} - {{ node.base_url }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p>No remote nodes configured</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <hr>
+    
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <h3>How to Connect with Other Nodes</h3>
+            <div class="card">
+                <div class="card-body">
+                    <ol>
+                        <li><strong>Share your node information</strong> with the other party: Your base URL, service username, and service password</li>
+                        <li><strong>Have them add your node</strong> to their remote nodes using the "Configure Remote Node" link below</li>
+                        <li><strong>Add their node to yours</strong> using the "Configure Remote Node" link below</li>
+                        <li><strong>Both parties should now be able to follow each other</strong> and share content</li>
+                    </ol>
+                    
+                    <div class="mt-3">
+                        <a href="{% url 'authors:configure_remote_node' %}" class="btn btn-success">Configure Remote Node</a>
+                        <a href="{% url 'authors:explore' %}" class="btn btn-info">Go to Explore Page</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

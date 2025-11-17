@@ -30,7 +30,7 @@ class Author(AbstractUser):
         """Auto-populate url and host fields for local authors on creation"""
         is_new = self._state.adding
         super().save(*args, **kwargs)
-        
+
         # Only set url/host if not already set (for local authors)
         if is_new and not self.url:
             base_url = getattr(settings, 'BASE_URL', 'http://localhost:8000')
@@ -38,7 +38,7 @@ class Author(AbstractUser):
             self.host = base_url
             # Save again to persist url/host
             super().save(update_fields=['url', 'host'])
-    
+
     def is_remote(self) -> bool:
         """Determine if this author is remote based on their host."""
         local_node = (getattr(settings, "BASE_URL", "") or "").rstrip("/")

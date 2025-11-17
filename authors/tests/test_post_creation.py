@@ -292,3 +292,145 @@ class PostCreationTests(TestCase):
         self.client.login(username='otheruser', password='testpass123')
         response = self.client.get(reverse('authors:post_detail', kwargs={'post_id': post.id}))
         self.assertEqual(response.status_code, 403)  # Forbidden
+
+    
+    def test_create_post_requires_login(self):
+        """Anonymous users should not be able to create posts."""
+        response = self.client.post(reverse('authors:create_post'), {
+            'title': 'Anon Post',
+            'content': 'Should not be created',
+            'contentType': 'text/plain',
+            'visibility': 'PUBLIC',
+        })
+
+        # Expect redirect to login or 403 depending on how you enforce it
+        self.assertIn(response.status_code, [302, 403])
+        self.assertFalse(Post.objects.filter(title='Anon Post').exists())
+
+def test_cannot_create_post_with_empty_title(self):
+    """Post must have a non-empty title."""
+    self.client.login(username='testuser', password='testpass123')
+
+    response = self.client.post(reverse('authors:create_post'), {
+        'title': '',
+        'content': 'Some content',
+        'contentType': 'text/plain',
+        'visibility': 'PUBLIC',
+    })
+
+    self.assertEqual(response.status_code, 200)  # form re-rendered
+    self.assertFalse(Post.objects.filter(content='Some content').exists())
+
+
+def test_cannot_create_post_with_empty_content(self):
+    """Post must have non-empty content for text types."""
+    self.client.login(username='testuser', password='testpass123')
+
+    response = self.client.post(reverse('authors:create_post'), {
+        'title': 'Empty content',
+        'content': '',
+        'contentType': 'text/plain',
+        'visibility': 'PUBLIC',
+    })
+
+    self.assertEqual(response.status_code, 200)
+    self.assertFalse(Post.objects.filter(title='Empty content').exists())
+
+
+def test_invalid_content_type_rejected(self):
+    """Form should reject contentType that is not one of the choices."""
+    self.client.login(username='testuser', password='testpass123')
+
+    response = self.client.post(reverse('authors:create_post'), {
+        'title': 'Bad type',
+        'content': 'Some content',
+        'contentType': 'application/json',  # not in choices
+        'visibility': 'PUBLIC',
+    })
+
+    self.assertEqual(response.status_code, 200)
+    self.assertFalse(Post.objects.filter(title='Bad type').exists())
+
+
+def test_image_content_type_requires_image_file(self):
+    """If contentType is image/* but no image is uploaded, form should fail."""
+    self.client.login(username='testuser', password='testpass123')
+
+    response = self.client.post(reverse('authors:create_post'), {
+        'title': 'Image without file',
+        'content': 'This should fail',
+        'contentType': 'image/png',
+        'visibility': 'PUBLIC',
+        # no 'image' in POST
+    })
+
+    self.assertEqual(response.status_code, 200)
+    self.assertFalse(Post.objects.filter(title='Image without file').exists())
+
+
+def test_cannot_spoof_author_on_post_creation(self):
+    """Author field in POST data should be ignored; request.user must be the author."""
+    self.client.login(username='testuser', password='testpass123')
+
+    response = self.client.post(reverse('authors:create_post'), {
+        'title': 'Spoofed Author',
+        'content': 'Trying to spoof author',
+        'contentType': 'text/plain',
+        'visibility': 'PUBLIC',
+        'author': str(self.other_user.id),  # attempt to spoof
+    })
+
+    self.assertEqual(response.status_code, 302)
+
+    post = Post.objects.get(title='Spoofed Author')
+    self.assertEqual(post.author, self.user)          # still current user
+    self.assertNotEqual(post.author, self.other_user)
+
+
+def test_create_friends_only_post(self):
+    """Authors can create FRIENDS-only posts via the UI."""
+    self.client.login(username='testuser', password='testpass123')
+
+    response = self.client.post(reverse('authors:create_post'), {
+        'title': 'Friends Only Post',
+        'content': 'Only friends should see this',
+        'contentType': 'text/plain',
+        'visibility': 'FRIENDS',
+    })
+
+    self.assertEqual(response.status_code, 302)
+    post = Post.objects.get(title='Friends Only Post')
+    self.assertEqual(post.visibility, 'FRIENDS')
+    self.assertEqual(post.author, self.user)
+
+
+def test_create_unlisted_post(self):
+    """Authors can create PUBLIC_UNLISTED posts via the UI."""
+    self.client.login(username='testuser', password='testpass123')
+
+    response = self.client.post(reverse('authors:create_post'), {
+        'title': 'Unlisted Post',
+        'content': 'Unlisted but shareable by link',
+        'contentType': 'text/plain',
+        'visibility': 'PUBLIC_UNLISTED',
+    })
+
+    self.assertEqual(response.status_code, 302)
+    post = Post.objects.get(title='Unlisted Post')
+    self.assertEqual(post.visibility, 'PUBLIC_UNLISTED')
+
+
+def test_title_too_long_rejected(self):
+    """Title exceeding max_length should be rejected."""
+    self.client.login(username='testuser', password='testpass123')
+    long_title = 'a' * 300  # adjust based on your model's max_length
+
+    response = self.client.post(reverse('authors:create_post'), {
+        'title': long_title,
+        'content': 'Content with long title',
+        'contentType': 'text/plain',
+        'visibility': 'PUBLIC',
+    })
+
+    self.assertEqual(response.status_code, 200)
+    self.assertFalse(Post.objects.filter(content='Content with long title').exists())

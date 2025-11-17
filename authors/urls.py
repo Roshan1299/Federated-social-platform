@@ -9,7 +9,7 @@ from .views import (
     toggle_like, PostLikesView, add_comment, toggle_comment_like,
     FollowersListView, FollowingListView, AuthorDeletedPostsAdminView,
     RemoteNodeListView, AddRemoteNodeView, EditRemoteNodeView, DeleteRemoteNodeView,
-    FollowRemoteAuthorView,
+    FollowRemoteAuthorView, FederationGuideView
 )
 
 # Import new API views
@@ -19,6 +19,9 @@ from .api_views import (
     CommentLikesAPIView, FollowingAPIView, SingleFollowingAPIView
     , FollowRequestsAPIView
 )
+
+# Import configuration views
+from .views import NodeConfigurationView, ConfigureRemoteNodeView
 
 app_name = "authors"
 urlpatterns = [
@@ -148,4 +151,11 @@ urlpatterns = [
     path('node_admin/remote_nodes/add/', AddRemoteNodeView.as_view(), name='add_remote_node'),
     path('node_admin/remote_nodes/<int:node_id>/edit/', EditRemoteNodeView.as_view(), name='edit_remote_node'),
     path('node_admin/remote_nodes/<int:node_id>/delete/', DeleteRemoteNodeView.as_view(), name='delete_remote_node'),
+
+    # ========== Node Configuration Routes ==========
+    path('node_config/', NodeConfigurationView.as_view(), name='node_config'),
+    path('configure_remote_node/', ConfigureRemoteNodeView.as_view(), name='configure_remote_node'),
+
+    # ========== Federation Guide ==========
+    path('federation_guide/', FederationGuideView.as_view(), name='federation_guide'),
 ]
