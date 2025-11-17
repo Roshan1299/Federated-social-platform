@@ -21,6 +21,9 @@ from django.utils.decorators import method_decorator
 from .authentication import http_basic_auth_or_session
 from django.http import HttpResponse, Http404
 from django.conf import settings
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import authenticate
+from .forms import ImageUploadForm
 from .models import Image
 from .inbox_handlers import reopen_follow_request
 from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post
@@ -29,11 +32,9 @@ import urllib.parse
 import requests
 from django.conf import settings
 from .api_views import SingleFollowingAPIView
-from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth import authenticate
-from .forms import ImageUploadForm
-from .models import Image
-from authors.utils.federation import send_comment_to_post_owner,send_like_to_post_owner, send_comment_like_to_post_owner
+from authors.utils.federation import send_comment_to_post_owner, send_like_to_post_owner, send_comment_like_to_post_owner
+
+
 
 def render_post_content(post):
     ''' Rendered HTML for markdown/plain posts. '''
@@ -1182,6 +1183,7 @@ def toggle_comment_like(request, comment_id):
 
     if post_host and post_host != local_host:
         send_comment_like_to_post_owner(like)
+        
 
     return redirect('authors:post_detail', post_id=post.id)
 

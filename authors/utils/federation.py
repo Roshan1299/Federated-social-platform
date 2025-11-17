@@ -3,7 +3,6 @@ from django.conf import settings
 from authors.models import Follow, RemoteNode, Post, Comment, Like, Author
 from authors.utils.nodes import remote_post
 
-# Find which RemoteNode an author belongs to (by matching host URL)
 def get_remote_node_for_author(author: Author):
     # Take the author's host (e.g. "https://team-green.herokuapp.com")
     host = (author.host or "").rstrip("/")
@@ -129,12 +128,15 @@ def build_like_payload(like: Like) -> dict:
             "url": like.author.url,
         },
     }
-# Convert a CommentLike into JSON for remote nodes
+
 def build_comment_like_payload(comment_like):
+    """
+    Convert a CommentLike into JSON for remote nodes.
+    """
     return {
         "type": "like",
         "id": comment_like.origin,
-        "object": comment_like.comment.origin,
+        "object": comment_like.comment.origin,   # <--- 댓글의 origin
         "summary": f"{comment_like.author.displayName} likes your comment",
         "author": {
             "id": comment_like.author.url,
@@ -145,7 +147,7 @@ def build_comment_like_payload(comment_like):
     }
 
 
-# Send payload (post/comment/like) to remote followers/friends, respecting visibility
+
 def send_to_remote_inboxes(author, payload: dict, post_visibility: str = 'PUBLIC'):
     # Don't send PUBLIC_UNLISTED posts to remote nodes at all
     if post_visibility == 'PUBLIC_UNLISTED':
@@ -295,7 +297,6 @@ def send_like_to_post_owner(like: Like) -> bool:
         base_url=node.base_url,
     )
 
-# Send a comment-like to the remote comment owner
 def send_comment_like_to_post_owner(comment_like) -> bool:
     # The comment being liked
     comment = comment_like.comment
