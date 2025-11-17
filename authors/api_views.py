@@ -293,7 +293,7 @@ def build_author_dict(author, request):
         "displayName": author.displayName,
         "url": author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/",
         "github": author.github,
-        "profileImage": request.build_absolute_uri(author.profileImage.url) if author.profileImage else None,
+        "profileImage": request.build_absolute_uri(author.profileImage.file_name) if author.profileImage else None,
         "web": f"{request.scheme}://{request.get_host()}{web_url}",
     }
 
@@ -330,7 +330,7 @@ def build_post_dict(post, request):
     
     # Add image if present
     if post.image:
-        data["image"] = request.build_absolute_uri(post.image.url)
+        data["image"] = request.build_absolute_uri(post.image.file_name)
 
     # Add likes metadata for this entry
     likes_url = f"{entry_url}/likes"
