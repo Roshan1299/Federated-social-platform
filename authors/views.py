@@ -33,7 +33,6 @@ import requests
 from django.conf import settings
 from .api_views import SingleFollowingAPIView
 from authors.utils.federation import send_comment_to_post_owner, send_like_to_post_owner, send_comment_like_to_post_owner
-from authors.utils.remote_read import fetch_remote_comments_for_post
 
 
 
@@ -372,20 +371,6 @@ class PostDetailView(DetailView):
                 .prefetch_related("likes")
                 .all()
         )
-
-        context["comments"] = comments
-
-        local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
-        post_host = (post.author.host or "").rstrip("/")
-
-        remote_comments = []
-        # Only try to fetch from remote if this post belongs to another node
-        if post_host and post_host != local_host:
-            remote_comments = fetch_remote_comments_for_post(post)
-
-        # Expose extra remote comments to template
-        # (These are not stored in our DB, just displayed read-only)
-        context["remote_comments"] = remote_comments
 
         def compute_username_display(author):
             # Try the Django username first
