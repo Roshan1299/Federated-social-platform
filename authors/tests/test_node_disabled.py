@@ -16,6 +16,8 @@ import json
 import urllib.parse
 import base64
 
+from social_distribution import settings
+
 class FromDisabledNodeTests(TestCase):
     def setUp(self):
         # Create a disabled remote node
@@ -27,10 +29,11 @@ class FromDisabledNodeTests(TestCase):
         
         # Create a local author
         self.local_password = "password123"
+        host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
         self.local_author = Author.objects.create_user(
             displayName="Local Author",
-            host="http://local-node.com/",
-            url="http://local-node.com/authors/local-author-id",
+            host=host,
+            url=f"{host}/authors/local-author-id",
             username="localauthor",
             password=self.local_password
         )
@@ -42,6 +45,15 @@ class FromDisabledNodeTests(TestCase):
             url=f"{self.disabled_node_url}authors/disabled-author-id",
             username="remote_author",
             password=self.remote_password
+        )
+        # Create a service user for the local node. The remote node will send requests as this user.
+        self.service_password = "servicepassword"
+        self.service_user = Author.objects.create_user(
+            displayName="Service User",
+            host=host,
+            url=f"{host}/authors/service-user-id",
+            username="serviceuser",
+            password=self.service_password
         )
         
         # Create a client to simulate requests
@@ -108,6 +120,35 @@ class FromDisabledNodeTests(TestCase):
         
         # Assert that the response status code indicates success (201 Created)
         self.assertEqual(response.status_code, 201)
+
+    def test_inbox_rejects_body_author(self):
+        # Simulate a POST request to the inbox with body author from disabled node
+        inbox_url = f"/api/authors/{self.local_author.id}/inbox/"
+        payload = {
+            "type": "post",
+            "id": f"{self.disabled_node_url}posts/123",
+            "author": {
+                "host": self.disabled_node_url,
+                "displayName": self.remote_author.displayName,
+                "url": self.remote_author.url,
+            },
+            "content": "This is a post with body author from disabled node."
+        }
+        
+        # Basic Auth header for disabled node author
+        creds = f"{self.service_user.username}:{self.service_password}".encode("utf-8")
+        auth_header = "Basic " + base64.b64encode(creds).decode("utf-8")  # Simple encoding for example
+
+        response = self.client.post(
+            inbox_url,
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_AUTHORIZATION=auth_header, 
+            HTTP_HOST=str(urllib.parse.urlparse(self.local_author.url).netloc)
+        )
+        
+        # Assert that the response status code indicates rejection (403 Forbidden)
+        self.assertEqual(response.status_code, 403)
 
     """ Edge Cases: 
     1. No Auth Header Provided

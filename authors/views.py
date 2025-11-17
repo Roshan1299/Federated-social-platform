@@ -380,7 +380,7 @@ class PostDetailView(DetailView):
                 .prefetch_related("likes")
                 .all()
         )
-        # liked_by_me + username_display as before
+
         if user.is_authenticated:
             liked_comment_ids = set(
                 CommentLike.objects
@@ -408,10 +408,14 @@ class PostDetailView(DetailView):
             dn = (getattr(author, "displayName", "") or "").strip()
             if dn:
                 return "".join(ch for ch in dn.lower() if ch.isalnum())  # simple slug
-            # As a last resort, show nothing (template will skip the @ block)
             return ""
 
-        user = self.request.user
+        # Annotate each comment with liked_by_me + username_display
+        for c in comments:
+            c.liked_by_me = c.id in liked_comment_ids
+            c.username_display = compute_username_display(c.author)
+
+        context["comments"] = comments
 
         # Which comments did I like?
         if user.is_authenticated:
@@ -449,11 +453,11 @@ class AuthorPostsView(ListView):
         # Viewing own posts → show all (not deleted)
         if current_user.is_authenticated and current_user == author:
             queryset = Post.objects.filter(author=author, deleted=False)
-        # Viewing someone you follow → show PUBLIC + FRIENDS
+        # Viewing someone you follow → show PUBLIC + PUBLIC_UNLISTED + FRIENDS
         elif current_user.is_authenticated and Follow.objects.filter(follower=current_user, following=author).exists():
             queryset = Post.objects.filter(
                 author=author,
-                visibility__in=["PUBLIC", "FRIENDS"],
+                visibility__in=["PUBLIC", "PUBLIC_UNLISTED", "FRIENDS"],
                 deleted=False
             )
         # Otherwise → only PUBLIC
@@ -639,6 +643,8 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
         ).exclude(author=user)
         
         # 2. Remote unlisted posts (only if received in inbox)
+        # Since we now push PUBLIC_UNLISTED posts to remote followers' inboxes, 
+        # they should appear here if the user is a follower
         unlisted_posts_remote = Post.objects.filter(
             id__in=inbox_post_ids,
             visibility='PUBLIC_UNLISTED',
@@ -1274,50 +1280,36 @@ def toggle_comment_like(request, comment_id):
 
     return redirect('authors:post_detail', post_id=post.id)
 
-def push_image_to_remote_nodes(image_obj):
-    """
-    Push the uploaded image to all connected remote nodes (federation).
-    Reads remote nodes from settings.REMOTE_NODES.
-    """
-    REMOTE_NODES = getattr(settings, "REMOTE_NODES", [])
-    for node in REMOTE_NODES:
-        try:
-            # Each remote node should have a public endpoint to receive images
-            url = f"{node['host'].rstrip('/')}/api/images/"
-            headers = {
-                "Content-Type": image_obj.content_type,
-                "Authorization": f"Basic {node['auth']}",
-            }
-
-            response = requests.post(url, headers=headers, data=image_obj.data)
-
-            if response.status_code in (200, 201):
-                print(f"✅ Successfully pushed image to {node['host']}")
-            else:
-                print(f"⚠️ Failed to push image to {node['host']} (status {response.status_code})")
-
-        except Exception as e:
-            print(f"❌ Error pushing image to {node['host']}: {e}")
-
-
 
 def upload_image(request):
+    next_url = request.GET.get("next") or request.POST.get("next")
+
     if request.method == "POST":
         form = ImageUploadForm(request.POST, request.FILES)
         if form.is_valid():
-            image_file = request.FILES["image"]
+            img_file = request.FILES["image"]
+
             image = Image.objects.create(
-                file_name=image_file.name,
-                content_type=image_file.content_type,
-                data=image_file.read(),
+                file_name=img_file.name,
+                content_type=img_file.content_type,
+                data=img_file.read(),
             )
-            print(f"✅ Uploaded image {image.id}")
-            # Redirect back to edit profile after upload
+
+            # Go back where the user came from
+            if next_url:
+                return redirect(next_url)
+
+            # fallback: go to edit profile
             return redirect("authors:edit_profile", request.user.id)
+
     else:
         form = ImageUploadForm()
 
-    return render(request, "authors/upload_image.html", {"form": form})
+    return render(request, "authors/upload_image.html", {
+        "form": form,
+        "next": next_url,
+    })
+
 
 def serve_image(request, image_id):
     try:
@@ -1325,41 +1317,72 @@ def serve_image(request, image_id):
     except Image.DoesNotExist:
         raise Http404("Image not found")
 
-    response = HttpResponse(img.data, content_type=img.content_type)
-    response['Content-Disposition'] = f'inline; filename={img.file_name}'
-    return response
+    return HttpResponse(
+        img.data,
+        content_type=img.content_type
+    )
+
+
 
 @csrf_exempt
 def receive_remote_image(request):
     """
     Receives an image pushed from a remote node.
+    Compatible with older and newer federation code.
     """
+    import base64
+    import uuid
+    from django.http import JsonResponse, HttpResponse
+
     if request.method != "POST":
         return HttpResponse("Method Not Allowed", status=405)
 
-    # --- Authenticate remote node ---
-    if "HTTP_AUTHORIZATION" not in request.META:
+    # -----------------------------
+    # AUTHENTICATE REMOTE NODE
+    # -----------------------------
+    auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+
+    if not auth_header.startswith("Basic "):
         return HttpResponse("Unauthorized", status=401)
 
-    auth_header = request.META["HTTP_AUTHORIZATION"].replace("Basic ", "")
-    import base64
-    username, password = base64.b64decode(auth_header).decode().split(":", 1)
+    try:
+        encoded = auth_header.replace("Basic ", "")
+        decoded = base64.b64decode(encoded).decode()
+        username, password = decoded.split(":", 1)
+    except Exception:
+        return HttpResponse("Unauthorized", status=401)
+
+    # Validate using Django user model (your old code)
     user = authenticate(username=username, password=password)
     if not user:
         return HttpResponse("Unauthorized", status=401)
 
-    # --- Save the image ---
+    # -----------------------------
+    # SAVE THE IMAGE
+    # -----------------------------
     content_type = request.headers.get("Content-Type", "application/octet-stream")
-    file_name = request.headers.get("X-Filename", f"remote_{uuid.uuid4().hex[:8]}.bin")
-    data = request.body
+
+    # Support both old & new header names
+    file_name = (
+        request.headers.get("X-Filename")
+        or request.headers.get("X-File-Name")
+        or f"remote_{uuid.uuid4().hex[:8]}.bin"
+    )
+
+    raw_data = request.body
+    if not raw_data:
+        return JsonResponse({"error": "No image data"}, status=400)
 
     image = Image.objects.create(
         file_name=file_name,
         content_type=content_type,
-        data=data
+        data=raw_data,
     )
-    print(f"✅ Received remote image {image.id} from {username}")
-    return JsonResponse({"status": "ok", "image_id": image.id}, status=201)
+
+    print(f"✅ Received remote image {image.id} from remote user {username}")
+
+    return JsonResponse({"status": "ok", "image_id": str(image.id)}, status=201)
+
 
 
 class NodeManagementView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):

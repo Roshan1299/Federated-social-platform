@@ -37,7 +37,9 @@
       <label for="{{ form.image.id_for_label }}">Attach Image</label>
       <p style="margin-top:4px;">
         Need a new image? 
-        <a href="{% url 'authors:upload_image' %}" target="_blank">Upload here</a>,
+        <a href="{% url 'authors:upload_image' %}?next={{ request.path }}" class="btn btn-sm btn-outline-primary">
+          Upload New Image
+      </a>,
         then come back and select it.
       </p>
       {{ form.image }}
