@@ -28,7 +28,7 @@ import urllib.parse
 import requests
 from django.conf import settings
 from .api_views import SingleFollowingAPIView
-from authors.utils.federation import send_comment_to_post_owner, send_like_to_post_owner
+from authors.utils.federation import send_comment_to_post_owner, send_like_to_post_owner, send_comment_like_to_post_owner
 
 
 
