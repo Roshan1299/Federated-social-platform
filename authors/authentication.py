@@ -86,10 +86,11 @@ def http_basic_auth_required(view_func):
 
                 remote_user_node = None
                 for node in RemoteNode.objects.all():
-                    if normalize_host(node.base_url) == incoming_host:
+                    if normalize_host(node.base_url) == normalize_host(incoming_host):
                         remote_user_node = node
                         break
 
+                
                 if remote_user_node is None:
                     return HttpResponse(
                         'Remote node is not configured',
@@ -104,7 +105,7 @@ def http_basic_auth_required(view_func):
                         headers={'WWW-Authenticate': 'Basic realm="API"'}
                     )
                 
-            if _is_request_from_disabled_node(request):
+            if _is_request_from_disabled_node(request): # Checks the body author field
                 return HttpResponse(
                     'Requests from disabled remote nodes are not allowed',
                     status=403,
