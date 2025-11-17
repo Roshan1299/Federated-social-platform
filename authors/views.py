@@ -871,6 +871,26 @@ def follow_author(request, author_id):
 
 
 @login_required
+def cancel_follow_request(request, author_id):
+    """
+    Cancel a pending follow request sent by the logged-in user.
+    """
+    author_to_cancel = get_object_or_404(Author, id=author_id)
+    follow_request = FollowRequest.objects.filter(
+        sender=request.user,
+        receiver=author_to_cancel,
+        status='PENDING'
+    ).first()
+
+    if follow_request:
+        follow_request.delete()
+        messages.info(request, f"Follow request to {author_to_cancel.displayName} has been cancelled.")
+    else:
+        messages.warning(request, "No pending follow request to cancel.")
+
+    return redirect('authors:author_profile', author_id=author_id)
+
+@login_required
 @require_POST
 def unfollow_author(request, author_id):
     '''
