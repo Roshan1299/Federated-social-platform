@@ -26,6 +26,10 @@ class AuthorProfileForm(ModelForm):
 
 
 class PostForm(ModelForm):
+    visibility = forms.ChoiceField(
+        choices=Post.VISIBILITY_CHOICES,
+        widget=forms.Select(attrs={"class": "form-select"})
+    )
     image = forms.ModelChoiceField(
         queryset=Image.objects.all().order_by('-id'),
         required=False,
