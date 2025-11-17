@@ -1280,6 +1280,28 @@ def toggle_comment_like(request, comment_id):
 
     return redirect('authors:post_detail', post_id=post.id)
 
+def push_image_to_remote_nodes(image_obj):
+    REMOTE_NODES = getattr(settings, "REMOTE_NODES", [])
+
+    for node in REMOTE_NODES:
+        try:
+            url = f"{node['host'].rstrip('/')}/api/images/"
+            headers = {
+                "Content-Type": image_obj.content_type,
+                "Authorization": f"Basic {node['auth']}",
+            }
+
+            resp = requests.post(url, headers=headers, data=image_obj.data)
+
+            if resp.status_code in (200, 201):
+                print(f"✅ Sent image to {node['host']}")
+            else:
+                print(f"⚠️ Failed to send image to {node['host']} ({resp.status_code})")
+
+        except Exception as e:
+            print(f"❌ Error sending to {node['host']}: {e}")
+
+
 
 def upload_image(request):
     next_url = request.GET.get("next") or request.POST.get("next")
@@ -1322,67 +1344,37 @@ def serve_image(request, image_id):
         content_type=img.content_type
     )
 
-
-
 @csrf_exempt
 def receive_remote_image(request):
     """
     Receives an image pushed from a remote node.
-    Compatible with older and newer federation code.
     """
-    import base64
-    import uuid
-    from django.http import JsonResponse, HttpResponse
-
     if request.method != "POST":
         return HttpResponse("Method Not Allowed", status=405)
 
-    # -----------------------------
-    # AUTHENTICATE REMOTE NODE
-    # -----------------------------
-    auth_header = request.META.get("HTTP_AUTHORIZATION", "")
-
-    if not auth_header.startswith("Basic "):
+    # --- Authenticate remote node ---
+    if "HTTP_AUTHORIZATION" not in request.META:
         return HttpResponse("Unauthorized", status=401)
 
-    try:
-        encoded = auth_header.replace("Basic ", "")
-        decoded = base64.b64decode(encoded).decode()
-        username, password = decoded.split(":", 1)
-    except Exception:
-        return HttpResponse("Unauthorized", status=401)
-
-    # Validate using Django user model (your old code)
+    auth_header = request.META["HTTP_AUTHORIZATION"].replace("Basic ", "")
+    import base64
+    username, password = base64.b64decode(auth_header).decode().split(":", 1)
     user = authenticate(username=username, password=password)
     if not user:
         return HttpResponse("Unauthorized", status=401)
 
-    # -----------------------------
-    # SAVE THE IMAGE
-    # -----------------------------
+    # --- Save the image ---
     content_type = request.headers.get("Content-Type", "application/octet-stream")
-
-    # Support both old & new header names
-    file_name = (
-        request.headers.get("X-Filename")
-        or request.headers.get("X-File-Name")
-        or f"remote_{uuid.uuid4().hex[:8]}.bin"
-    )
-
-    raw_data = request.body
-    if not raw_data:
-        return JsonResponse({"error": "No image data"}, status=400)
+    file_name = request.headers.get("X-Filename", f"remote_{uuid.uuid4().hex[:8]}.bin")
+    data = request.body
 
     image = Image.objects.create(
         file_name=file_name,
         content_type=content_type,
-        data=raw_data,
+        data=data
     )
-
-    print(f"✅ Received remote image {image.id} from remote user {username}")
-
-    return JsonResponse({"status": "ok", "image_id": str(image.id)}, status=201)
-
+    print(f"✅ Received remote image {image.id} from {username}")
+    return JsonResponse({"status": "ok", "image_id": image.id}, status=201)
 
 
 class NodeManagementView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
