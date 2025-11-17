@@ -1275,51 +1275,47 @@ def toggle_comment_like(request, comment_id):
     return redirect('authors:post_detail', post_id=post.id)
 
 def push_image_to_remote_nodes(image_obj):
-    """
-    Push the uploaded image to all connected remote nodes (federation).
-    Reads remote nodes from settings.REMOTE_NODES.
-    """
     REMOTE_NODES = getattr(settings, "REMOTE_NODES", [])
+
     for node in REMOTE_NODES:
         try:
-            # Each remote node should have a public endpoint to receive images
             url = f"{node['host'].rstrip('/')}/api/images/"
             headers = {
                 "Content-Type": image_obj.content_type,
                 "Authorization": f"Basic {node['auth']}",
             }
 
-            response = requests.post(url, headers=headers, data=image_obj.data)
+            resp = requests.post(url, headers=headers, data=image_obj.data)
 
-            if response.status_code in (200, 201):
-                print(f"✅ Successfully pushed image to {node['host']}")
+            if resp.status_code in (200, 201):
+                print(f"✅ Sent image to {node['host']}")
             else:
-                print(f"⚠️ Failed to push image to {node['host']} (status {response.status_code})")
+                print(f"⚠️ Failed to send image to {node['host']} ({resp.status_code})")
 
         except Exception as e:
-            print(f"❌ Error pushing image to {node['host']}: {e}")
+            print(f"❌ Error sending to {node['host']}: {e}")
 
 
 
 def upload_image(request):
-    # Get ?next= url or hidden input
     next_url = request.GET.get("next") or request.POST.get("next")
 
     if request.method == "POST":
         form = ImageUploadForm(request.POST, request.FILES)
         if form.is_valid():
-            image_file = request.FILES["image"]
+            img_file = request.FILES["image"]
+
             image = Image.objects.create(
-                file_name=image_file.name,
-                content_type=image_file.content_type,
-                data=image_file.read(),
+                file_name=img_file.name,
+                content_type=img_file.content_type,
+                data=img_file.read(),
             )
 
-            # Go back where user came from
+            # Go back where the user came from
             if next_url:
                 return redirect(next_url)
 
-            # Fallback
+            # fallback: go to edit profile
             return redirect("authors:edit_profile", request.user.id)
 
     else:
@@ -1330,15 +1326,17 @@ def upload_image(request):
         "next": next_url,
     })
 
+
 def serve_image(request, image_id):
     try:
         img = Image.objects.get(pk=image_id)
     except Image.DoesNotExist:
         raise Http404("Image not found")
 
-    response = HttpResponse(img.data, content_type=img.content_type)
-    response['Content-Disposition'] = f'inline; filename={img.file_name}'
-    return response
+    return HttpResponse(
+        img.data,
+        content_type=img.content_type
+    )
 
 @csrf_exempt
 def receive_remote_image(request):
