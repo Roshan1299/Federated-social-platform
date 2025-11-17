@@ -1051,7 +1051,7 @@ def add_comment(request, post_id):
         messages.error(request, "Comment cannot be empty.")
         return redirect('authors:post_detail', post_id=post.id)
 
-    Comment.objects.create(
+    comment = Comment.objects.create(
         post=post,
         author=viewer,
         content=content_text,
@@ -1061,7 +1061,7 @@ def add_comment(request, post_id):
     post_host = (post.author.host or "").rstrip("/")
 
     if post_host and post_host != local_host:
-        send_comment_to_post_owner(Comment)
+        send_comment_to_post_owner(comment)
     messages.success(request, "Comment posted!")
     return redirect('authors:post_detail', post_id=post.id)
 
