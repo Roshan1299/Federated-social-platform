@@ -440,13 +440,13 @@ class InboxAPIView(View):
             object_type = data.get('type', '').lower()
             
             if object_type == 'follow':
-                return self.handle_follow_request(recipient, data, request)
+                return self.handle_follow_request(self, recipient, data, request)
             elif object_type == 'post':
-                return self.handle_post(recipient, data, request)
+                return self.handle_post(self, recipient, data, request)
             elif object_type == 'like':
-                return self.handle_like(recipient, data, request)
+                return self.handle_like(self, recipient, data, request)
             elif object_type == 'comment':
-                return self.handle_comment(recipient, data, request)
+                return self.handle_comment(self, recipient, data, request)
             else:
                 return json_response({'error': f'Unknown object type: {object_type}'}, status=400)
                 
