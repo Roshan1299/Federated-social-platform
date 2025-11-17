@@ -20,10 +20,12 @@ from django.conf import settings
 from django.conf.urls.static import static
 from authors.views import CustomLoginView
 from django.urls import path, include
+from django.views.generic import RedirectView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path("accounts/login/", CustomLoginView.as_view(), name="login"),
     path("accounts/", include("django.contrib.auth.urls")),  # Include other auth URLs like logout, password reset, etc.
     path("", include("authors.urls")),
+    path('', RedirectView.as_view(url='/explore/', permanent=False)),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) # tells django to serve files from MEDIA_ROOT directory at URLs starting with MEDIA_URL
