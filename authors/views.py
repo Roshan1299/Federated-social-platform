@@ -376,6 +376,7 @@ class PostDetailView(DetailView):
 
         context["comments"] = comments
 
+        logger = logging.getLogger(__name__)
         local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
         post_host = (post.author.host or "").rstrip("/")
 
@@ -384,10 +385,9 @@ class PostDetailView(DetailView):
             try:
                 remote_comments = fetch_remote_comments_for_post(post)
             except Exception as e:
-                logging.error(f"Error fetching remote comments for post {post.id} from {post_host}: {e}")
+                logger.warning("Failed to fetch remote comments for %s: %s", post.origin, e)
+                remote_comments = []
 
-        # Expose extra remote comments to template
-        # (These are not stored in our DB, just displayed read-only)
         context["remote_comments"] = remote_comments
 
         def compute_username_display(author):

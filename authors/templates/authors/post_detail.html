@@ -97,7 +97,9 @@
       {% for c in comments %}
         <div class="comment-card">
           <div class="comment-header">
-            <a href="{% url 'authors:author_profile' c.author.id %}" class="comment-author">{{ c.author.displayName }}</a>
+            <a href="{% url 'authors:author_profile' c.author.id %}" class="comment-author">
+              {{ c.author.displayName }}
+            </a>
             <span class="comment-date">{{ c.created_at|date:"Y-m-d H:i" }}</span>
           </div>
           <div class="comment-content">{{ c.content|linebreaksbr }}</div>
@@ -119,37 +121,31 @@
     {% else %}
       <p class="no-comments">No comments yet.</p>
     {% endif %}
-  </section>
-</div>
-{% if remote_comments %}
-      <h4 style="margin-top:1.5rem;">Remote comments</h4>
+
+    {% if remote_comments %}
+      <h4>Remote comments</h4>
       {% for rc in remote_comments %}
-        <div class="comment-card" style="background:#eef6ff;">
+        <div class="comment-card">
           <div class="comment-header">
-            {# if your remote_read returns an author URL, use it here #}
             {% if rc.author_url %}
-              <a href="{{ rc.author_url }}" class="comment-author">
-                {{ rc.author_display_name|default:"Remote Author" }}
+              <a href="{{ rc.author_url }}" class="comment-author" target="_blank" rel="noopener">
+                {{ rc.author_display }}
               </a>
             {% else %}
-              <span class="comment-author">
-                {{ rc.author_display_name|default:"Remote Author" }}
-              </span>
+              <span class="comment-author">{{ rc.author_display }}</span>
             {% endif %}
-            {% if rc.published %}
-              <span class="comment-date">{{ rc.published }}</span>
-            {% endif %}
+            <span class="comment-date">{{ rc.published }}</span>
           </div>
           <div class="comment-content">
-            {{ rc.content|default:rc.comment|linebreaksbr }}
+            {{ rc.content|linebreaksbr }}
           </div>
           <div class="comment-actions">
-            <span><em>Remote comment (read-only)</em></span>
+            <span>Remote comment (read-only)</span>
           </div>
         </div>
       {% endfor %}
     {% endif %}
-  </section>
+
 
 <!-- 📋 Copy Link Script -->
 <script>
