@@ -8,7 +8,8 @@ from django.core.paginator import Paginator
 from django.views import View
 from django.http import HttpResponse, JsonResponse
 from django.db.models import Q
-from .models import Author, Post, Follow, FollowRequest, Like, Comment, CommentLike, RemoteNode
+from django.conf import settings
+from .models import Author, Post, Follow, FollowRequest, Like, Comment, CommentLike, RemoteNode, InboxReceipt
 from .forms import AuthorCreationForm, AuthorProfileForm, PostForm, RemoteNodeForm
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.decorators import login_required
@@ -536,11 +537,21 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
         '''
         Returns posts for the author's stream:
         - Public posts from all authors (anyone can see in stream)
-        - Friends-only posts from mutual friends
+        - Friends-only posts from mutual friends (with inbox receipt tracking for remote posts)
+        - Unlisted posts from followed authors (with inbox receipt tracking for remote posts)
         - All posts from the author themselves
-        - Public unlisted posts from followed authors (only in stream for followers)
+        
+        Inbox receipt logic:
+        - For LOCAL posts (friends-only & unlisted): Use Follow relationships (always current)
+        - For REMOTE posts (friends-only & unlisted): Only show if received in user's inbox
+          (solves the stale Follow relationship problem in distributed systems)
+        
+        This prevents scenarios where:
+        - Remote author unfollows a local author but our node doesn't know
+        - Local author would still see unlisted/friends-only posts through stale Follow data
         '''
         user = self.request.user
+        local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
 
         # Get all mutual friends (both follow each other)
         followed_by_user = Follow.objects.filter(follower=user).values_list('following', flat=True)
@@ -552,29 +563,76 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
         # All public posts should appear in everyone's stream
         public_posts = Post.objects.filter(visibility='PUBLIC', deleted=False)
 
-        # Friends-only posts from mutual friends and the user's own friends-only posts
-        friends_posts_mutual = Post.objects.filter(
+        # Friends-only posts logic with inbox receipt tracking:
+        # SPLIT INTO LOCAL and REMOTE queries
+        
+        # 1. Local friends-only posts from mutual friends (trust Follow relationships)
+        local_mutual_friends = Author.objects.filter(
+            id__in=mutual_friends,
+            host=local_host
+        ).values_list('id', flat=True)
+        
+        friends_posts_local = Post.objects.filter(
             visibility='FRIENDS',
-            author__in=mutual_friends,
+            author__in=local_mutual_friends,
             deleted=False
         )
+        
+        # 2. Remote friends-only posts (only if received in inbox)
+        # Get posts that were delivered to this user's inbox
+        inbox_post_ids = InboxReceipt.objects.filter(
+            recipient=user
+        ).values_list('post_id', flat=True)
+        
+        friends_posts_remote = Post.objects.filter(
+            id__in=inbox_post_ids,
+            visibility='FRIENDS',
+            deleted=False
+        ).exclude(author__host=local_host)
+        
+        # User's own friends-only posts
         friends_posts_author = Post.objects.filter(
             visibility='FRIENDS',
             author=user,
             deleted=False
         )
 
+        # Unlisted posts logic with inbox receipt tracking:
+        # SPLIT INTO LOCAL and REMOTE queries
+        
+        # 1. Local unlisted posts from followed authors (trust Follow relationships)
+        local_followed_authors = Author.objects.filter(
+            id__in=followed_authors,
+            host=local_host
+        ).values_list('id', flat=True)
+        
+        unlisted_posts_local = Post.objects.filter(
+            visibility='PUBLIC_UNLISTED',
+            author__in=local_followed_authors,
+            deleted=False
+        ).exclude(author=user)
+        
+        # 2. Remote unlisted posts (only if received in inbox)
+        unlisted_posts_remote = Post.objects.filter(
+            id__in=inbox_post_ids,
+            visibility='PUBLIC_UNLISTED',
+            deleted=False
+        ).exclude(author__host=local_host).exclude(author=user)
+
         # All posts from the author themselves (they should see their own posts regardless of visibility)
         my_posts = Post.objects.filter(author=user, deleted=False)
 
-        # Public unlisted posts from followed authors (excluding own posts to avoid duplication)
-        unlisted_posts_followed = Post.objects.filter(
-            visibility='PUBLIC_UNLISTED',
-            author__in=followed_authors,
-        ).exclude(author=user).filter(deleted=False)
-
         # Combine all posts
-        queryset = (public_posts | friends_posts_mutual | friends_posts_author | my_posts | unlisted_posts_followed).distinct().order_by('-updated')
+        queryset = (
+            public_posts | 
+            friends_posts_local | 
+            friends_posts_remote | 
+            friends_posts_author | 
+            unlisted_posts_local |
+            unlisted_posts_remote |
+            my_posts
+        ).distinct().order_by('-updated')
+        
         return queryset
 
     def get_context_data(self, **kwargs):

@@ -73,8 +73,13 @@ def handle_follow_request(self, recipient, data, request):
 def handle_post(self, recipient, data, request):
     """
     Handle incoming post/entry from another node.
+    
+    Creates an InboxReceipt to track that this post was delivered to the recipient's inbox.
     """
     try:
+        # avoid circular dependency
+        from .models import InboxReceipt
+        
         # Extract origin - the globally unique identifier
         origin = data.get('origin') or data.get('id')
         
@@ -94,6 +99,12 @@ def handle_post(self, recipient, data, request):
             existing_post.updated = timezone.now()
             existing_post.save()
             
+            # Create inbox receipt for updated post (idempotent due to unique_together)
+            InboxReceipt.objects.get_or_create(
+                recipient=recipient,
+                post=existing_post
+            )
+            
             return JsonResponse({'message': 'Post updated'}, status=200)
         
         # STEP 2: Get or create the author
@@ -111,6 +122,12 @@ def handle_post(self, recipient, data, request):
             visibility=data.get('visibility', 'PUBLIC'),
             source=data.get('source', origin),
             origin=origin,
+        )
+        
+        # STEP 4: Create inbox receipt to track delivery
+        InboxReceipt.objects.create(
+            recipient=recipient,
+            post=post
         )
         
         return JsonResponse({'message': 'Post received'}, status=201)
