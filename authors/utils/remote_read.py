@@ -7,7 +7,6 @@ def sync_remote_comments_for_post(post):
     """
     Fetch comments from the remote node for this post
     and store/update them as Comment rows in our DB.
-    This replaces the old read-only `fetch_remote_comments_for_post`.
     """
 
     # 1) Figure out the *remote* post URL
@@ -23,12 +22,10 @@ def sync_remote_comments_for_post(post):
     # Adjust this if your remote uses a different pattern.
     if not post_url:
         host = (post.author.host or "").rstrip("/")
-        # Typical Social Distribution style:
-        #   {host}/api/authors/{author_id}/posts/{post_id}
+        # Typical Social Distribution style, adjust if your remote uses something else:
         post_url = f"{host}/api/authors/{post.author.id}/posts/{post.id}"
 
     if not post_url.startswith("http"):
-        # nothing usable → bail
         return
 
     comments_url = post_url.rstrip("/") + "/comments/"
@@ -36,7 +33,6 @@ def sync_remote_comments_for_post(post):
     try:
         resp = requests.get(comments_url, timeout=5)
     except Exception:
-        # Remote node down / DNS issue / whatever
         return
 
     if resp.status_code >= 300:
@@ -47,7 +43,6 @@ def sync_remote_comments_for_post(post):
     except Exception:
         return
 
-    # 2) Normalize JSON format
     # Many nodes return: {"type": "comments", "items": [ ... ]}
     items = data.get("items", []) if isinstance(data, dict) else data
 
@@ -55,8 +50,7 @@ def sync_remote_comments_for_post(post):
         if not isinstance(item, dict):
             continue
 
-        # Skip non-comment items
-        if item.get("type", "").lower() not in ("comment", "comment"):
+        if item.get("type", "").lower() not in ("comment",):
             continue
 
         comment_id = item.get("id")
@@ -65,7 +59,6 @@ def sync_remote_comments_for_post(post):
 
         author_data = item.get("author") or {}
         content = item.get("comment") or item.get("content", "") or ""
-        # published = item.get("published")  # You can parse this later if you care
 
         # 3) Get or create Author for the remote commenter
         author_url = author_data.get("id") or author_data.get("url")
@@ -85,7 +78,6 @@ def sync_remote_comments_for_post(post):
             },
         )
 
-        # 4) Store / update the comment in our DB
         defaults = {
             "post": post,
             "author": author_obj,
