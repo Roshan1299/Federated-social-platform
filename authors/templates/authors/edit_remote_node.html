@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Remote Node - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <h2>Edit Remote Node</h2>
+            <p>Edit configuration for {{ object.name }}</p>
+            
+            <form method="post">
+                {% csrf_token %}
+                
+                <div class="mb-3">
+                    <label for="{{ form.name.id_for_label }}" class="form-label">Node Name</label>
+                    {{ form.name }}
+                    {% if form.name.errors %}
+                        <div class="text-danger">{{ form.name.errors }}</div>
+                    {% endif %}
+                    <div class="form-text">A friendly name for this remote node (e.g., "Team Blue Node")</div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="{{ form.base_url.id_for_label }}" class="form-label">Base URL</label>
+                    {{ form.base_url }}
+                    {% if form.base_url.errors %}
+                        <div class="text-danger">{{ form.base_url.errors }}</div>
+                    {% endif %}
+                    <div class="form-text">The base URL of the remote node (e.g., https://team-blue.herokuapp.com/)</div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="{{ form.username.id_for_label }}" class="form-label">Username</label>
+                    {{ form.username }}
+                    {% if form.username.errors %}
+                        <div class="text-danger">{{ form.username.errors }}</div>
+                    {% endif %}
+                    <div class="form-text">Username for authentication with the remote node</div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="{{ form.password.id_for_label }}" class="form-label">Password</label>
+                    {{ form.password }}
+                    {% if form.password.errors %}
+                        <div class="text-danger">{{ form.password.errors }}</div>
+                    {% endif %}
+                    <div class="form-text">Leave blank to keep the current password</div>
+                </div>
+                
+                <div class="mb-3 form-check">
+                    {{ form.enabled }}
+                    <label class="form-check-label" for="{{ form.enabled.id_for_label }}">
+                        Enabled
+                    </label>
+                    <div class="form-text">Whether this remote node connection is active</div>
+                </div>
+                
+                <div class="mb-3">
+                    <button type="submit" class="btn btn-primary">Update Remote Node</button>
+                    <a href="{% url 'authors:remote_nodes_list' %}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

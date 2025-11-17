@@ -2,8 +2,12 @@ from django.core.management.base import BaseCommand
 from django.conf import settings
 from django.utils import timezone
 
-from authors.models import Author, Post, Follow, Like, Comment, CommentLike
+from authors.models import Author, Post, Follow, Like, Comment, CommentLike, InboxReceipt
 
+""" 
+Create 5 authors with posts, follows, comments, and likes for testing.
+    Usage: python manage.py seed_db [--clear] 
+"""
 
 class Command(BaseCommand):
     help = 'Seed the database with 5 authors, posts, follows, comments and likes for local development'
@@ -131,5 +135,27 @@ class Command(BaseCommand):
                 c, _ = Comment.objects.get_or_create(post=friends_post, author=commenter, content=f'Friend comment by {commenter.username} on {friends_post.title}')
                 for liker in mutual_followers:
                     CommentLike.objects.get_or_create(author=liker, comment=c)
+
+        # Create inbox receipts for friends-only and unlisted posts
+        # This simulates the inbox delivery system for local testing
+        self.stdout.write('Creating inbox receipts for appropriate posts...')
+        for key, author_posts in posts.items():
+            author = authors[key]
+            
+            # Friends-only posts: create receipts for mutual friends
+            friends_post = author_posts['friends']
+            potential_friends = Follow.objects.filter(follower__in=all_authors, following=author)
+            mutual_followers = [f.follower for f in potential_friends if Follow.objects.filter(follower=author, following=f.follower).exists()]
+            for recipient in mutual_followers:
+                InboxReceipt.objects.get_or_create(recipient=recipient, post=friends_post)
+            
+            # Unlisted posts: create receipts for all followers
+            unlisted_post = author_posts['unlisted']
+            followers = Follow.objects.filter(following=author).values_list('follower', flat=True)
+            for follower_id in followers:
+                follower = Author.objects.get(id=follower_id)
+                InboxReceipt.objects.get_or_create(recipient=follower, post=unlisted_post)
+            
+            # Note: Public posts don't need receipts as they're visible to everyone anyway
 
         self.stdout.write(self.style.SUCCESS('Seeding complete.'))

@@ -4,9 +4,35 @@ Provides HTTP Basic Auth for node-to-node communication
 """
 import base64
 from functools import wraps
+import json
 from django.http import JsonResponse, HttpResponse
 from django.contrib.auth import authenticate
 from django.conf import settings
+from django.shortcuts import get_object_or_404
+from authors.models import Author, RemoteNode
+from urllib.parse import urlparse
+
+
+def normalize_host(url: str) -> str:
+    """
+    Normalize a host/base_url so we can reliably match RemoteNode entries.
+
+    - strips spaces
+    - removes trailing slash
+    - lowercases
+    - keeps just scheme://netloc if it's a full URL
+    """
+    if not url:
+        return ""
+
+    url = url.strip()
+
+    parsed = urlparse(url)
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}".lower()
+
+    # Fallback for weird stored values
+    return url.rstrip("/").lower()
 
 
 def http_basic_auth_required(view_func):
@@ -51,9 +77,51 @@ def http_basic_auth_required(view_func):
                     status=401,
                     headers={'WWW-Authenticate': 'Basic realm="API"'}
                 )
-            
-            # Set the authenticated user on the request
+            if not isinstance(user, Author):
+                user = Author.objects.get(id=user.pk)
+
+            if user.is_remote(): # This doesn't actually check if request is coming from remote since all go through a service user
+                # Log somehow so the frontend can see we got here
+                incoming_host = normalize_host(user.host)
+
+                remote_user_node = None
+                for node in RemoteNode.objects.all():
+                    if normalize_host(node.base_url) == incoming_host:
+                        remote_user_node = node
+                        break
+
+                if remote_user_node is None:
+                    return HttpResponse(
+                        'Remote node is not configured',
+                        status=404,
+                        headers={'WWW-Authenticate': 'Basic realm="API"'}
+                    )
+
+                if not remote_user_node.enabled:
+                    return HttpResponse(
+                        'Remote node is disabled',
+                        status=403,  # 403 Forbidden for disabled nodes
+                        headers={'WWW-Authenticate': 'Basic realm="API"'}
+                    )
+                
+            if _is_request_from_disabled_node(request):
+                return HttpResponse(
+                    'Requests from disabled remote nodes are not allowed',
+                    status=403,
+                    headers={'WWW-Authenticate': 'Basic realm="API"'}
+                )
+
+
+            # Set the authenticated user on the request and mark that this
+            # request was authenticated via HTTP Basic Auth. Views can use
+            # `getattr(request, 'is_basic_auth', False)` to detect node-to-node
+            # authentication and relax visibility rules if desired.
             request.user = user
+            try:
+                request.is_basic_auth = True
+            except Exception:
+                # In case request object is immutable for any reason, ignore
+                pass
             
             # Call the actual view
             return view_func(request, *args, **kwargs)
@@ -107,16 +175,46 @@ def http_basic_auth_or_session(view_func):
             
             # Authenticate user
             user = authenticate(request, username=username, password=password)
-            
+
             if user is None:
                 return HttpResponse(
                     'Invalid credentials',
                     status=401,
                     headers={'WWW-Authenticate': 'Basic realm="API"'}
                 )
-            
+            if not isinstance(user, Author):
+                user = Author.objects.get(id=user.pk)
+
+            if user.is_remote():
+                incoming_host = normalize_host(user.host)
+
+                remote_user_node = None
+                for node in RemoteNode.objects.all():
+                    if normalize_host(node.base_url) == incoming_host:
+                        remote_user_node = node
+                        break
+
+                if remote_user_node is None:
+                    return HttpResponse(
+                        'Remote node is not configured',
+                        status=404,
+                        headers={'WWW-Authenticate': 'Basic realm="API"'}
+                    )
+
+                if not remote_user_node.enabled:
+                    return HttpResponse(
+                        'Remote node is disabled',
+                        status=403,
+                        headers={'WWW-Authenticate': 'Basic realm="API"'}
+                    )
+
+
             # Set the authenticated user on the request
             request.user = user
+            try:
+                request.is_basic_auth = True
+            except Exception:
+                pass
             
             # Call the actual view
             return view_func(request, *args, **kwargs)
@@ -155,8 +253,39 @@ class BasicAuthMiddleware:
                         user = authenticate(request, username=username, password=password)
                         if user:
                             request.user = user
+                            try:
+                                request.is_basic_auth = True
+                            except Exception:
+                                pass
                     except (ValueError, UnicodeDecodeError):
                         pass
         
         response = self.get_response(request)
         return response
+
+def _is_request_from_disabled_node(request):
+    """
+    Check if the request is from a disabled remote node by checking the author in its body
+    Returns: True, if the request is a json request with an author from a remote node that is disabled.
+             False, otherwise.
+    """
+    content_type = request.META.get("CONTENT_TYPE", "")
+    if not content_type.startswith("application/json"):
+        return False
+    body = request.body.decode("utf-8") if request.body else ""
+    if not body:
+        return False
+    data = json.loads(body)
+    author = data.get("author")
+    if not author:
+        return False
+    author_host = author.get("host")
+    if not author_host:
+        return False
+
+    local_node = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+    if (author != "" and author_host != local_node):
+        for node in RemoteNode.objects.all():
+            if normalize_host(node.base_url) == normalize_host(author_host):
+                return not node.enabled 
+    return (author_host != "" and author_host != local_node)

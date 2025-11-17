@@ -4,13 +4,13 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy, reverse
 from django.views.generic.edit import CreateView, UpdateView
 from django.views.generic import DetailView, ListView, TemplateView
+from django.core.paginator import Paginator
 from django.views import View
 from django.http import HttpResponse, JsonResponse
 from django.db.models import Q
-from .models import Author, Post, Follow, FollowRequest, Like, Comment, CommentLike
-from .forms import CommentForm
-
-from .forms import AuthorCreationForm, AuthorProfileForm, PostForm
+from django.conf import settings
+from .models import Author, Post, Follow, FollowRequest, Like, Comment, CommentLike, RemoteNode, InboxReceipt
+from .forms import AuthorCreationForm, AuthorProfileForm, PostForm, RemoteNodeForm, NodeConfigurationForm
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
@@ -20,7 +20,22 @@ from django.views.decorators.http import require_POST
 from django.utils.decorators import method_decorator
 from .authentication import http_basic_auth_or_session
 from django.http import HttpResponse, Http404
+from django.conf import settings
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import authenticate
+from .forms import ImageUploadForm
 from .models import Image
+from .inbox_handlers import reopen_follow_request
+from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post, send_unfollow_to_remote_author, notify_remote_comment
+import uuid
+import urllib.parse
+import requests
+import logging
+from django.conf import settings
+from .api_views import SingleFollowingAPIView
+from authors.utils.remote_read import sync_remote_comments_for_post
+from authors.utils.federation import send_comment_to_post_owner, send_like_to_post_owner, send_comment_like_to_post_owner
+
 
 
 def render_post_content(post):
@@ -164,67 +179,6 @@ class AuthorEditView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
         success_url = reverse('authors:author_profile', kwargs={'author_id': user.id})
         return redirect(success_url)
     
-@method_decorator(http_basic_auth_or_session, name='dispatch')
-class AuthorAPIView(View):
-    def get(self, request, author_id=None, author_fqid=None):
-        """Get author by UUID or FQID"""
-        identifier = author_fqid or author_id
-        
-        # Try UUID first
-        try:
-            author = Author.objects.get(id=identifier)
-        except (Author.DoesNotExist, ValueError, Exception):
-            # Fall back to FQID - try with and without trailing slash
-            try:
-                author = Author.objects.get(url=identifier)
-            except Author.DoesNotExist:
-                try:
-                    # Try with trailing slash added
-                    author = Author.objects.get(url=identifier + '/')
-                except Author.DoesNotExist:
-                    try:
-                        # Try with trailing slash removed
-                        author = Author.objects.get(url=identifier.rstrip('/'))
-                    except Author.DoesNotExist:
-                        return JsonResponse({"error": "Author not found"}, status=404)
-        
-        web_url = reverse('authors:author_profile', kwargs={'author_id': author.id})
-        author_id_url = author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/"
-        data = {
-            "type": "author",
-            "id": author_id_url,
-            "host": author.host or f"{request.scheme}://{request.get_host()}",
-            "displayName": author.displayName,
-            "github": author.github,
-            "profileImage": request.build_absolute_uri(author.profileImage.url) if author.profileImage else None,
-            "web": f"{request.scheme}://{request.get_host()}{web_url}",
-        }
-        return JsonResponse(data)
-
-'''
-AuthorsListAPIView: returns a JSON list of all authors.
-Same format as AuthorAPIView but for multiple authors.
-GET requests only.
-'''
-@method_decorator(http_basic_auth_or_session, name='dispatch')
-class AuthorsListAPIView(View):
-    def get(self, request):
-        authors = Author.objects.all()
-        authors_data = []
-        for author in authors:
-            web_url = reverse('authors:author_profile', kwargs={'author_id': author.id})
-            # Build full URL for id if not set
-            author_id_url = author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/"
-            authors_data.append({
-                "type": "author",
-                "id": author_id_url,
-                "host": author.host or f"{request.scheme}://{request.get_host()}",
-                "displayName": author.displayName,
-                "github": author.github,
-                "profileImage": request.build_absolute_uri(author.profileImage.url) if author.profileImage else None,
-                "web": f"{request.scheme}://{request.get_host()}{web_url}",
-            })
-        return JsonResponse(authors_data, safe=False, json_dumps_params={'indent': 2})
 
 
 class CreatePostView(CreateView):
@@ -234,7 +188,14 @@ class CreatePostView(CreateView):
     def form_valid(self, form):
         # Set the author to the current user
         form.instance.author = self.request.user
-        return super().form_valid(form)
+
+        # Let the generic view save the post first
+        response = super().form_valid(form)
+
+        # Notify remote followers about this new post
+        notify_remote_new_post(self.object)
+
+        return response
     
     def get_success_url(self):
         return reverse('authors:author_profile', kwargs={'author_id': self.request.user.id})
@@ -257,6 +218,15 @@ class EditPostView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     def get_success_url(self):
         return reverse("authors:post_detail", kwargs={"post_id": self.object.id})
 
+    def form_valid(self, form):
+        # Call the parent form_valid to save the post
+        response = super().form_valid(form)
+
+        # Notify remote followers and friends about the edited post
+        notify_remote_edit_post(self.object)
+
+        return response
+
 
 '''
 Allows deleting a post.
@@ -272,6 +242,10 @@ class DeletePostView(LoginRequiredMixin, UserPassesTestMixin, View):
         if self.request.user == post.author:
             post.deleted = True
             post.save()
+
+            # Notify remote followers about the deleted post
+            notify_remote_delete_post(post)
+
             return redirect('authors:author_profile', author_id=self.request.user.id)
         return HttpResponse("Unauthorized", status=403)
 
@@ -280,6 +254,7 @@ class DeletePostView(LoginRequiredMixin, UserPassesTestMixin, View):
         if self.request.user == post.author:
             return render(request, "authors/delete_post.html", {"post": post})
         return HttpResponse("Unauthorized", status=403)
+    
 
 class PostDetailView(DetailView):
     model = Post
@@ -327,14 +302,21 @@ class PostDetailView(DetailView):
 
         
         # Add image context if image exists
-        context['has_image'] = post.image and post.image.url
+        context['has_image'] = bool(post.image)
         # User will not have option to copy link if post is friends-only
         context['VISIBILITY_FRIENDS'] = "FRIENDS"
 
         user = self.request.user
         author = post.author
 
-                # relationship checks
+        local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+        post_host = (post.author.host or "").rstrip("/")
+
+        # If the post's author lives on a remote node, pull their comments into our DB
+        if post_host and post_host != local_host:
+            sync_remote_comments_for_post(post) 
+            
+        # relationship checks
         is_follower = user.is_authenticated and Follow.objects.filter(
             follower=user, following=author
         ).exists()
@@ -383,22 +365,13 @@ class PostDetailView(DetailView):
         )
 
   
-        if user == author:
+        if can_interact:
             comments_qs = post.comments.all()
-        elif post.visibility == 'PUBLIC':
-            comments_qs = post.comments.all()
-        elif post.visibility == 'PUBLIC_UNLISTED':
-            if is_follower:
-                comments_qs = post.comments.all()
-            else:
-                comments_qs = post.comments.filter(author=user)
-        elif post.visibility == 'FRIENDS':
-            if is_friend:
-                comments_qs = post.comments.all()
-            else:
-                comments_qs = post.comments.filter(author=user)
         else:
-            comments_qs = post.comments.filter(author=user)
+            if user.is_authenticated:
+                comments_qs = post.comments.filter(author=user)
+            else:
+                comments_qs = post.comments.none()
 
 
         comments = (
@@ -407,6 +380,15 @@ class PostDetailView(DetailView):
                 .prefetch_related("likes")
                 .all()
         )
+        # liked_by_me + username_display as before
+        if user.is_authenticated:
+            liked_comment_ids = set(
+                CommentLike.objects
+                .filter(author=user, comment__in=comments)
+                .values_list("comment_id", flat=True)
+            )
+        else:
+            liked_comment_ids = set()
 
         def compute_username_display(author):
             # Try the Django username first
@@ -562,7 +544,9 @@ class PostAPIView(View):
             "updated": post.updated.isoformat(),
         }
         if post.image:
-            data["image"] = request.build_absolute_uri(post.image.url)
+            data["image"] = request.build_absolute_uri(
+                reverse('authors:serve_image', args=[post.image.id])
+            )
         
         return JsonResponse(data)
     
@@ -579,11 +563,21 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
         '''
         Returns posts for the author's stream:
         - Public posts from all authors (anyone can see in stream)
-        - Friends-only posts from mutual friends
+        - Friends-only posts from mutual friends (with inbox receipt tracking for remote posts)
+        - Unlisted posts from followed authors (with inbox receipt tracking for remote posts)
         - All posts from the author themselves
-        - Public unlisted posts from followed authors (only in stream for followers)
+        
+        Inbox receipt logic:
+        - For LOCAL posts (friends-only & unlisted): Use Follow relationships (always current)
+        - For REMOTE posts (friends-only & unlisted): Only show if received in user's inbox
+          (solves the stale Follow relationship problem in distributed systems)
+        
+        This prevents scenarios where:
+        - Remote author unfollows a local author but our node doesn't know
+        - Local author would still see unlisted/friends-only posts through stale Follow data
         '''
         user = self.request.user
+        local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
 
         # Get all mutual friends (both follow each other)
         followed_by_user = Follow.objects.filter(follower=user).values_list('following', flat=True)
@@ -595,29 +589,76 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
         # All public posts should appear in everyone's stream
         public_posts = Post.objects.filter(visibility='PUBLIC', deleted=False)
 
-        # Friends-only posts from mutual friends and the user's own friends-only posts
-        friends_posts_mutual = Post.objects.filter(
+        # Friends-only posts logic with inbox receipt tracking:
+        # SPLIT INTO LOCAL and REMOTE queries
+        
+        # 1. Local friends-only posts from mutual friends (trust Follow relationships)
+        local_mutual_friends = Author.objects.filter(
+            id__in=mutual_friends,
+            host=local_host
+        ).values_list('id', flat=True)
+        
+        friends_posts_local = Post.objects.filter(
             visibility='FRIENDS',
-            author__in=mutual_friends,
+            author__in=local_mutual_friends,
             deleted=False
         )
+        
+        # 2. Remote friends-only posts (only if received in inbox)
+        # Get posts that were delivered to this user's inbox
+        inbox_post_ids = InboxReceipt.objects.filter(
+            recipient=user
+        ).values_list('post_id', flat=True)
+        
+        friends_posts_remote = Post.objects.filter(
+            id__in=inbox_post_ids,
+            visibility='FRIENDS',
+            deleted=False
+        ).exclude(author__host=local_host)
+        
+        # User's own friends-only posts
         friends_posts_author = Post.objects.filter(
             visibility='FRIENDS',
             author=user,
             deleted=False
         )
 
+        # Unlisted posts logic with inbox receipt tracking:
+        # SPLIT INTO LOCAL and REMOTE queries
+        
+        # 1. Local unlisted posts from followed authors (trust Follow relationships)
+        local_followed_authors = Author.objects.filter(
+            id__in=followed_authors,
+            host=local_host
+        ).values_list('id', flat=True)
+        
+        unlisted_posts_local = Post.objects.filter(
+            visibility='PUBLIC_UNLISTED',
+            author__in=local_followed_authors,
+            deleted=False
+        ).exclude(author=user)
+        
+        # 2. Remote unlisted posts (only if received in inbox)
+        unlisted_posts_remote = Post.objects.filter(
+            id__in=inbox_post_ids,
+            visibility='PUBLIC_UNLISTED',
+            deleted=False
+        ).exclude(author__host=local_host).exclude(author=user)
+
         # All posts from the author themselves (they should see their own posts regardless of visibility)
         my_posts = Post.objects.filter(author=user, deleted=False)
 
-        # Public unlisted posts from followed authors (excluding own posts to avoid duplication)
-        unlisted_posts_followed = Post.objects.filter(
-            visibility='PUBLIC_UNLISTED',
-            author__in=followed_authors,
-        ).exclude(author=user).filter(deleted=False)
-
         # Combine all posts
-        queryset = (public_posts | friends_posts_mutual | friends_posts_author | my_posts | unlisted_posts_followed).distinct().order_by('-updated')
+        queryset = (
+            public_posts | 
+            friends_posts_local | 
+            friends_posts_remote | 
+            friends_posts_author | 
+            unlisted_posts_local |
+            unlisted_posts_remote |
+            my_posts
+        ).distinct().order_by('-updated')
+        
         return queryset
 
     def get_context_data(self, **kwargs):
@@ -658,6 +699,31 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
         # Pass the authenticated user's ID, not from URL kwargs
         context["author_id"] = user.id
         return context
+
+
+class ExploreView(ListView):
+    model = Post
+    template_name = "authors/explore.html"
+    context_object_name = "posts"
+    paginate_by = 15
+
+    def get_queryset(self):
+        """Return all public, non-deleted posts from all authors."""
+        queryset = Post.objects.filter(visibility='PUBLIC', deleted=False).order_by('-published')
+        for post in queryset:
+            post.rendered_content = render_post_content(post)
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["title"] = "Explore Public Posts"
+
+        # Include current author's id for the follow-remote form
+        if self.request.user.is_authenticated:
+            context["current_author_id"] = self.request.user.id
+
+        return context
+
 
 class StreamRedirectView(TemplateView):
     """Redirect view to send user to their personalized stream"""
@@ -725,39 +791,84 @@ class FollowingListView(LoginRequiredMixin, ListView):
 @login_required
 @require_POST
 def follow_author(request, author_id):
-    '''
-     Send a follow request to another author.
-     '''
+    """
+    Send a follow request to another author.
+
+    - If the target is LOCAL → create/refresh a FollowRequest (current behaviour).
+    - If the target is REMOTE → use SingleFollowingAPIView.put to send a federated
+      Follow to their inbox (same logic as the "enter remote URL" flow).
+    """
     author_to_follow = get_object_or_404(Author, id=author_id)
+
     if author_to_follow == request.user:  # Prevent following oneself
         messages.error(request, "You cannot follow yourself.")
-        return redirect('authors:author_profile', author_id=author_id)
+        return redirect("authors:author_profile", author_id=author_id)
 
-    existing_follow = Follow.objects.filter(follower=request.user, following=author_to_follow).exists()
-    if existing_follow:  # Already following
+    # Already following?
+    if Follow.objects.filter(follower=request.user, following=author_to_follow).exists():
         messages.info(request, f"You are already following {author_to_follow.displayName}.")
-        return redirect('authors:author_profile', author_id=author_id)
+        return redirect("authors:author_profile", author_id=author_id)
 
-    # Either create or update the existing follow request
+    # 🔹 Case 1: remote author → use the same federation path as FollowRemoteAuthorView
+    if hasattr(author_to_follow, "is_remote") and author_to_follow.is_remote():
+        remote_author_url = author_to_follow.url
+        if not remote_author_url:
+            messages.error(
+                request,
+                "This remote author does not have a URL configured, so a follow cannot be sent.",
+            )
+            return redirect("authors:author_profile", author_id=author_id)
+
+        # Reuse SingleFollowingAPIView.put just like FollowRemoteAuthorView
+        api_view = SingleFollowingAPIView()
+        api_response = api_view.put(
+            request,
+            author_id=str(request.user.id),
+            following_fqid=remote_author_url,
+        )
+
+        if 200 <= api_response.status_code < 300:
+            # SingleFollowingAPIView already creates the Follow row on success
+            messages.success(
+                request,
+                f"Follow request sent to remote author {author_to_follow.displayName}.",
+            )
+        else:
+            error_msg = getattr(api_response, "content", b"").decode(errors="ignore")
+            messages.error(
+                request,
+                f"Failed to follow remote author (status {api_response.status_code}). {error_msg}",
+            )
+
+        return redirect("authors:author_profile", author_id=author_id)
+
+    # 🔹 Case 2: local author → keep existing FollowRequest behaviour
     follow_request, created = FollowRequest.objects.get_or_create(
         sender=request.user,
         receiver=author_to_follow,
-        defaults={'status': 'PENDING'}
+        defaults={"status": "PENDING"},
     )
 
     if not created:
         # If it exists and was denied or approved before, reset to pending
-        # Chose this method rather than because delete and recreate to preserve history
-        if follow_request.status != 'PENDING':
-            follow_request.status = 'PENDING'
-            follow_request.save()
-            messages.info(request, f"Follow request re-sent to {author_to_follow.displayName}.")
+        if reopen_follow_request(follow_request):
+            messages.info(
+                request,
+                f"Follow request re-sent to {author_to_follow.displayName}.",
+            )
         else:
-            messages.info(request, f"Follow request already pending.")
+            messages.info(
+                request,
+                f"Follow request to {author_to_follow.displayName} is already pending.",
+            )
     else:
-        messages.success(request, f"Follow request sent to {author_to_follow.displayName}!")
+        messages.success(
+            request,
+            f"Follow request sent to {author_to_follow.displayName}!",
+        )
 
-    return redirect('authors:author_profile', author_id=author_id)
+    return redirect("authors:author_profile", author_id=author_id)
+
 
 @login_required
 def cancel_follow_request(request, author_id):
@@ -786,7 +897,18 @@ def unfollow_author(request, author_id):
     Unfollow an author.
     '''
     author_to_unfollow = get_object_or_404(Author, id=author_id)
-    Follow.objects.filter(follower=request.user, following=author_to_unfollow).delete()  # Remove follow relationship
+
+    # Remove local follow relationship
+    Follow.objects.filter(follower=request.user, following=author_to_unfollow).delete()
+
+    # If this is a remote author, notify their node so they stop
+    # treating us as a follower / friend.
+    try:
+        if author_to_unfollow.is_remote():
+            send_unfollow_to_remote_author(request.user, author_to_unfollow)
+    except Exception:
+        pass
+
     messages.success(request, f"You have unfollowed {author_to_unfollow.displayName}.")
     return redirect('authors:author_profile', author_id=author_id)
 
@@ -814,6 +936,92 @@ def deny_follow_request(request, request_id):
     messages.warning(request, f"You denied {follow_request.sender.displayName}'s follow request.")
     return redirect('authors:follow_requests')
     
+
+class FollowRemoteAuthorView(LoginRequiredMixin, View):
+    """
+    Let a local author follow a remote author by pasting the remote author's FQID/URL.
+    Uses the same logic as SingleFollowingAPIView.put to send a Follow to the remote inbox.
+    """
+    template_name = "authors/follow_remote_author.html"
+
+    def get(self, request, author_id):
+        # Only allow a user to open this page for themselves
+        if str(request.user.id) != str(author_id):
+            return HttpResponse("Forbidden", status=403)
+        return render(request, self.template_name, {})
+
+    def post(self, request, author_id):
+        # Only allow a user to submit for themselves
+        if str(request.user.id) != str(author_id):
+            return HttpResponse("Forbidden", status=403)
+
+        remote_author_url = (request.POST.get("remote_author_url") or "").strip()
+        if not remote_author_url:
+            messages.error(request, "Please enter a remote author URL.")
+            return redirect("authors:follow_remote_author", author_id=author_id)
+
+        # Very basic URL sanity check
+        try:
+            parsed = urllib.parse.urlparse(remote_author_url)
+        except Exception:
+            parsed = None
+
+        if not parsed or not parsed.scheme or not parsed.netloc:
+            messages.error(request, "That doesn't look like a valid URL.")
+            return redirect("authors:follow_remote_author", author_id=author_id)
+
+        # If this URL already matches a local Author, just reuse it,
+        # otherwise create a stub remote Author.
+        author_defaults = {
+            "username": f"remote_{uuid.uuid4().hex[:8]}",
+            "displayName": remote_author_url,  # you can customize later
+            "host": f"{parsed.scheme}://{parsed.netloc}",
+        }
+        remote_author, created = Author.objects.get_or_create(
+            url=remote_author_url,
+            defaults=author_defaults,
+        )
+
+        # Reuse the existing API logic to send the Follow request to the remote inbox.
+        # This runs SingleFollowingAPIView.put with the current request object.
+        api_view = SingleFollowingAPIView()
+        api_response = api_view.put(
+            request,
+            author_id=str(author_id),
+            following_fqid=remote_author_url,
+        )
+
+        if 200 <= api_response.status_code < 300:
+            # Your SingleFollowingAPIView returns 200 or 201 on success
+            messages.success(request, "Follow request sent to remote author.")
+        else:
+            # Try to extract error message if JSON, otherwise generic
+            error_msg = getattr(api_response, "content", b"").decode(errors="ignore")
+            messages.error(
+                request,
+                f"Failed to follow remote author (status {api_response.status_code}). {error_msg}",
+            )
+
+        # Redirect back to their stream or following list
+        return redirect("authors:author_stream", author_id=author_id)
+
+
+class FederationGuideView(LoginRequiredMixin, View):
+    """
+    A guide page that explains how to connect with other nodes
+    """
+    template_name = "authors/federation_guide.html"
+
+    def get(self, request):
+        context = {
+            'current_user': request.user,
+            'remote_nodes': RemoteNode.objects.all(),
+            'base_url': getattr(settings, 'BASE_URL', request.build_absolute_uri('/').rstrip('/')),
+        }
+        return render(request, self.template_name, context)
+
+
+
 @login_required
 def redirect_to_profile(request):
     return redirect('authors:author_profile', author_id=request.user.id)
@@ -823,6 +1031,10 @@ def redirect_to_profile(request):
 def toggle_like(request, post_id):
     # Get the post by ID, or show 404 if not found
     post = get_object_or_404(Post, id=post_id)
+    # If parent post is deleted, treat this as gone.
+    if getattr(post, "deleted", False):
+        return HttpResponse("Not Found", status=404)
+    
     viewer = request.user
     author = post.author
 
@@ -862,6 +1074,14 @@ def toggle_like(request, post_id):
         # New like
         liked = True
         messages.success(request, "Liked!")
+
+        # if this is a remote post, send the like to that node
+        local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+        post_host = (post.author.host or "").rstrip("/")
+
+        if post_host and post_host != local_host:
+            send_like_to_post_owner(like)
+            
     if request.headers.get('HX-Request') or request.headers.get('x-requested-with') == 'XMLHttpRequest':
         return JsonResponse({'liked': liked, 'count': post.likes.count()})
     return redirect('authors:post_detail', post_id=post.id)
@@ -875,6 +1095,10 @@ class PostLikesView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         post = get_object_or_404(Post, id=self.kwargs["post_id"])
+        # Deleted post → show an error in context (tests expect 200 + error)
+        if getattr(post, "deleted", False):
+            ctx["error"] = "This post no longer exists."
+            return ctx
 
         user = self.request.user
         is_owner = user == post.author
@@ -924,6 +1148,9 @@ class PostLikesView(LoginRequiredMixin, TemplateView):
 @require_POST
 def add_comment(request, post_id):
     post = get_object_or_404(Post, id=post_id)
+    # If the post is marked deleted, treat it as gone
+    if getattr(post, "deleted", False):
+        return HttpResponse("Not Found", status=404)
 
     viewer = request.user
     author = post.author
@@ -963,12 +1190,29 @@ def add_comment(request, post_id):
         messages.error(request, "Comment cannot be empty.")
         return redirect('authors:post_detail', post_id=post.id)
 
-    Comment.objects.create(
+    comment = Comment.objects.create(
         post=post,
         author=viewer,
         content=content_text,
     )
-    messages.success(request, "Comment posted!")
+    # Figure out hosts
+    local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+    post_host = (post.author.host or "").rstrip("/")
+    viewer_host = (getattr(getattr(viewer, "author", None), "host", "") or "").rstrip("/")
+    # if your request.user *is* Author, then:
+    if not viewer_host and hasattr(viewer, "host"):
+        viewer_host = (viewer.host or "").rstrip("/")
+
+    # 1) If this is a REMOTE post, send the comment TO THE POST OWNER'S NODE
+    if post_host and post_host != local_host:
+        # e.g. you comment on a Team-Green post -> send to Team-Green inbox
+        send_comment_to_post_owner(comment)
+
+    # 2) If THIS commenter is LOCAL, fan out to THEIR remote followers
+    #    (so when YOU comment on YOUR local post, your remote followers see it)
+    if (not viewer_host) or (viewer_host == local_host):
+        notify_remote_comment(comment)
+
     return redirect('authors:post_detail', post_id=post.id)
 
 
@@ -977,6 +1221,10 @@ def add_comment(request, post_id):
 def toggle_comment_like(request, comment_id):
     comment = get_object_or_404(Comment, id=comment_id)
     post = comment.post
+    # If parent post is deleted, treat this as gone.
+    if getattr(post, "deleted", False):
+        return HttpResponse("Not Found", status=404)
+    
     viewer = request.user
     author = post.author
 
@@ -1007,28 +1255,69 @@ def toggle_comment_like(request, comment_id):
     if not can_like:
         return HttpResponse("Forbidden", status=403)
 
-    like, created = CommentLike.objects.get_or_create(author=viewer, comment=comment)
+    comment_like, created = CommentLike.objects.get_or_create(author=viewer, comment=comment)
     if not created:
         # If already liked → remove like
-        like.delete()
+        comment_like.delete()
         messages.info(request, "Unliked comment.")
     else:
         # If new like --> add it
         messages.success(request, "Liked comment.")
 
+    # If this post belongs to a REMOTE node, notify that node
+    local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+    comment_host = (comment.author.host or "").rstrip("/")
+
+    if comment_host and comment_host != local_host:
+        send_comment_like_to_post_owner(comment_like)
+        
+
     return redirect('authors:post_detail', post_id=post.id)
 
+def push_image_to_remote_nodes(image_obj):
+    """
+    Push the uploaded image to all connected remote nodes (federation).
+    Reads remote nodes from settings.REMOTE_NODES.
+    """
+    REMOTE_NODES = getattr(settings, "REMOTE_NODES", [])
+    for node in REMOTE_NODES:
+        try:
+            # Each remote node should have a public endpoint to receive images
+            url = f"{node['host'].rstrip('/')}/api/images/"
+            headers = {
+                "Content-Type": image_obj.content_type,
+                "Authorization": f"Basic {node['auth']}",
+            }
+
+            response = requests.post(url, headers=headers, data=image_obj.data)
+
+            if response.status_code in (200, 201):
+                print(f"✅ Successfully pushed image to {node['host']}")
+            else:
+                print(f"⚠️ Failed to push image to {node['host']} (status {response.status_code})")
+
+        except Exception as e:
+            print(f"❌ Error pushing image to {node['host']}: {e}")
+
+
+
 def upload_image(request):
-    if request.method == 'POST' and request.FILES.get('image'):
-        img_file = request.FILES['image']
-        image = Image.objects.create(
-            file_name=img_file.name,
-            content_type=img_file.content_type,
-            data=img_file.read()
-        )
-        messages.success(request, f"Image uploaded successfully! ID: {image.id}")
-        return redirect('authors:serve_image', image_id=image.id)
-    return render(request, 'authors/upload_image.html')
+    if request.method == "POST":
+        form = ImageUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            image_file = request.FILES["image"]
+            image = Image.objects.create(
+                file_name=image_file.name,
+                content_type=image_file.content_type,
+                data=image_file.read(),
+            )
+            print(f"✅ Uploaded image {image.id}")
+            # Redirect back to edit profile after upload
+            return redirect("authors:edit_profile", request.user.id)
+    else:
+        form = ImageUploadForm()
+
+    return render(request, "authors/upload_image.html", {"form": form})
 
 def serve_image(request, image_id):
     try:
@@ -1039,3 +1328,267 @@ def serve_image(request, image_id):
     response = HttpResponse(img.data, content_type=img.content_type)
     response['Content-Disposition'] = f'inline; filename={img.file_name}'
     return response
+
+@csrf_exempt
+def receive_remote_image(request):
+    """
+    Receives an image pushed from a remote node.
+    """
+    if request.method != "POST":
+        return HttpResponse("Method Not Allowed", status=405)
+
+    # --- Authenticate remote node ---
+    if "HTTP_AUTHORIZATION" not in request.META:
+        return HttpResponse("Unauthorized", status=401)
+
+    auth_header = request.META["HTTP_AUTHORIZATION"].replace("Basic ", "")
+    import base64
+    username, password = base64.b64decode(auth_header).decode().split(":", 1)
+    user = authenticate(username=username, password=password)
+    if not user:
+        return HttpResponse("Unauthorized", status=401)
+
+    # --- Save the image ---
+    content_type = request.headers.get("Content-Type", "application/octet-stream")
+    file_name = request.headers.get("X-Filename", f"remote_{uuid.uuid4().hex[:8]}.bin")
+    data = request.body
+
+    image = Image.objects.create(
+        file_name=file_name,
+        content_type=content_type,
+        data=data
+    )
+    print(f"✅ Received remote image {image.id} from {username}")
+    return JsonResponse({"status": "ok", "image_id": image.id}, status=201)
+
+
+class NodeManagementView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
+    """
+    Landing page for all node-related admin actions.
+    Accessible only to superusers (node admins).
+    """
+    template_name = "authors/node_management.html"
+
+    def test_func(self):
+        return self.request.user.is_superuser
+    
+
+class NodeConfigurationView(LoginRequiredMixin, UserPassesTestMixin, View):
+    template_name = "authors/node_configuration.html"
+
+    def test_func(self):
+        return self.request.user.is_superuser
+
+    def get(self, request):
+        initial_data = {}
+        # Prefer settings.BASE_URL if present
+        if hasattr(settings, "BASE_URL"):
+            initial_data["base_url"] = getattr(settings, "BASE_URL")
+
+        form = NodeConfigurationForm(initial=initial_data)
+
+        context = {
+            "form": form,
+            "current_config": {
+                "base_url": getattr(settings, "BASE_URL", ""),
+                "service_username": request.user.username if hasattr(request, "user") else "",
+                "remote_nodes": RemoteNode.objects.all(),
+            },
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request):
+        form = NodeConfigurationForm(request.POST)
+
+        if form.is_valid():
+            base_url = form.cleaned_data["base_url"].rstrip("/")
+            service_username = form.cleaned_data["service_username"]
+            service_password = form.cleaned_data["service_password"]
+
+            # 1) Create or update the service user
+            service_user, created = Author.objects.get_or_create(
+                username=service_username,
+                defaults={
+                    "displayName": f"Node Service User ({service_username})",
+                    "is_active": True,
+                    "is_staff": True,      # often useful for service accounts
+                },
+            )
+            # Update password & display name every time in case they changed
+            service_user.set_password(service_password)
+            service_user.displayName = f"Node Service User ({service_username})"
+            service_user.host = base_url
+            service_user.url = f"{base_url}/api/authors/{service_user.id}/"
+            service_user.save(update_fields=["password", "displayName", "host", "url"])
+
+            # 2) Update the current admin user's host/url to match this node
+            current_user = request.user
+            current_user.host = base_url
+            current_user.url = f"{base_url}/api/authors/{current_user.id}/"
+            current_user.save(update_fields=["host", "url"])
+
+            # 3) Normalize any local authors that still point at localhost
+            from django.db.models import Q
+
+            Author.objects.filter(
+                Q(host__isnull=True)
+                | Q(host__exact="")
+                | Q(host__icontains="localhost")
+            ).update(host=base_url)
+
+            # For authors that have the correct host but missing url, fill it in
+            for author in Author.objects.filter(host=base_url, url__isnull=True):
+                author.url = f"{base_url}/api/authors/{author.id}/"
+                author.save(update_fields=["url"])
+
+            # Re-authenticate current user to keep them logged in
+            from django.contrib.auth import login
+            login(request, current_user)
+
+            messages.success(
+                request,
+                f"Node configuration updated. "
+                f"Service user '{service_username}' is ready for federation."
+            )
+            return redirect("authors:node_config")
+
+        else:
+            messages.error(request, "Please correct the errors below.")
+
+        context = {
+            "form": form,
+            "current_config": {
+                "base_url": getattr(settings, "BASE_URL", ""),
+                "service_username": request.user.username if hasattr(request, "user") else "",
+                "remote_nodes": RemoteNode.objects.all(),
+            },
+        }
+        return render(request, self.template_name, context)
+
+
+class ConfigureRemoteNodeView(LoginRequiredMixin, UserPassesTestMixin, View):
+    """
+    A view to help users add remote nodes through the UI
+    """
+    template_name = "authors/configure_remote_node.html"
+
+    def test_func(self):
+        # Only allow superusers (node admins) to access this view
+        return self.request.user.is_superuser
+
+    def get(self, request):
+        form = RemoteNodeForm()
+        context = {
+            'form': form,
+            'remote_nodes': RemoteNode.objects.all()
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request):
+        form = RemoteNodeForm(request.POST)
+
+        if form.is_valid():
+            remote_node = form.save()
+            messages.success(request, f"Remote node '{remote_node.name}' added successfully!")
+            return redirect('authors:configure_remote_node')
+        else:
+            messages.error(request, "Please correct the errors below.")
+
+        context = {
+            'form': form,
+            'remote_nodes': RemoteNode.objects.all()
+        }
+        return render(request, self.template_name, context)
+
+
+# Views for Node Admin Management of Remote Nodes
+class RemoteNodeListView(LoginRequiredMixin, ListView):
+    """
+    List all configured remote nodes
+    Only accessible to superusers (node admins)
+    """
+    model = RemoteNode
+    template_name = "authors/remote_nodes_list.html"
+    context_object_name = "remote_nodes"
+
+    def dispatch(self, request, *args, **kwargs):
+        # Only allow superusers (node admins) to access this view
+        if not request.user.is_superuser:
+            return redirect('authors:author_profile', author_id=request.user.id)
+        return super().dispatch(request, *args, **kwargs)
+
+
+class AddRemoteNodeView(LoginRequiredMixin, CreateView):
+    """
+    Add a new remote node to connect with
+    Only accessible to superusers (node admins)
+    """
+    model = RemoteNode
+    form_class = RemoteNodeForm
+    template_name = "authors/add_remote_node.html"
+    success_url = reverse_lazy('authors:remote_nodes_list')
+
+    def dispatch(self, request, *args, **kwargs):
+        # Only allow superusers (node admins) to access this view
+        if not request.user.is_superuser:
+            return redirect('authors:author_profile', author_id=request.user.id)
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        messages.success(self.request, f"Successfully added remote node: {form.instance.name}")
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, "Error adding remote node. Please check the form data.")
+        return super().form_invalid(form)
+
+
+class EditRemoteNodeView(LoginRequiredMixin, UpdateView):
+    """
+    Edit an existing remote node configuration
+    Only accessible to superusers (node admins)
+    """
+    model = RemoteNode
+    form_class = RemoteNodeForm
+    template_name = "authors/edit_remote_node.html"
+    success_url = reverse_lazy('authors:remote_nodes_list')
+    pk_url_kwarg = "node_id"
+
+
+    def dispatch(self, request, *args, **kwargs):
+        # Only allow superusers (node admins) to access this view
+        if not request.user.is_superuser:
+            return redirect('authors:author_profile', author_id=request.user.id)
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        messages.success(self.request, f"Successfully updated remote node: {form.instance.name}")
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, "Error updating remote node. Please check the form data.")
+        return super().form_invalid(form)
+
+
+class DeleteRemoteNodeView(LoginRequiredMixin, View):
+    """
+    Delete a remote node connection
+    Only accessible to superusers (node admins)
+    """
+    def dispatch(self, request, *args, **kwargs):
+        # Only allow superusers (node admins) to access this view
+        if not request.user.is_superuser:
+            return redirect('authors:author_profile', author_id=request.user.id)
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request, node_id):
+        try:
+            # Use integer ID (node_id from URL)
+            node = RemoteNode.objects.get(id=node_id)
+            node_name = node.name
+            node.delete()
+            messages.success(request, f"Successfully removed remote node: {node_name}")
+        except RemoteNode.DoesNotExist:
+            messages.error(request, "Remote node not found.")
+
+        return redirect('authors:remote_nodes_list')

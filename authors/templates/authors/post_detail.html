@@ -25,33 +25,39 @@
       <p class="post-description"><strong>Description:</strong> {{ post.description }}</p>
     {% endif %}
 
-    <!-- show image if post has one -->
-    {% if post.image %}
+    <!-- 🖼 Fixed image display (from DB via serve_image) -->
+    {% if post.image_id %}
       <div class="post-detail-image-container">
-        <img src="{{ post.image.url }}" alt="{{ post.title }}" class="post-detail-image">
+        <img
+          src="{% url 'authors:serve_image' post.image_id %}"
+          alt="{{ post.title }}"
+          class="post-detail-image"
+          loading="lazy"
+        />
       </div>
     {% endif %}
 
     {% if post.content %}
       <div class="post-detail-content">{{ content_html|safe }}</div>
     {% endif %}
-
-    <div class="post-actions">
-      <span class="like-count">{{ like_count }} like{{ like_count|pluralize }}</span>
-      {% if can_like %}
-        <form method="post" action="{% url 'authors:toggle_like' post_id=post.id %}" class="inline-form">
-          {% csrf_token %}
-          <button type="submit" class="btn-like">
-            {% if liked_by_me %}👎 Unlike {% else %}👍 Like {% endif %}
-          </button>
-        </form>
-      {% endif %}
-      <a href="{% url 'authors:post_likes_page' post_id=post.id %}" class="link-view-likes">View Likes</a>
-
-      <button class="btn-copy" data-link="{{ absolute_url }}">📋 Copy Link</button>
-    </div>
   </section>
 
+  <!-- 💙 Post Actions -->
+  <div class="post-actions">
+    <span class="like-count">{{ like_count }} like{{ like_count|pluralize }}</span>
+    {% if can_like %}
+      <form method="post" action="{% url 'authors:toggle_like' post_id=post.id %}" class="inline-form">
+        {% csrf_token %}
+        <button type="submit" class="btn-like">
+          {% if liked_by_me %}👎 Unlike{% else %}👍 Like{% endif %}
+        </button>
+      </form>
+    {% endif %}
+    <a href="{% url 'authors:post_likes_page' post_id=post.id %}" class="link-view-likes">View Likes</a>
+    <button class="btn-copy" data-link="{{ absolute_url }}">📋 Copy Link</button>
+  </div>
+
+  <!-- ✏️ Edit/Delete Buttons -->
   <div class="post-footer-actions">
     {% if user.is_authenticated and user.id == post.author.id %}
       <a href="{% url 'authors:edit_post' post.id %}" class="btn-secondary">✏️ Edit</a>
@@ -62,16 +68,16 @@
 
   <hr class="divider">
 
+  <!-- 💬 Comments Section -->
   <section class="comment-section">
     <h3>Comments ({{ comments|length }})</h3>
 
- {% if can_interact %}
+    {% if can_interact %}
       <form method="post"
             action="{% url 'authors:add_comment' post_id=post.id %}"
             class="comment-form"
             style="margin-bottom: 1rem;">
         {% csrf_token %}
-
         <textarea
           name="content"
           rows="3"
@@ -91,7 +97,9 @@
       {% for c in comments %}
         <div class="comment-card">
           <div class="comment-header">
-            <a href="{% url 'authors:author_profile' c.author.id %}" class="comment-author">{{ c.author.displayName }}</a>
+            <a href="{% url 'authors:author_profile' c.author.id %}" class="comment-author">
+              {{ c.author.displayName }}
+            </a>
             <span class="comment-date">{{ c.created_at|date:"Y-m-d H:i" }}</span>
           </div>
           <div class="comment-content">{{ c.content|linebreaksbr }}</div>
@@ -99,14 +107,14 @@
             <span>{{ c.likes.count }} like{{ c.likes.count|pluralize }}</span>
             {% if can_like_comments %}
               <form method="post" action="{% url 'authors:toggle_comment_like' comment_id=c.id %}" class="inline-form">
-              {% csrf_token %}
-              {% if c.liked_by_me %}
-                <button type="submit" class="btn-secondary">👎 Unlike</button>
-              {% else %}
-                <button type="submit" class="btn-primary">👍 Like</button>
-              {% endif %}
-            </form>
-          {% endif %}
+                {% csrf_token %}
+                {% if c.liked_by_me %}
+                  <button type="submit" class="btn-secondary">👎 Unlike</button>
+                {% else %}
+                  <button type="submit" class="btn-primary">👍 Like</button>
+                {% endif %}
+              </form>
+            {% endif %}
           </div>
         </div>
       {% endfor %}
@@ -116,6 +124,8 @@
   </section>
 </div>
 
+
+<!-- 📋 Copy Link Script -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('.btn-copy').forEach(btn => {
@@ -132,4 +142,113 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 </script>
+
+<!-- 💅 Responsive Styling -->
+<style>
+.post-detail-container {
+  max-width: 800px;
+  margin: 2rem auto;
+  padding: 2rem;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+}
+
+.post-detail-header {
+  text-align: left;
+  margin-bottom: 1.5rem;
+}
+
+.post-detail-meta {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.post-detail-body {
+  margin-top: 1rem;
+}
+
+.post-detail-image-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 1.2rem auto;
+  width: 100%;
+  max-width: 700px;
+  overflow: hidden;
+  border-radius: 12px;
+  background-color: #fafafa;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.post-detail-image {
+  width: 100%;
+  height: auto;
+  max-height: 500px;
+  object-fit: contain; /* ensures no cropping */
+  border-radius: 12px;
+}
+
+@media (max-width: 600px) {
+  .post-detail-image {
+    max-height: 300px;
+  }
+}
+
+.post-actions, .post-footer-actions {
+  margin-top: 1.2rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.btn-like, .btn-primary, .btn-secondary, .btn-danger {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.btn-like { background: #0b5ed7; color: white; }
+.btn-primary { background: #0b5ed7; color: white; }
+.btn-secondary { background: #aaa; color: white; }
+.btn-danger { background: #e74c3c; color: white; }
+
+.btn-like:hover, .btn-primary:hover { background: #094cba; }
+.btn-secondary:hover { background: #888; }
+.btn-danger:hover { background: #c0392b; }
+
+.comment-card {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 0.8rem;
+  margin-bottom: 0.8rem;
+}
+
+.comment-header {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+
+.comment-date {
+  font-size: 0.8rem;
+  color: #777;
+}
+
+.comment-content {
+  font-size: 0.95rem;
+  margin-bottom: 0.3rem;
+}
+
+.comment-actions {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #555;
+}
+</style>
 {% endblock %}

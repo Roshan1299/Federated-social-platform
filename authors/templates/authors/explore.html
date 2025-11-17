@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Explore Public Posts{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="stream-header">
+    <div class="header-content">
+      <h1>Explore Public Posts</h1>
+      <p>Discover public posts from everyone in the network.</p>
+    </div>
+  </div>
+
+  {% if user.is_authenticated %}
+    <section class="remote-follow-section mb-4">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title">Follow a Remote Author</h5>
+          <p class="card-text">
+            Paste the full API URL of a remote author to send them a follow request.
+            For example:
+            <code>https://other-node.herokuapp.com/api/authors/&lt;uuid&gt;/</code>
+          </p>
+
+          <form method="post"
+                action="{% url 'authors:follow_remote_author' author_id=current_author_id %}">
+            {% csrf_token %}
+            <div class="mb-3">
+              <label for="remote_author_url" class="form-label">Remote author URL</label>
+              <input type="url"
+                     class="form-control"
+                     id="remote_author_url"
+                     name="remote_author_url"
+                     placeholder="https://other-node.herokuapp.com/api/authors/123e4567-e89b-12d3-a456-426614174000/"
+                     required>
+            </div>
+            <button type="submit" class="btn btn-primary">
+              Send Follow Request
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
+  {% endif %}
+
+  {% if posts %}
+    <section class="all-posts-section">
+      <div class="posts-grid">
+        {% for post in posts %}
+          <article class="post-card">
+            <div class="post-header">
+              <div class="post-author">
+                <a href="{% url 'authors:author_profile' post.author.id %}">
+                  {% if post.author.profileImage_id %}
+                    <img
+                      src="{% url 'authors:serve_image' post.author.profileImage_id %}"
+                      alt="{{ post.author.displayName }}"
+                      style="width:28px;height:28px;border-radius:50%;object-fit:cover;margin-right:8px;"
+                    />
+                  {% else %}
+                    <span style="margin-right:8px;">👤</span>
+                  {% endif %}
+                  {{ post.author.displayName }}
+                </a>
+              </div>
+              <div class="post-meta">
+                <span class="publish-date">Published {{ post.published|naturaltime }}</span>
+              </div>
+            </div>
+
+            <h3 class="post-title">
+              <a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a>
+            </h3>
+
+            {% if post.image_id %}
+              <div class="post-image-container">
+                <a href="{% url 'authors:post_detail' post.id %}">
+                  <img
+                    src="{% url 'authors:serve_image' post.image_id %}"
+                    alt="image for {{ post.title }}"
+                    class="post-image"
+                    style="width:100%;height:200px;object-fit:cover;border-radius:10px;"
+                  />
+                </a>
+              </div>
+            {% endif %}
+
+            <div class="post-content">
+              {{ post.rendered_content|truncatechars_html:300|safe }}
+            </div>
+
+            <div class="post-actions">
+              <a href="{% url 'authors:post_detail' post.id %}" class="btn btn-primary">Read More</a>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+
+      {% if is_paginated %}
+        <div class="pagination">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-secondary">Previous</a>
+          {% endif %}
+          <span class="page-info">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}" class="btn btn-secondary">Next</a>
+          {% endif %}
+        </div>
+      {% endif %}
+    </section>
+  {% else %}
+    <div class="empty-state">
+      <h3>No posts available yet</h3>
+      <p>There are no public posts in the network yet.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

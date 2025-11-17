@@ -276,7 +276,7 @@ class CommentsFQIDTests(FQIDTestCase):
         """Test getting a single comment by its FQID"""
         self.client.login(username='remote_author', password='password2')
         
-        comment_fqid = f'http://testserver/api/authors/{self.local_author.id}/entries/{self.public_post.id}/comments/{self.comment.id}'
+        comment_fqid = f'http://testserver/api/authors/{self.remote_author.id}/commented/{self.comment.id}'
         encoded_fqid = self.encode_fqid(comment_fqid)
         
         # Using the remote comment endpoint
@@ -305,9 +305,9 @@ class CommentsFQIDTests(FQIDTestCase):
     
     def test_get_comment_by_comment_fqid(self):
         """Test getting a comment using the /commented/{COMMENT_FQID} endpoint"""
-        self.client.login(username='local_author', password='password1')
+        self.client.login(username='remote_author', password='password2')
         
-        comment_fqid = f'http://testserver/api/authors/{self.local_author.id}/entries/{self.public_post.id}/comments/{self.comment.id}'
+        comment_fqid = f'http://testserver/api/authors/{self.remote_author.id}/commented/{self.comment.id}'
         encoded_fqid = self.encode_fqid(comment_fqid)
         
         response = self.client.get(f'/api/commented/{encoded_fqid}')
@@ -372,7 +372,7 @@ class CommentLikesFQIDTests(FQIDTestCase):
         # Create a like on the comment
         CommentLike.objects.create(author=self.local_author, comment=self.comment)
         
-        comment_fqid = f'http://testserver/api/authors/{self.local_author.id}/entries/{self.public_post.id}/comments/{self.comment.id}'
+        comment_fqid = f'http://testserver/api/authors/{self.comment.author.id}/commented//{self.comment.id}'
         encoded_fqid = self.encode_fqid(comment_fqid)
         
         response = self.client.get(

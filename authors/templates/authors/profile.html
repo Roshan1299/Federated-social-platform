@@ -3,200 +3,223 @@
 {% block title %}{{ author.displayName }} - Profile{% endblock %}
 
 {% block content %}
-  <div class="profile-container">
-    <div class="profile-header">
-      <div class="profile-avatar">
-        {% if author.profileImage %}
-          <img src="{{ author.profileImage.url }}" alt="{{ author.displayName }}'s Profile Image" class="profile-img-large">
-        {% else %}
-          <div class="profile-placeholder-large">👤</div>
-        {% endif %}
-      </div>
-      
-      <div class="profile-info">
-        <h1 class="profile-display-name">{{ author.displayName }}</h1>
-        
-        {% if author.github %}
-          <div class="profile-links">
-            <a href="{{ author.github }}" target="_blank" class="github-link">
-              <i class="fab fa-github"></i> GitHub Profile
-            </a>
-          </div>
-        {% endif %}
-        
-        {% if author.description %}
-          <div class="profile-description">
-            <p>{{ author.description }}</p>
-          </div>
-        {% endif %}
+<div class="profile-container">
+  <div class="profile-header">
 
-        {% if is_admin_viewing %}
-          <div class="admin-tools" style="margin-top: 1rem;">
-            <a 
-              href="{% url 'authors:author_deleted_posts_admin' author_id=author.id %}" 
-              class="btn btn-danger admin-view-deleted-btn"
-              style="
-                background:#5c0000;
-                color:white;
-                font-weight:600;
-                border-radius:8px;
-                padding:8px 12px;
-                text-decoration:none;
-                display:inline-block;
-              "
-            >
-              🔒 Admin: View Deleted Posts
-            </a>
-            <p style="font-size:0.8rem; color:#a33; margin-top:6px;">
-              Only visible to admins. Shows posts this author deleted.
-            </p>
-          </div>
-        {% endif %}
-      </div>
-
-      
-      
-      <div class="profile-actions">
-          {% if user.is_authenticated and user.id != author.id %}
-            {% if is_friends %}
-              <!-- Friends Button with popup -->
-              <button type="button" class="btn btn-success" id="friends-btn">Friends</button>
-
-              <div id="unfollow-popup" class="popup hidden">
-                <div class="popup-content">
-                  <p>Unfollow {{ author.displayName }}?</p>
-                  <form action="{% url 'authors:unfollow_author' author.id %}" method="post">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-danger">Yes</button>
-                    <button type="button" class="btn btn-secondary" id="cancel-popup">No</button>
-                  </form>
-                </div>
-              </div>
-
-            {% elif is_following %}
-              <!-- Unfollow -->
-              <form action="{% url 'authors:unfollow_author' author.id %}" method="post" class="follow-form">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-secondary">Unfollow</button>
-              </form>
-
-            {% elif has_pending_request %}
-              <!-- Cancel follow -->
-              <form action="{% url 'authors:cancel_follow_request' author.id %}" method="post" class="follow-form">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-warning">Cancel Follow Request</button>
-              </form>
-
-            {% else %}
-              <!-- Follow -->
-              <form action="{% url 'authors:follow_author' author.id %}" method="post" class="follow-form">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-primary">Follow</button>
-              </form>
-            {% endif %}
-          {% endif %}
-
-          {% if user.is_authenticated %}
-            {% if user.id == author.id %}
-              <!-- Current user's own profile -->
-              <a href="{% url 'authors:edit_profile' author.id %}" class="btn btn-secondary">Edit Profile</a>
-            {% endif %}
-
-            <!-- Followers Button (Visible to everyone) -->
-            <a href="{% url 'authors:followers_list' author.id %}" class="btn btn-info">
-              Followers ({{ author.followers.count }})
-            </a>
-
-            <!-- Following Button (Visible to everyone) -->
-            <a href="{% url 'authors:following_list' author.id %}" class="btn btn-info">
-              Following ({{ author.following.count }})
-            </a>
-          {% endif %}
+    <!-- 🖼 Profile Image (no zoom, full fit) -->
+    <div class="profile-avatar">
+      {% if author.profileImage %}
+        <div class="profile-image-container">
+          <img
+            src="{% url 'authors:serve_image' author.profileImage.id %}"
+            alt="{{ author.displayName }}'s Profile Image"
+            class="profile-image"
+          />
         </div>
-
+      {% else %}
+        <div class="profile-placeholder">👤</div>
+      {% endif %}
     </div>
-    
-    <div class="profile-content">
-      <div class="profile-posts-section">
-        <div class="posts-header">
-          <h2>Posts</h2>
-          <div class="posts-actions">
-            {% if user.id == author.id %}
-              <a href="{% url 'authors:create_post' %}" class="btn btn-primary">Create New Post</a>
-            {% endif %}
-            <a href="{% url 'authors:author_posts' author.id %}" class="btn btn-secondary">View All Posts</a>
-          </div>
-        </div>
-        
-        <div class="posts-grid">
-          {% for post in posts|slice:":6" %}
-            <div class="post-card">
-              <h3>
-                <a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a>
-              </h3>
 
-              {% if post.image %}
-                <div class="post-image-preview">
-                  <a href="{% url 'authors:post_detail' post.id %}">
-                    <img src="{{ post.image.url }}" alt="{{ post.title }}" class="post-thumbnail">
-                  </a>
-                </div>
-              {% endif %}
+    <!-- 🧾 Profile Info -->
+    <div class="profile-info">
+      <h1 class="profile-display-name">{{ author.displayName }}</h1>
 
-              <div class="post-content">
-                {{ post.rendered_content|truncatechars_html:150|safe }}
-              </div>
-
-              <div class="post-meta">
-                <p>Published: {{ post.published|date:"M d, Y" }}</p>
-              </div>
-            </div>
-          {% empty %}
-            <div class="no-posts">
-              <p>No posts yet.</p>
-            </div>
-          {% endfor %}
-        </div>
+      {% if author.github %}
+      <div class="profile-links">
+        <a href="{{ author.github }}" target="_blank" class="github-link">
+          <i class="fab fa-github"></i> GitHub Profile
+        </a>
       </div>
+      {% endif %}
+
+      {% if author.description %}
+      <div class="profile-description">
+        <p>{{ author.description }}</p>
+      </div>
+      {% endif %}
+
+      {% if is_admin_viewing %}
+      <div class="admin-tools" style="margin-top: 1rem;">
+        <a
+          href="{% url 'authors:author_deleted_posts_admin' author_id=author.id %}"
+          class="btn btn-danger admin-view-deleted-btn"
+          style="
+            background:#5c0000;
+            color:white;
+            font-weight:600;
+            border-radius:8px;
+            padding:8px 12px;
+            text-decoration:none;
+            display:inline-block;
+          "
+        >
+          🔒 Admin: View Deleted Posts
+        </a>
+        <p style="font-size:0.8rem; color:#a33; margin-top:6px;">
+          Only visible to admins. Shows posts this author deleted.
+        </p>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- 👥 Actions -->
+    <div class="profile-actions">
+      {% if user.is_authenticated and user.id != author.id %}
+        {% if is_friends %}
+          <button type="button" class="btn btn-success" id="friends-btn">Friends</button>
+
+          <div id="unfollow-popup" class="popup hidden">
+            <div class="popup-content">
+              <p>Unfollow {{ author.displayName }}?</p>
+              <form action="{% url 'authors:unfollow_author' author.id %}" method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">Yes</button>
+                <button type="button" class="btn btn-secondary" id="cancel-popup">No</button>
+              </form>
+            </div>
+          </div>
+
+        {% elif is_following %}
+          <form action="{% url 'authors:unfollow_author' author.id %}" method="post" class="follow-form">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-secondary">Unfollow</button>
+          </form>
+
+        {% elif has_pending_request %}
+          <form action="{% url 'authors:cancel_follow_request' author.id %}" method="post" class="follow-form">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-warning">Cancel Follow Request</button>
+          </form>
+
+        {% else %}
+          <form action="{% url 'authors:follow_author' author.id %}" method="post" class="follow-form">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">Follow</button>
+          </form>
+        {% endif %}
+      {% endif %}
+
+      {% if user.is_authenticated %}
+        {% if user.id == author.id %}
+          <a href="{% url 'authors:edit_profile' author.id %}" class="btn btn-secondary">Edit Profile</a>
+        {% endif %}
+
+        <a href="{% url 'authors:followers_list' author.id %}" class="btn btn-info">
+          Followers ({{ author.followers.count }})
+        </a>
+
+        <a href="{% url 'authors:following_list' author.id %}" class="btn btn-info">
+          Following ({{ author.following.count }})
+        </a>
+      {% endif %}
     </div>
   </div>
 
-  <style>
-  .popup {
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.4);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-  }
-  .popup.hidden {
-    display: none;
-  }
-  .popup-content {
-    background: white;
-    padding: 20px 30px;
-    border-radius: 12px;
-    text-align: center;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-  }
-  .popup-content p {
-    font-size: 1.1rem;
-    margin-bottom: 15px;
-  }
-  </style>
+  <!-- 🧾 Posts Section -->
+  <div class="profile-content">
+    <div class="profile-posts-section">
+      <div class="posts-header">
+        <h2>Posts</h2>
+        <div class="posts-actions">
+          {% if user.id == author.id %}
+          <a href="{% url 'authors:create_post' %}" class="btn btn-primary">Create New Post</a>
+          {% endif %}
+          <a href="{% url 'authors:author_posts' author.id %}" class="btn btn-secondary">View All Posts</a>
+        </div>
+      </div>
 
-  <script>
-  document.addEventListener('DOMContentLoaded', () => {
-    const friendsBtn = document.getElementById('friends-btn');
-    const popup = document.getElementById('unfollow-popup');
-    const cancelPopup = document.getElementById('cancel-popup');
+      <div class="posts-grid">
+        {% for post in posts|slice:":6" %}
+        <div class="post-card">
+          <h3>
+            <a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a>
+          </h3>
 
-    if (friendsBtn && popup && cancelPopup) {
-      friendsBtn.addEventListener('click', () => popup.classList.remove('hidden'));
-      cancelPopup.addEventListener('click', () => popup.classList.add('hidden'));
-    }
-  });
-  </script>
+          {% if post.image %}
+          <div class="post-image-preview">
+            <a href="{% url 'authors:post_detail' post.id %}">
+              <img src="{% url 'authors:serve_image' post.image.id %}"
+                   alt="{{ post.title }}"
+                   class="post-thumbnail">
+            </a>
+          </div>
+          {% endif %}
+
+          <div class="post-content">
+            {{ post.rendered_content|truncatechars_html:150|safe }}
+          </div>
+
+          <div class="post-meta">
+            <p>Published: {{ post.published|date:"M d, Y" }}</p>
+          </div>
+        </div>
+        {% empty %}
+        <div class="no-posts">
+          <p>No posts yet.</p>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 💅 Styling -->
+<style>
+.profile-image-container {
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  background-color: #f5f5f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 1.5rem;
+  flex-shrink: 0;
+}
+.profile-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain; 
+  border-radius: 50%;
+  background-color: white; 
+}
+.popup {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.popup.hidden { display: none; }
+.popup-content {
+  background: white;
+  padding: 20px 30px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+.popup-content p {
+  font-size: 1.1rem;
+  margin-bottom: 15px;
+}
+</style>
+
+<!-- 🧠 Popup Script -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const friendsBtn = document.getElementById('friends-btn');
+  const popup = document.getElementById('unfollow-popup');
+  const cancelPopup = document.getElementById('cancel-popup');
+
+  if (friendsBtn && popup && cancelPopup) {
+    friendsBtn.addEventListener('click', () => popup.classList.remove('hidden'));
+    cancelPopup.addEventListener('click', () => popup.classList.add('hidden'));
+  }
+});
+</script>
 {% endblock %}

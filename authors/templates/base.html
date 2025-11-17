@@ -40,21 +40,27 @@
   <nav>
     {% if user.is_authenticated %}
       <div class="nav-left">
-        <a href="{% url 'authors:redirect_profile' %}" class="nav-profile">
-          {% if user.profileImage %}
-            <img src="{{ user.profileImage.url }}" alt="Profile" class="nav-profile-img">
+        <a href="{% url 'authors:redirect_profile' %}" class="nav-profile" style="display:flex;align-items:center;gap:8px;">
+          {% if user.profileImage_id %}
+            <img
+              src="{% url 'authors:serve_image' user.profileImage_id %}"
+              alt="{{ user.displayName|default:user.username }}'s Profile Image"
+              class="nav-profile-img"
+              style="width:32px;height:32px;border-radius:50%;object-fit:cover;border:1px solid #ccc;"
+            />
           {% else %}
-            <div class="nav-profile-placeholder">👤</div>
+            <div class="nav-profile-placeholder" style="font-size:24px;">👤</div>
           {% endif %}
-          <span class="nav-display-name">{{ user.displayName|default:user.username }}</span>
+          <span class="nav-display-name" style="font-weight:500;">{{ user.displayName|default:user.username }}</span>
         </a>
       </div>
-
+  
       <div class="nav-center">
         <a href="{% url 'authors:author_stream' author_id=user.id %}" class="nav-logo">Darkblue</a>
       </div>
-
+  
       <div class="nav-right">
+        <a href="{% url 'authors:explore' %}" class="nav-explore">Explore</a>
         <a href="{% url 'authors:create_post' %}" class="nav-create-post">Create Post</a>
 
         <!-- Follow Requests link with badge -->
@@ -65,6 +71,12 @@
           {% endif %}
         </a>
 
+                <!-- Node Admin links for superusers -->
+        {% if user.is_superuser %}
+          <a href="{% url 'authors:node_management' %}" class="nav-node-management">Nodes</a>
+          <a href="{% url 'authors:federation_guide' %}" class="nav-federation-guide">Federation Guide</a>
+        {% endif %}
+
         <form action="{% url 'logout' %}" method="post" class="nav-logout-form">
           {% csrf_token %}
           <button type="submit" class="nav-logout-btn">Logout</button>
@@ -74,13 +86,14 @@
       <div class="nav-left">
         <a href="{% url 'login' %}" class="nav-logo">Darkblue</a>
       </div>
-
+  
       <div class="nav-right">
         <a href="{% url 'login' %}">Login</a>
         <a href="{% url 'authors:signup' %}">Sign Up</a>
       </div>
     {% endif %}
   </nav>
+  
 
   <hr>
 

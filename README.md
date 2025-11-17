@@ -133,6 +133,65 @@ The system currently supports conversion of these GitHub event types to posts:
 
 ---
 
+## Node Federation Setup Guide
+
+### Quick Configuration via UI (Recommended)
+
+1. **Login as Superuser/Admin** (the initial user you created is typically a superuser)
+
+2. **Go to Node Configuration page**: Use the "Node Config" link in the navigation menu if you're an admin, or visit `/node_config/`
+
+3. **Configure your node settings**:
+   - Enter your full Heroku app URL (e.g., `https://your-app-name.herokuapp.com/`)
+   - Create a service username and password for node-to-node communication
+   - Click "Save Configuration"
+
+4. **Add Remote Nodes**:
+   - Click "Configure Remote Node" or visit `/configure_remote_node/`
+   - Add the other party's base URL, username, and password
+   - Both parties must add each other as remote nodes
+
+5. **Follow Remote Authors**:
+   - Navigate to the Explore page
+   - Use the "Follow a Remote Author" form to enter the full API URL of the author you want to follow
+   - The format should be: `https://other-node.herokuapp.com/api/authors/<uuid>/`
+
+### Manual Setup via Management Command (Alternative)
+
+For advanced users, there's a management command:
+
+```bash
+python manage.py setup_node \
+  --base-url="https://your-app-name.herokuapp.com/" \
+  --service-username="your_service_user" \
+  --service-password="your_service_pass" \
+  --current-username="your_username"
+```
+
+### Environment Variables (Heroku)
+
+When deploying on Heroku, you can set these configuration variables:
+
+```bash
+heroku config:set \
+  BASE_URL="https://your-app-name.herokuapp.com/" \
+  NODE_SERVICE_USER="service_user" \
+  NODE_SERVICE_PASSWORD="service_pass"
+```
+
+### Connecting with Other Nodes
+
+1. Share your node information with the other party:
+   - Your base URL (e.g., `https://your-app.herokuapp.com/`)
+   - Your service username
+   - Your service password
+
+2. Both parties must add each other as remote nodes through the UI
+
+3. Once connected, you can follow each other using the "Follow Remote Author" feature on the Explore page
+
+---
+
 ## API Documentation
 
 This section details the REST API endpoints for the Social Distribution project.
@@ -172,6 +231,34 @@ curl http://127.0.0.1:8000/api/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/
     "web": "http://127.0.0.1:8000/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/"
 }
 ```
+
+#### Example Request
+```bash
+curl \
+  https://darkblue-xxxxxxxxxxxx.herokuapp.com/api/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/
+```
+
+#### Example Response:
+*  **Code:** `401 Unauthorized`
+```json
+{
+    "detail": "Authentication required"
+}
+```
+
+#### Example Request
+```bash
+curl -u username:password \
+  https://darkblue-xxxxxxxxxxxx.herokuapp.com/api/authors/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/
+```
+#### Example Response:
+*  **Code:** `404 Not Found`
+```json
+{
+    "error": "Author not found."
+}
+```
+
 #### Response Fields:
 
 | Field          | Type   | Description                                                                 | Example                                                              |
@@ -224,7 +311,7 @@ Retrieves the public profile information of all authors.
 
 ```bash
 curl -u username:password \
-  https://127.0.0.1:8000/api/authors/
+  https://darkblue-xxxxxxxxxxxx.herokuapp.com/api/authors/
 ```
 #### Example Response:
 
@@ -251,6 +338,16 @@ curl -u username:password \
     "web": "http://127.0.0.1:8000/authors/2cabd0b3-4cc7-49da-9b42-65bc9c5e6f56/"
   }
 ]
+```
+
+#### Example Request
+```bash
+curl https://darkblue-xxxxxxxxxxxx.herokuapp.com/api/authors/
+```
+#### Example Response:
+*  **Code:** `401 Unauthorized`
+```
+"Authentication required"
 ```
 
 #### Response Fields:
@@ -733,6 +830,121 @@ curl -u username:password \
 
 ---
 
+### Following API
+
+#### URL: `GET /api/authors/{AUTHOR_SERIAL}/following`
+
+**Purpose:** Retrieve a list of authors that a local author is following.
+
+**Authentication Required:** Yes (session auth — only the local author may call this endpoint)
+
+**Access Level:** [local]
+
+**URL Parameters:**
+
+| Parameter | Type | Required | Description | Example |
+|-----------|------|----------|-------------|---------|
+| `AUTHOR_SERIAL` | UUID | Yes | UUID of the author whose following list you want | `bb89f943-bd11-475d-9e1e-71ef9f7a914a` |
+
+**Success Response - Example (200 OK):**
+```json
+{
+  "type": "following",
+  "items": [ /* array of author objects (same shape as Author object in Followers response) */ ]
+}
+```
+
+**Error Responses:**
+
+| Status Code | Description |
+|-------------|-------------|
+| 401 Unauthorized | No authentication provided or invalid credentials |
+| 403 Forbidden | Requesting user is not the local author |
+
+---
+
+#### URL: `GET /api/authors/{AUTHOR_SERIAL}/following/{FOREIGN_AUTHOR_FQID}`
+
+**Purpose:** Check if the local author is following a given foreign author. The `FOREIGN_AUTHOR_FQID` must be percent-encoded.
+
+**Authentication Required:** Yes (session auth — only the local author may call this endpoint)
+
+**Success Response:**
+- `200 OK` with the author object if the local author follows the target
+- `404 Not Found` if not following or target not resolvable
+
+---
+
+#### URL: `PUT /api/authors/{AUTHOR_SERIAL}/following/{FOREIGN_AUTHOR_FQID}`
+
+**Purpose:** Create a follow request from the local author to the specified target author. Behavior differs for local vs remote targets:
+- If the target resolves to a local author on this node and is not already followed, a local `FollowRequest` is created with status `PENDING`.
+- If the target resolves to a remote author (different host), the server sends a `follow` activity to the remote author's inbox. The activity's `actor` is the local author object and the `object` is the target author object (full author JSON). On success the local node records a `Follow` immediately referencing the remote author record.
+
+**Authentication Required:** Yes (session auth — only the local author may call this endpoint)
+
+**Success Responses:**
+- `201 Created` when a new follow request is created or successfully delivered to remote inbox
+- `200 OK` when a follow request already exists
+
+**Error Responses:**
+- `401 Unauthorized` when not authenticated
+- `403 Forbidden` when acting as a different author
+- `404 Not Found` when the FQID cannot be resolved locally
+- `502 Bad Gateway` when a network error occurs while sending to a remote inbox
+- Any non-2xx response returned from the remote inbox will be forwarded (same status code)
+
+---
+
+#### URL: `DELETE /api/authors/{AUTHOR_SERIAL}/following/{FOREIGN_AUTHOR_FQID}`
+
+**Purpose:** Unfollow a target author. Only the local author may call this endpoint.
+
+**Authentication Required:** Yes (session auth — only the local author may call this endpoint)
+
+**Success Responses:**
+- `204 No Content` when an existing follow relationship is removed
+
+**Error Responses:**
+- `401 Unauthorized` when not authenticated
+- `403 Forbidden` when acting as a different author
+- `404 Not Found` when there is no follow relationship to remove
+
+---
+
+### Follow Requests API
+
+#### URL: `GET /api/authors/{AUTHOR_SERIAL}/follow_requests`
+
+**Purpose:** Return pending follow requests targeting the specified local author.
+
+**Authentication Required:** Yes (session auth — only the local author may call this endpoint)
+
+**Access Level:** [local]
+
+**Success Response - Example (200 OK):**
+```json
+{
+  "type": "follow_requests",
+  "items": [
+    {
+      "id": "<follow-request-id>",
+      "sender": { /* author object for the requester */ },
+      "status": "PENDING",
+      "created_at": "2025-10-17T03:40:00Z"
+    }
+  ]
+}
+```
+
+**Error Responses:**
+
+| Status Code | Description |
+|-------------|-------------|
+| 401 Unauthorized | No authentication provided or invalid credentials |
+| 403 Forbidden | Requesting user is not the local author |
+
+
 #### URL: `GET /api/authors/{AUTHOR_SERIAL}/followers/{FOREIGN_AUTHOR_FQID}`
 
 **Purpose:** Check if a specific foreign author is following another author.
@@ -788,7 +1000,6 @@ curl -u username:password \
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 200 OK | Foreign author IS following | Follow relationship exists |
 | 404 Not Found | Foreign author is NOT following | No follow relationship or author doesn't exist |
 | 401 Unauthorized | Authentication required | No/invalid credentials |
 
@@ -905,7 +1116,6 @@ curl -u username:password -X POST \
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 201 Created | Follow request successfully received | Request processed and queued for approval |
 | 400 Bad Request | Invalid request format | Missing required fields or incorrect JSON structure |
 | 401 Unauthorized | Authentication required | No/invalid credentials provided |
 | 404 Not Found | Author not found | AUTHOR_SERIAL doesn't exist on this node |
@@ -1170,7 +1380,6 @@ curl -u username:password -X POST \
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 201 Created | Post created successfully | Valid request, properly authenticated |
 | 400 Bad Request | Invalid request data | Missing required fields or invalid data |
 | 401 Unauthorized | Authentication required | Not authenticated |
 | 403 Forbidden | Not authorized to post as this author | Authenticated but not as the specified author |
@@ -1264,7 +1473,6 @@ curl https://dark-blue-t-6ce3d0bd82d3.herokuapp.com/api/authors/2cabd0b3-4cc7-49
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 200 OK | Post retrieved successfully | Valid request with proper permissions |
 | 401 Unauthorized | Authentication required | Friends-only post accessed without auth |
 | 403 Forbidden | Access denied | Friends-only post but user is not a friend |
 | 404 Not Found | Post not found | ENTRY_SERIAL doesn't exist or post is deleted |
@@ -1409,7 +1617,6 @@ curl -u username:password \
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 200 OK | Comments retrieved successfully | Valid request with proper permissions |
 | 401 Unauthorized | Authentication required | Friends-only post accessed without auth |
 | 403 Forbidden | Access denied | Friends-only post but user is not a friend |
 | 404 Not Found | Post not found | ENTRY_SERIAL doesn't exist or post is deleted |
@@ -1533,7 +1740,6 @@ The response is an array of comment objects (not wrapped in a container object).
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 200 OK | Comments retrieved successfully | Valid request |
 | 401 Unauthorized | Authentication required | No/invalid credentials |
 | 404 Not Found | Author not found | AUTHOR_SERIAL doesn't exist |
 
@@ -1602,7 +1808,6 @@ curl -u username:password \
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 200 OK | Comment retrieved successfully | Valid comment ID |
 | 401 Unauthorized | Authentication required | No/invalid credentials |
 | 404 Not Found | Comment not found | COMMENT_SERIAL doesn't exist or author doesn't match |
 
@@ -1739,7 +1944,6 @@ curl -u username:password \
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 200 OK | Likes retrieved successfully | Valid request |
 | 401 Unauthorized | Authentication required | Friends-only post accessed without auth |
 | 403 Forbidden | Access denied | Friends-only post but user is not a friend |
 | 404 Not Found | Post not found | ENTRY_SERIAL doesn't exist or post is deleted |
@@ -1830,7 +2034,6 @@ Same as post likes response - returns a `likes` object with `items` array contai
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 200 OK | Comment likes retrieved successfully | Valid request |
 | 401 Unauthorized | Authentication required | Friends-only post's comment accessed without auth |
 | 403 Forbidden | Access denied | Friends-only post but user is not a friend |
 | 404 Not Found | Comment or post not found | COMMENT_ID doesn't exist or post is deleted |
@@ -1940,7 +2143,6 @@ curl -u username:password \
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 200 OK | Liked items retrieved successfully | Valid request |
 | 401 Unauthorized | Authentication required | No/invalid credentials |
 | 404 Not Found | Author not found | AUTHOR_SERIAL doesn't exist |
 
@@ -2006,7 +2208,6 @@ curl -u username:password \
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 200 OK | Like retrieved successfully | Valid like ID |
 | 401 Unauthorized | Authentication required | No/invalid credentials |
 | 404 Not Found | Like not found | LIKE_SERIAL doesn't exist or author doesn't match |
 
@@ -2362,7 +2563,6 @@ curl -u username:password -X POST \
 
 | Status Code | Description | When This Occurs |
 |-------------|-------------|------------------|
-| 201 Created | Object successfully received | Valid request with proper object type |
 | 400 Bad Request | Invalid request format | Missing required fields, invalid JSON, or unsupported object type |
 | 401 Unauthorized | Authentication required | No/invalid credentials provided |
 | 404 Not Found | Author not found | AUTHOR_SERIAL doesn't exist on this node |

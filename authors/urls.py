@@ -1,25 +1,32 @@
 from django.urls import path, re_path
 from . import views
 from .views import (
-    SignUpView, redirect_to_profile, StreamRedirectView, AuthorProfileView, 
-    AuthorsListAPIView, AuthorAPIView, AuthorEditView, CreatePostView, 
-    PostDetailView, EditPostView, DeletePostView, AuthorPostsView, PostAPIView, 
-    AuthorStreamView, follow_author, cancel_follow_request, unfollow_author, 
-    FollowRequest, FollowRequestsView, approve_follow_request, deny_follow_request, 
-    toggle_like, PostLikesView, add_comment, toggle_comment_like, 
-    FollowersListView, FollowingListView, AuthorDeletedPostsAdminView
+    SignUpView, redirect_to_profile, StreamRedirectView, AuthorProfileView,
+    AuthorEditView, CreatePostView,
+    PostDetailView, EditPostView, DeletePostView, AuthorPostsView, PostAPIView,
+    AuthorStreamView, follow_author, cancel_follow_request, unfollow_author,
+    FollowRequest, FollowRequestsView, approve_follow_request, deny_follow_request,
+    toggle_like, PostLikesView, add_comment, toggle_comment_like,
+    FollowersListView, FollowingListView, AuthorDeletedPostsAdminView,
+    RemoteNodeListView, AddRemoteNodeView, EditRemoteNodeView, DeleteRemoteNodeView,
+    FollowRemoteAuthorView, FederationGuideView, NodeManagementView
 )
 
 # Import new API views
 from .api_views import (
-    InboxAPIView, FollowersAPIView, SingleFollowerAPIView, EntriesAPIView,
+    InboxAPIView, FollowersAPIView, SingleFollowerAPIView, EntriesAPIView, AuthorsListAPIView, AuthorAPIView,
     SingleEntryAPIView, CommentsAPIView, LikesAPIView, LikedAPIView, ImageEntryAPIView,
-    CommentLikesAPIView
+    CommentLikesAPIView, FollowingAPIView, SingleFollowingAPIView
+    , FollowRequestsAPIView
 )
+
+# Import configuration views
+from .views import NodeConfigurationView, ConfigureRemoteNodeView
 
 app_name = "authors"
 urlpatterns = [
     # ========== UI Routes (HTML Views) ==========
+    path("explore/", views.ExploreView.as_view(), name="explore"),
     path("accounts/signup/", SignUpView.as_view(), name="signup"),
     path("accounts/profile/", redirect_to_profile, name="redirect_profile"),
     path("authors/<uuid:author_id>/", AuthorProfileView.as_view(), name="author_profile"),
@@ -35,6 +42,9 @@ urlpatterns = [
     path("authors/<uuid:author_id>/followers/", FollowersListView.as_view(), name="followers_list"),
     path("authors/<uuid:author_id>/following/", FollowingListView.as_view(), name="following_list"),
     path("authors/<uuid:author_id>/deleted_posts/", AuthorDeletedPostsAdminView.as_view(), name="author_deleted_posts_admin"),
+
+    # Follow Remote Author UI route
+    path("authors/<uuid:author_id>/follow_remote/", FollowRemoteAuthorView.as_view(), name="follow_remote_author"),
 
 
     path("authors/follow_request/<int:request_id>/approve/", approve_follow_request, name="approve_follow_request"),
@@ -60,12 +70,18 @@ urlpatterns = [
 
     # Inbox API (important)
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/inbox/?$', InboxAPIView.as_view(), name="inbox_api"),
+    # Follow Requests API (local author only)
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/follow_requests/?$', FollowRequestsAPIView.as_view(), name='follow_requests_api'),
     
     # Followers API
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/followers/?$', FollowersAPIView.as_view(), name="followers_api"),
-    # to support FQID in addition to UUID
-    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/followers/(?P<follower_id>.+)$', 
-            SingleFollowerAPIView.as_view(), name="single_follower_api"),
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/followers/(?P<follower_fqid>.+)$', 
+        SingleFollowerAPIView.as_view(), name="single_follower_api"),
+    # Following API (local author managing who they follow)
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/following/?$', 
+        FollowingAPIView.as_view(), name="following_api"),
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/following/(?P<following_fqid>.+)$', 
+        SingleFollowingAPIView.as_view(), name="single_following_api"),
     
     # Entries/Posts API 
     # List/create endpoint
@@ -105,13 +121,13 @@ urlpatterns = [
     re_path(r'^api/entries/(?P<entry_fqid>.+)/likes$', LikesAPIView.as_view(), name="entry_fqid_likes_api"),
     re_path(r'^api/entries/(?P<entry_fqid>.+)$', SingleEntryAPIView.as_view(), name="entry_fqid_api"),
     
-    # Comment with FQID in path
-    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comment/(?P<comment_fqid>.+)$', 
-            CommentsAPIView.as_view(), name="remote_comment_api"),
-    
-    # Comment Likes with FQID
+    # Comment Likes with FQID - MUST come before general comment FQID route
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments/(?P<comment_fqid>.+)/likes$', 
             CommentLikesAPIView.as_view(), name="comment_fqid_likes_api"),
+    
+    # Comment with FQID in path
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments?/(?P<comment_fqid>.+)$', 
+        CommentsAPIView.as_view(), name="remote_comment_api"),
     
     # Commented API with FQID
     re_path(r'^api/authors/(?P<author_fqid>.+)/commented$', CommentsAPIView.as_view(), name="author_fqid_commented_api"),
@@ -128,4 +144,21 @@ urlpatterns = [
     path("api/posts/<uuid:post_id>/", PostAPIView.as_view(), name="post_api"),
     path('upload_image/', views.upload_image, name='upload_image'),
     path('image/<int:image_id>/', views.serve_image, name='serve_image'),
+    path('api/images/', views.receive_remote_image, name='receive_remote_image'),
+
+        # ========== Node Management Landing Page ==========
+    path('node_management/', NodeManagementView.as_view(), name='node_management'),
+
+    # ========== Node Admin Management Routes ==========
+    path('node_admin/remote_nodes/', RemoteNodeListView.as_view(), name='remote_nodes_list'),
+    path('node_admin/remote_nodes/add/', AddRemoteNodeView.as_view(), name='add_remote_node'),
+    path('node_admin/remote_nodes/<int:node_id>/edit/', EditRemoteNodeView.as_view(), name='edit_remote_node'),
+    path('node_admin/remote_nodes/<int:node_id>/delete/', DeleteRemoteNodeView.as_view(), name='delete_remote_node'),
+
+    # ========== Node Configuration Routes ==========
+    path('node_config/', NodeConfigurationView.as_view(), name='node_config'),
+    path('configure_remote_node/', ConfigureRemoteNodeView.as_view(), name='configure_remote_node'),
+
+    # ========== Federation Guide ==========
+    path('federation_guide/', FederationGuideView.as_view(), name='federation_guide'),
 ]
