@@ -791,57 +791,84 @@ class FollowingListView(LoginRequiredMixin, ListView):
 @login_required
 @require_POST
 def follow_author(request, author_id):
-    '''
-     Send a follow request to another author.
-     '''
+    """
+    Send a follow request to another author.
+
+    - If the target is LOCAL → create/refresh a FollowRequest (current behaviour).
+    - If the target is REMOTE → use SingleFollowingAPIView.put to send a federated
+      Follow to their inbox (same logic as the "enter remote URL" flow).
+    """
     author_to_follow = get_object_or_404(Author, id=author_id)
+
     if author_to_follow == request.user:  # Prevent following oneself
         messages.error(request, "You cannot follow yourself.")
-        return redirect('authors:author_profile', author_id=author_id)
+        return redirect("authors:author_profile", author_id=author_id)
 
-    existing_follow = Follow.objects.filter(follower=request.user, following=author_to_follow).exists()
-    if existing_follow:  # Already following
+    # Already following?
+    if Follow.objects.filter(follower=request.user, following=author_to_follow).exists():
         messages.info(request, f"You are already following {author_to_follow.displayName}.")
-        return redirect('authors:author_profile', author_id=author_id)
+        return redirect("authors:author_profile", author_id=author_id)
 
-    # Either create or update the existing follow request
+    # 🔹 Case 1: remote author → use the same federation path as FollowRemoteAuthorView
+    if hasattr(author_to_follow, "is_remote") and author_to_follow.is_remote():
+        remote_author_url = author_to_follow.url
+        if not remote_author_url:
+            messages.error(
+                request,
+                "This remote author does not have a URL configured, so a follow cannot be sent.",
+            )
+            return redirect("authors:author_profile", author_id=author_id)
+
+        # Reuse SingleFollowingAPIView.put just like FollowRemoteAuthorView
+        api_view = SingleFollowingAPIView()
+        api_response = api_view.put(
+            request,
+            author_id=str(request.user.id),
+            following_fqid=remote_author_url,
+        )
+
+        if 200 <= api_response.status_code < 300:
+            # SingleFollowingAPIView already creates the Follow row on success
+            messages.success(
+                request,
+                f"Follow request sent to remote author {author_to_follow.displayName}.",
+            )
+        else:
+            error_msg = getattr(api_response, "content", b"").decode(errors="ignore")
+            messages.error(
+                request,
+                f"Failed to follow remote author (status {api_response.status_code}). {error_msg}",
+            )
+
+        return redirect("authors:author_profile", author_id=author_id)
+
+    # 🔹 Case 2: local author → keep existing FollowRequest behaviour
     follow_request, created = FollowRequest.objects.get_or_create(
         sender=request.user,
         receiver=author_to_follow,
-        defaults={'status': 'PENDING'}
+        defaults={"status": "PENDING"},
     )
 
     if not created:
         # If it exists and was denied or approved before, reset to pending
-        # Chose this method rather than delete-and-recreate to preserve history
         if reopen_follow_request(follow_request):
-            messages.info(request, f"Follow request re-sent to {author_to_follow.displayName}.")
+            messages.info(
+                request,
+                f"Follow request re-sent to {author_to_follow.displayName}.",
+            )
         else:
-            messages.info(request, f"Follow request already pending.")
+            messages.info(
+                request,
+                f"Follow request to {author_to_follow.displayName} is already pending.",
+            )
     else:
-        messages.success(request, f"Follow request sent to {author_to_follow.displayName}!")
+        messages.success(
+            request,
+            f"Follow request sent to {author_to_follow.displayName}!",
+        )
 
-    return redirect('authors:author_profile', author_id=author_id)
+    return redirect("authors:author_profile", author_id=author_id)
 
-@login_required
-def cancel_follow_request(request, author_id):
-    """
-    Cancel a pending follow request sent by the logged-in user.
-    """
-    author_to_cancel = get_object_or_404(Author, id=author_id)
-    follow_request = FollowRequest.objects.filter(
-        sender=request.user,
-        receiver=author_to_cancel,
-        status='PENDING'
-    ).first()
-
-    if follow_request:
-        follow_request.delete()
-        messages.info(request, f"Follow request to {author_to_cancel.displayName} has been cancelled.")
-    else:
-        messages.warning(request, "No pending follow request to cancel.")
-
-    return redirect('authors:author_profile', author_id=author_id)
 
 @login_required
 @require_POST
