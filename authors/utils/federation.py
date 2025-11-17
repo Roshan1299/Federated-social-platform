@@ -196,12 +196,31 @@ def notify_remote_edit_post(post: Post):
 def notify_remote_delete_post(post: Post):
     """
     Called when a post is deleted.
-    Sends a simple delete notification.
+    Sends the post object marked as deleted to all remote followers/friends.
+    This ensures they know the post has been deleted.
     """
+    # Send the post with its current visibility but mark as deleted
+    # This will trigger the remote node to update their local copy with deleted=True
     payload = {
-        "type": "delete",
+        "type": "post",
         "id": post.origin,
-        "author": post.author.url,
+        "source": post.source,
+        "origin": post.origin,
+        "title": post.title,
+        "content": post.content,  # Content remains but will be hidden when viewed
+        "contentType": post.contentType,
+        "visibility": post.visibility,  # Keep original visibility
+        "published": post.published.isoformat(),
+        "updated": post.updated.isoformat(),
+        "deleted": True,  # Explicitly mark as deleted for remote update
+        "author": {
+            "type": "author",
+            "id": post.author.url,
+            "host": post.author.host,
+            "displayName": post.author.displayName,
+            "url": post.author.url,
+            "github": post.author.github,
+        },
     }
     send_to_remote_inboxes(post.author, payload)
 
