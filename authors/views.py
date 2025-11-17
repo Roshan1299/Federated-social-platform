@@ -33,10 +33,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate
 from .forms import ImageUploadForm
 from .models import Image
-from authors.utils.federation import (
-    send_comment_to_post_owner,
-    send_like_to_post_owner,
-)
+from authors.utils.federation import send_comment_to_post_owner,send_like_to_post_owner, send_comment_like_to_post_owner
 
 def render_post_content(post):
     ''' Rendered HTML for markdown/plain posts. '''
@@ -1178,6 +1175,13 @@ def toggle_comment_like(request, comment_id):
     else:
         # If new like --> add it
         messages.success(request, "Liked comment.")
+
+    # If this post belongs to a REMOTE node, notify that node
+    local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+    post_host = (post.author.host or "").rstrip("/")
+
+    if post_host and post_host != local_host:
+        send_comment_like_to_post_owner(like)
 
     return redirect('authors:post_detail', post_id=post.id)
 

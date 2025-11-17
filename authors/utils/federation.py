@@ -3,9 +3,7 @@ from django.conf import settings
 from authors.models import Follow, RemoteNode, Post, Comment, Like, Author
 from authors.utils.nodes import remote_post
 
-
-
-
+# Find which RemoteNode an author belongs to (by matching host URL)
 def get_remote_node_for_author(author: Author):
     # Take the author's host (e.g. "https://team-green.herokuapp.com")
     host = (author.host or "").rstrip("/")
@@ -18,7 +16,8 @@ def get_remote_node_for_author(author: Author):
         return RemoteNode.objects.get(base_url__icontains=host, enabled=True)
     except RemoteNode.DoesNotExist:
         return None
-    
+
+# Get all remote followers and remote mutual friends
 def get_remote_followers_and_friends(author):
     """
     Get a list of (RemoteNode, remote_author) tuples for remote followers 
@@ -38,7 +37,7 @@ def get_remote_followers_and_friends(author):
     local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
     results = {}  # Use a dict to avoid duplicates
 
-    # Get followers
+    # Find remote followers
     followers = Follow.objects.filter(following=author).select_related("follower")
     for f in followers:
         follower = f.follower
@@ -50,7 +49,7 @@ def get_remote_followers_and_friends(author):
             except RemoteNode.DoesNotExist:
                 continue
 
-    # Get friends (mutual follows)
+    # Find remote mutual friends
     following = Follow.objects.filter(follower=author).select_related("following")
     for f in following:
         followed_author = f.following
@@ -66,28 +65,17 @@ def get_remote_followers_and_friends(author):
     
     return list(results.values())
 
-
+# Build the remote inbox URL for a remote author
 def inbox_url_for_remote(node: RemoteNode, remote_author_url: str) -> str:
-    """
-    Build the inbox URL for the remote author.
-
-    Example:
-        node.base_url        = "https://team-green.herokuapp.com"
-        remote_author_url    = "https://team-green.herokuapp.com/api/authors/1234/"
-
-        inbox URL result:
-        "https://team-green.herokuapp.com/api/authors/1234/inbox"
-    """
     author_id = remote_author_url.rstrip("/").split("/")[-1]
     return f"{node.base_url.rstrip('/')}/api/authors/{author_id}/inbox"
 
+# ---------------------------------------------------------------------
+# Payload Builders
+# ---------------------------------------------------------------------
 
+# Convert Post to JSON for remote sending
 def build_post_payload(post: Post) -> dict:
-    """
-    Convert a Post into JSON for remote nodes.
-
-    Only basic fields are included.
-    """
     return {
         "type": "post",
         "id": post.origin,
@@ -109,11 +97,8 @@ def build_post_payload(post: Post) -> dict:
         },
     }
 
-
+# Convert a Comment into JSON for remote nodes
 def build_comment_payload(comment: Comment) -> dict:
-    """
-    Convert a Comment into JSON for remote nodes.
-    """
     return {
         "type": "comment",
         "id": comment.origin,
@@ -129,11 +114,8 @@ def build_comment_payload(comment: Comment) -> dict:
         },
     }
 
-
+# Convert a Like into JSON for remote nodes
 def build_like_payload(like: Like) -> dict:
-    """
-    Convert a Like into JSON for remote nodes.
-    """
     return {
         "type": "like",
         "id": like.origin,
@@ -147,22 +129,24 @@ def build_like_payload(like: Like) -> dict:
             "url": like.author.url,
         },
     }
+# Convert a CommentLike into JSON for remote nodes
+def build_comment_like_payload(comment_like):
+    return {
+        "type": "like",
+        "id": comment_like.origin,
+        "object": comment_like.comment.origin,
+        "summary": f"{comment_like.author.displayName} likes your comment",
+        "author": {
+            "id": comment_like.author.url,
+            "host": comment_like.author.host,
+            "displayName": comment_like.author.displayName,
+            "url": comment_like.author.url,
+        },
+    }
 
 
+# Send payload (post/comment/like) to remote followers/friends, respecting visibility
 def send_to_remote_inboxes(author, payload: dict, post_visibility: str = 'PUBLIC'):
-    """
-    Send the given payload to every remote follower and friend's inbox,
-    respecting post visibility settings.
-
-    For each remote follower/friend:
-        - Build inbox URL for that follower on their node
-        - Call remote_post(url, payload, base_url=node.base_url)
-        
-    Visibility rules:
-    - PUBLIC: Send to both followers and friends
-    - FRIENDS: Send only to friends (mutual follows)
-    - PUBLIC_UNLISTED: Do not send to any remote nodes (not pushed to inboxes)
-    """
     # Don't send PUBLIC_UNLISTED posts to remote nodes at all
     if post_visibility == 'PUBLIC_UNLISTED':
         return  # Early return - don't send unlisted posts to remote nodes
@@ -199,7 +183,7 @@ def send_to_remote_inboxes(author, payload: dict, post_visibility: str = 'PUBLIC
 
 
 # ---------------------------------------------------------------------
-# Public helpers: call these from your views
+# Nofitications
 # ---------------------------------------------------------------------
 
 def notify_remote_new_post(post: Post):
@@ -210,7 +194,7 @@ def notify_remote_new_post(post: Post):
     payload = build_post_payload(post)
     send_to_remote_inboxes(post.author, payload, post.visibility)
 
-
+# Called when a post is edited
 def notify_remote_edit_post(post: Post):
     """
     Called when a post is edited.
@@ -219,7 +203,7 @@ def notify_remote_edit_post(post: Post):
     payload = build_post_payload(post)
     send_to_remote_inboxes(post.author, payload, post.visibility)
 
-
+# Called when a post is deleted
 def notify_remote_delete_post(post: Post):
     """
     Called when a post is deleted.
@@ -251,25 +235,17 @@ def notify_remote_delete_post(post: Post):
     }
     send_to_remote_inboxes(post.author, payload, post.visibility)
 
-
+# Called when a comment is created
 def notify_remote_comment(comment: Comment):
-    """
-    Called when a comment is created.
-    Sends the comment JSON to remote followers and friends.
-    """
     payload = build_comment_payload(comment)
     send_to_remote_inboxes(comment.author, payload)
 
-
+# Called when a like is created
 def notify_remote_like(like: Like):
-    """
-    Called when a like is created.
-    Sends the like JSON to remote followers and friends.
-    """
     payload = build_like_payload(like)
     send_to_remote_inboxes(like.author, payload)
 
-
+# Send a comment to the original author's remote inbox
 def send_comment_to_post_owner(comment: Comment) -> bool:
     # Get the post being commented on
     post = comment.post
@@ -295,7 +271,7 @@ def send_comment_to_post_owner(comment: Comment) -> bool:
         base_url=node.base_url,
     )
 
-
+# Send a like on a post to remote post owner
 def send_like_to_post_owner(like: Like) -> bool:
     # Get the post that was liked
     post = like.post
@@ -313,6 +289,30 @@ def send_like_to_post_owner(like: Like) -> bool:
     payload = build_like_payload(like)
 
     # Send payload to remote node using base_url + username + password
+    return remote_post(
+        url=inbox_url,
+        payload=payload,
+        base_url=node.base_url,
+    )
+
+# Send a comment-like to the remote comment owner
+def send_comment_like_to_post_owner(comment_like) -> bool:
+    # The comment being liked
+    comment = comment_like.comment
+    remote_author = comment.author
+
+    # Find remote node for this comment author
+    node = get_remote_node_for_author(remote_author)
+    if not node:
+        return False  # remote node not registered
+
+    # Build inbox URL of comment author
+    inbox_url = inbox_url_for_remote(node, remote_author.url)
+
+    # Build payload
+    payload = build_comment_like_payload(comment_like)
+
+    # Send to remote node
     return remote_post(
         url=inbox_url,
         payload=payload,

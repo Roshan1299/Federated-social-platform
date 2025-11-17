@@ -89,12 +89,17 @@ def handle_post(self, recipient, data, request):
         # STEP 1: Check if we already have this post (by origin, NOT by UUID!)
         existing_post = Post.objects.filter(origin=origin).first()
         
+        # Determine visibility, mapping unlisted to PUBLIC_UNLISTED
+        visibility = data.get('visibility', 'PUBLIC').upper()
+        if data.get('unlisted', False):
+            visibility = 'PUBLIC_UNLISTED'
+
         if existing_post:
             # Post already exists - update it
             existing_post.title = data.get('title', existing_post.title)
             existing_post.content = data.get('content', existing_post.content)
             existing_post.contentType = data.get('contentType', existing_post.contentType)
-            existing_post.visibility = data.get('visibility', existing_post.visibility)
+            existing_post.visibility = visibility
             existing_post.source = data.get('source', existing_post.source)
             existing_post.updated = timezone.now()
 
@@ -124,7 +129,7 @@ def handle_post(self, recipient, data, request):
             title=data.get('title', 'Untitled'),
             content=data.get('content', ''),
             contentType=data.get('contentType', 'text/plain'),
-            visibility=data.get('visibility', 'PUBLIC'),
+            visibility=visibility,
             source=data.get('source', origin),
             origin=origin,
         )
