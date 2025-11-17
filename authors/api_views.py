@@ -1323,16 +1323,12 @@ class ImageEntryAPIView(View):
         if not post.image:
             return HttpResponse("No image found", status=404)
         
-        # Return the image file
-        with open(post.image.path, 'rb') as f:
-            image_data = f.read()
+        # Get the image data from the database
+        image = post.image
+        image_data = bytes(image.data)
         
-        # Determine content type
-        content_type = 'image/jpeg'
-        if post.image.name.endswith('.png'):
-            content_type = 'image/png'
-        elif post.image.name.endswith('.gif'):
-            content_type = 'image/gif'
+        # Use the content_type from the Image model
+        content_type = image.content_type or 'image/jpeg'
         
         return HttpResponse(image_data, content_type=content_type)
 
