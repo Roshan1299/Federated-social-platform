@@ -4,6 +4,10 @@ from django.utils import timezone
 
 from authors.models import Author, Post, Follow, Like, Comment, CommentLike
 
+""" 
+Create 5 authors with posts, follows, comments, and likes for testing.
+    Usage: python manage.py seed_db [--clear] 
+"""
 
 class Command(BaseCommand):
     help = 'Seed the database with 5 authors, posts, follows, comments and likes for local development'

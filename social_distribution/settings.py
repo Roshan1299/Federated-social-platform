@@ -29,6 +29,10 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
+# Set this in  Heroku Config Vars (replace with your app url and name)
+#   heroku config:set BASE_URL=https://darkblue-s.herokuapp.com -a darkblue
+BASE_URL = os.environ.get('BASE_URL', 'http://localhost:8000')
+
 
 # Application definition
 
