@@ -47,31 +47,28 @@ def JsonResponse(*args, **kwargs):
     return _original_JsonResponse(*args, **kwargs)
 # ==================== Helper Functions for FQID Support ====================
 
-def _get_author_by_id_or_fqid(author_id=None, author_fqid=None):
-    """Get author by UUID (author_id) or FQID (author_fqid / full URL).
 
-    Behavior:
-    - If `author_fqid` is provided, perform a strict FQID lookup against the
-      `url` field (no UUID fallback). This mirrors the comment/like FQID helpers.
-    - If `author_id` is provided, perform a UUID/serial lookup against `id`.
-    """
-    # Prefer explicit FQID lookups when provided (strict - no UUID fallback)
+def _get_author_by_id_or_fqid(author_id=None, author_fqid=None):
+    """Get author by UUID (author_id) or FQID (author_fqid / full URL)."""
+
     if author_fqid:
         fqid_norm = author_fqid.rstrip('/') if isinstance(author_fqid, str) else author_fqid
         fqid_with_slash = fqid_norm + '/'
-        try:
-            return Author.objects.get(Q(url=fqid_norm) | Q(url=fqid_with_slash))
-        except Author.DoesNotExist:
+
+        qs = Author.objects.filter(Q(url=fqid_norm) | Q(url=fqid_with_slash))
+
+        if not qs.exists():
             raise Http404("Author not found")
 
-    # UUID/serial lookup
+        # If multiple somehow exist, pick a stable one instead of exploding
+        return qs.order_by("id").first()
+
     if author_id:
         try:
             return Author.objects.get(id=author_id)
         except (Author.DoesNotExist, ValueError):
             raise Http404("Author not found")
 
-    # Nothing provided
     raise Http404("Author identifier required")
 
 
