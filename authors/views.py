@@ -26,7 +26,7 @@ from django.contrib.auth import authenticate
 from .forms import ImageUploadForm
 from .models import Image
 from .inbox_handlers import reopen_follow_request
-from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post
+from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post, send_unfollow_to_remote_author
 import uuid
 import urllib.parse
 import requests
@@ -850,7 +850,18 @@ def unfollow_author(request, author_id):
     Unfollow an author.
     '''
     author_to_unfollow = get_object_or_404(Author, id=author_id)
-    Follow.objects.filter(follower=request.user, following=author_to_unfollow).delete()  # Remove follow relationship
+
+    # Remove local follow relationship
+    Follow.objects.filter(follower=request.user, following=author_to_unfollow).delete()
+
+    # If this is a remote author, notify their node so they stop
+    # treating us as a follower / friend.
+    try:
+        if author_to_unfollow.is_remote():
+            send_unfollow_to_remote_author(request.user, author_to_unfollow)
+    except Exception:
+        pass
+
     messages.success(request, f"You have unfollowed {author_to_unfollow.displayName}.")
     return redirect('authors:author_profile', author_id=author_id)
 

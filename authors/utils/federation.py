@@ -73,6 +73,19 @@ def inbox_url_for_remote(node: RemoteNode, remote_author_url: str) -> str:
 # Payload Builders
 # ---------------------------------------------------------------------
 
+# Minimal Author representation for follow/unfollow payloads
+def build_minimal_author_dict(author: Author) -> dict:
+    """
+    Minimal author representation suitable for follow/unfollow payloads.
+    """
+    return {
+        "id": author.url,
+        "host": author.host,
+        "displayName": author.displayName,
+        "url": author.url,
+        "github": author.github,
+    }
+
 # Convert Post to JSON for remote sending
 def build_post_payload(post: Post) -> dict:
     return {
@@ -272,6 +285,31 @@ def send_comment_to_post_owner(comment: Comment) -> bool:
         payload=payload,
         base_url=node.base_url,
     )
+
+# Send an unfollow notification to a remote author
+def send_unfollow_to_remote_author(local_author: Author, remote_author: Author) -> bool:
+    """
+    Notify a remote node that local_author has unfollowed remote_author.
+    The remote node will remove Follow(local_author_stub -> remote_author).
+    """
+    node = get_remote_node_for_author(remote_author)
+    if not node:
+        return False  # remote node not configured
+
+    inbox_url = inbox_url_for_remote(node, remote_author.url)
+
+    payload = {
+        "type": "unfollow",
+        "actor": build_minimal_author_dict(local_author),
+        "object": build_minimal_author_dict(remote_author),
+    }
+
+    return remote_post(
+        url=inbox_url,
+        payload=payload,
+        base_url=node.base_url,
+    )
+
 
 # Send a like on a post to remote post owner
 def send_like_to_post_owner(like: Like) -> bool:

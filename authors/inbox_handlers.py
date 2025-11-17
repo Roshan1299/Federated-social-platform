@@ -1,7 +1,7 @@
 import uuid
 from django.http import JsonResponse
 from django.utils import timezone
-from .models import Author, Post, Comment, Like, CommentLike, FollowRequest
+from .models import Author, Post, Comment, Like, CommentLike, FollowRequest, Follow
 
 import typing
 
@@ -68,6 +68,39 @@ def handle_follow_request(self, recipient, data, request):
 
     except Exception as e:
         return JsonResponse({'error': f'Failed to process follow request: {str(e)}'}, status=400)
+
+
+def handle_unfollow(self, recipient, data, request):
+    """
+    Handle an incoming unfollow from another node.
+
+    Expected payload shape (we only really need 'actor'):
+    {
+        "type": "unfollow",
+        "actor": { ... remote author ... },
+        "object": { ... our recipient author ... }   # optional
+    }
+    """
+    try:
+        actor_data = data.get("actor", {}) or {}
+        if not actor_data:
+            return JsonResponse({"error": "Unfollow must include actor"}, status=400)
+
+        # Ensure we have a stub Author for the remote actor
+        actor = get_or_create_author(actor_data)
+
+        # Remove any follow relationship actor -> recipient
+        Follow.objects.filter(follower=actor, following=recipient).delete()
+
+        # Also clear any pending follow requests from this actor to this recipient
+        FollowRequest.objects.filter(sender=actor, receiver=recipient, status="PENDING").delete()
+
+        return JsonResponse({"message": "Unfollow processed"}, status=200)
+    except Exception as e:
+        return JsonResponse(
+            {"error": f"Failed to process unfollow: {str(e)}"},
+            status=400,
+        )
 
 
 def handle_post(self, recipient, data, request):

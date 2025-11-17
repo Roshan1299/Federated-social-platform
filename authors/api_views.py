@@ -20,12 +20,14 @@ from .inbox_handlers import (
     handle_comment as ih_handle_comment,
     handle_like as ih_handle_like,
     handle_follow_request as ih_handle_follow_request,
+    handle_unfollow as ih_handle_unfollow,
     reopen_follow_request as reopen_follow_request,
 )
 from .utils.federation import (
     notify_remote_new_post,
     notify_remote_edit_post,
     notify_remote_delete_post,
+    send_unfollow_to_remote_author,
 )
 import requests
 import urllib.parse
@@ -441,6 +443,8 @@ class InboxAPIView(View):
             
             if object_type == 'follow':
                 return self.handle_follow_request(recipient, data, request)
+            elif object_type == 'unfollow':
+                return self.handle_unfollow(recipient, data, request)
             elif object_type == 'post':
                 return self.handle_post(recipient, data, request)
             elif object_type == 'like':
@@ -459,6 +463,10 @@ class InboxAPIView(View):
         """Delegate follow handling to inbox_handlers_updated.handle_follow_request"""
         return ih_handle_follow_request(self, recipient, data, request)
     
+    def handle_unfollow(self, recipient, data, request):
+        """Delegate unfollow handling to inbox_handlers.handle_unfollow"""
+        return ih_handle_unfollow(self, recipient, data, request)
+
     def handle_post(self, recipient, data, request):
         """Delegate post handling to inbox_handlers_updated.handle_post"""
         return ih_handle_post(self, recipient, data, request)
@@ -675,10 +683,20 @@ class SingleFollowingAPIView(View):
             return HttpResponse('Not Found', status=404)
 
         if Follow.objects.filter(follower=author, following=target).exists():
+            # Remove local relationship
             Follow.objects.filter(follower=author, following=target).delete()
+
+            # If target is remote, notify their node
+            try:
+                if getattr(target, "is_remote", None) and target.is_remote():
+                    send_unfollow_to_remote_author(author, target)
+            except Exception:
+                pass  # don't fail the API if federation call dies
+
             return json_response({'message': 'Unfollowed'}, status=204)
 
         return HttpResponse('Not Found', status=404)
+
 
 
 @method_decorator(http_basic_auth_or_session, name='dispatch')
