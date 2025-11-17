@@ -47,9 +47,8 @@ class Author(AbstractUser):
 
 
 class Image(models.Model):
-    id = models.AutoField(primary_key=True)
     file_name = models.CharField(max_length=255)
-    content_type = models.CharField(max_length=50)
+    content_type = models.CharField(max_length=100)
     data = models.BinaryField()
 
     def __str__(self):

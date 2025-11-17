@@ -119,6 +119,12 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+REMOTE_NODES = [
+    {
+        "host": "https://node-b.herokuapp.com",   # Remote host (or localhost:8001)
+        "auth": "bm9kZWJfdXNlcjpzdXBlcl9zZWNyZXRfcHc="  # base64("nodeb_user:super_secret_pw")
+    }
+]
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/

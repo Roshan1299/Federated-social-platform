@@ -144,6 +144,7 @@ urlpatterns = [
     path("api/posts/<uuid:post_id>/", PostAPIView.as_view(), name="post_api"),
     path('upload_image/', views.upload_image, name='upload_image'),
     path('image/<int:image_id>/', views.serve_image, name='serve_image'),
+    path('api/images/', views.receive_remote_image, name='receive_remote_image'),
 
     # ========== Node Admin Management Routes ==========
     path('node_admin/remote_nodes/', RemoteNodeListView.as_view(), name='remote_nodes_list'),
