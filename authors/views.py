@@ -1168,10 +1168,10 @@ def toggle_comment_like(request, comment_id):
     if not can_like:
         return HttpResponse("Forbidden", status=403)
 
-    like, created = CommentLike.objects.get_or_create(author=viewer, comment=comment)
+    comment_like, created = CommentLike.objects.get_or_create(author=viewer, comment=comment)
     if not created:
         # If already liked → remove like
-        like.delete()
+        comment_like.delete()
         messages.info(request, "Unliked comment.")
     else:
         # If new like --> add it
@@ -1179,10 +1179,10 @@ def toggle_comment_like(request, comment_id):
 
     # If this post belongs to a REMOTE node, notify that node
     local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
-    post_host = (post.author.host or "").rstrip("/")
+    comment_host = (comment.author.host or "").rstrip("/")
 
-    if post_host and post_host != local_host:
-        send_comment_like_to_post_owner(like)
+    if comment_host and comment_host != local_host:
+        send_comment_like_to_post_owner(comment_like)
         
 
     return redirect('authors:post_detail', post_id=post.id)
