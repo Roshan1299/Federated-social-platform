@@ -9,7 +9,7 @@ from .views import (
     toggle_like, PostLikesView, add_comment, toggle_comment_like,
     FollowersListView, FollowingListView, AuthorDeletedPostsAdminView,
     RemoteNodeListView, AddRemoteNodeView, EditRemoteNodeView, DeleteRemoteNodeView,
-    FollowRemoteAuthorView, FederationGuideView
+    FollowRemoteAuthorView, FederationGuideView, NodeManagementView
 )
 
 # Import new API views
@@ -145,6 +145,9 @@ urlpatterns = [
     path('upload_image/', views.upload_image, name='upload_image'),
     path('image/<int:image_id>/', views.serve_image, name='serve_image'),
     path('api/images/', views.receive_remote_image, name='receive_remote_image'),
+
+        # ========== Node Management Landing Page ==========
+    path('node_management/', NodeManagementView.as_view(), name='node_management'),
 
     # ========== Node Admin Management Routes ==========
     path('node_admin/remote_nodes/', RemoteNodeListView.as_view(), name='remote_nodes_list'),

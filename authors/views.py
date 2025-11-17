@@ -1274,6 +1274,18 @@ def receive_remote_image(request):
     print(f"✅ Received remote image {image.id} from {username}")
     return JsonResponse({"status": "ok", "image_id": image.id}, status=201)
 
+
+class NodeManagementView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
+    """
+    Landing page for all node-related admin actions.
+    Accessible only to superusers (node admins).
+    """
+    template_name = "authors/node_management.html"
+
+    def test_func(self):
+        return self.request.user.is_superuser
+    
+
 class NodeConfigurationView(LoginRequiredMixin, UserPassesTestMixin, View):
     template_name = "authors/node_configuration.html"
 
