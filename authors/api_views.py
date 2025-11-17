@@ -51,39 +51,26 @@ def JsonResponse(*args, **kwargs):
 
 
 def _get_author_by_id_or_fqid(author_id=None, author_fqid=None):
-    """Get author by UUID (author_id) or FQID (author_fqid / full URL).
+    """Get author by UUID (author_id) or FQID (author_fqid / full URL)."""
 
-    - If author_id is given, try UUID first.
-    - If author_fqid is given, try URL (with/without slash); if that fails,
-      treat it as a possible UUID and try id lookup.
-    """
-
-    # 1) If we were explicitly given an author_id, try that first
-    if author_id:
-        try:
-            return Author.objects.get(id=author_id)
-        except (Author.DoesNotExist, ValueError):
-            # Don't immediately raise; we may still have a usable author_fqid
-            if not author_fqid:
-                raise Http404("Author not found")
-
-    # 2) If we have an author_fqid, try matching it as a URL
     if author_fqid:
         fqid_norm = author_fqid.rstrip('/') if isinstance(author_fqid, str) else author_fqid
         fqid_with_slash = fqid_norm + '/'
 
         qs = Author.objects.filter(Q(url=fqid_norm) | Q(url=fqid_with_slash))
-        if qs.exists():
-            # If multiple somehow exist, pick a stable one instead of exploding
-            return qs.order_by("id").first()
 
-        # 3) FQID didn't match URL – it might actually be a UUID/id string
+        if not qs.exists():
+            raise Http404("Author not found")
+
+        # If multiple somehow exist, pick a stable one instead of exploding
+        return qs.order_by("id").first()
+
+    if author_id:
         try:
-            return Author.objects.get(id=author_fqid)
+            return Author.objects.get(id=author_id)
         except (Author.DoesNotExist, ValueError):
             raise Http404("Author not found")
 
-    # 4) Nothing usable provided
     raise Http404("Author identifier required")
 
 
