@@ -145,17 +145,40 @@ def build_like_payload(like: Like) -> dict:
     }
 
 
-def send_to_remote_inboxes(author, payload: dict):
+def send_to_remote_inboxes(author, payload: dict, post_visibility: str = 'PUBLIC'):
     """
-    Send the given payload to every remote follower and friend's inbox.
+    Send the given payload to every remote follower and friend's inbox,
+    respecting post visibility settings.
 
     For each remote follower/friend:
         - Build inbox URL for that follower on their node
         - Call remote_post(url, payload, base_url=node.base_url)
+        
+    Visibility rules:
+    - PUBLIC: Send to both followers and friends
+    - FRIENDS: Send only to friends (mutual follows)
+    - PUBLIC_UNLISTED: Do not send to any remote nodes (not pushed to inboxes)
     """
+    # Don't send PUBLIC_UNLISTED posts to remote nodes at all
+    if post_visibility == 'PUBLIC_UNLISTED':
+        return  # Early return - don't send unlisted posts to remote nodes
+
     recipients = get_remote_followers_and_friends(author)
 
     for node, remote_author in recipients:
+        # For FRIENDS posts, only send to friends (mutual follows), not to followers
+        if post_visibility == 'FRIENDS':
+            # Check if this is a mutual follow (friend relationship)
+            # remote_author follows the post author, and post author follows remote_author
+            is_friend = (
+                # Check if remote_author follows the post author (they are in followers/friends list, so this is true)
+                # AND check if post author follows remote_author back (mutual)
+                Follow.objects.filter(follower=author, following=remote_author).exists()
+            )
+            
+            if not is_friend:
+                continue  # Skip non-friends for FRIENDS posts
+
         # Build inbox URL using the remote author's canonical author URL
         inbox_url = inbox_url_for_remote(node, remote_author.url)
 
@@ -178,19 +201,19 @@ def send_to_remote_inboxes(author, payload: dict):
 def notify_remote_new_post(post: Post):
     """
     Called when a post is created.
-    Sends the post JSON to all remote followers and friends.
+    Sends the post JSON to all remote followers and friends based on visibility.
     """
     payload = build_post_payload(post)
-    send_to_remote_inboxes(post.author, payload)
+    send_to_remote_inboxes(post.author, payload, post.visibility)
 
 
 def notify_remote_edit_post(post: Post):
     """
     Called when a post is edited.
-    Re-sends the updated post JSON to all remote followers and friends.
+    Re-sends the updated post JSON to all remote followers and friends based on visibility.
     """
     payload = build_post_payload(post)
-    send_to_remote_inboxes(post.author, payload)
+    send_to_remote_inboxes(post.author, payload, post.visibility)
 
 
 def notify_remote_delete_post(post: Post):
@@ -222,7 +245,7 @@ def notify_remote_delete_post(post: Post):
             "github": post.author.github,
         },
     }
-    send_to_remote_inboxes(post.author, payload)
+    send_to_remote_inboxes(post.author, payload, post.visibility)
 
 
 def notify_remote_comment(comment: Comment):

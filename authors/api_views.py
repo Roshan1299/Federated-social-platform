@@ -286,6 +286,13 @@ def can_access_post(post, request):
 def build_author_dict(author, request):
     """Helper function to build author JSON object"""
     web_url = reverse('authors:author_profile', kwargs={'author_id': author.id})
+    
+    # Build profileImage URL using serve_image endpoint
+    profile_image_url = None
+    if author.profileImage:
+        image_path = reverse('authors:serve_image', args=[author.profileImage.id])
+        profile_image_url = request.build_absolute_uri(image_path)
+    
     return {
         "type": "author",
         "id": author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/",
@@ -328,7 +335,7 @@ def build_post_dict(post, request):
         }
     }
     
-    # Add image if present
+    # Add image if present - use serve_image endpoint
     if post.image:
         data["image"] = request.build_absolute_uri(post.image.file_name)
 
@@ -1399,13 +1406,20 @@ class AuthorsListAPIView(View):
         for author in page_obj:
             web_url = reverse('authors:author_profile', kwargs={'author_id': author.id})
             author_id_url = author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/"
+            
+            # Build profileImage URL using serve_image endpoint
+            profile_image_url = None
+            if author.profileImage:
+                image_path = reverse('authors:serve_image', args=[author.profileImage.id])
+                profile_image_url = request.build_absolute_uri(image_path)
+            
             items.append({
                 "type": "author",
                 "id": author_id_url,
                 "host": author.host or f"{request.scheme}://{request.get_host()}",
                 "displayName": author.displayName,
                 "github": author.github,
-                "profileImage": request.build_absolute_uri(author.profileImage.url) if author.profileImage else None,
+                "profileImage": profile_image_url,
                 "web": f"{request.scheme}://{request.get_host()}{web_url}",
             })
 
