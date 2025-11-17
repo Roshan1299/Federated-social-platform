@@ -20,6 +20,9 @@ from django.utils.decorators import method_decorator
 from .authentication import http_basic_auth_or_session
 from django.http import HttpResponse, Http404
 from django.conf import settings
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import authenticate
+from .forms import ImageUploadForm
 from .models import Image
 from .inbox_handlers import reopen_follow_request
 from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post
