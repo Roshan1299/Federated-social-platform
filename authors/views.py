@@ -1061,7 +1061,7 @@ def add_comment(request, post_id):
     post_host = (post.author.host or "").rstrip("/")
 
     if post_host and post_host != local_host:
-        send_comment_to_post_owner(comment)
+        send_comment_to_post_owner(Comment)
     messages.success(request, "Comment posted!")
     return redirect('authors:post_detail', post_id=post.id)
 
