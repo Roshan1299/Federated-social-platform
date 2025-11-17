@@ -1,65 +1,76 @@
 # authors/utils/remote_read.py
-
-import logging
 import requests
 from django.conf import settings
-from authors.models import Comment, Post
-from authors.inbox_handlers import get_or_create_author
+from authors.models import Comment, Author
 
-logger = logging.getLogger(__name__)
-
-def sync_remote_comments_for_post(post: Post):
+def sync_remote_comments_for_post(post):
     """
-    Fetch comments for this post from the remote node
-    and STORE them as local Comment rows.
-
-    After this runs, post.comments.all() will include
-    both local and remote comments (as long as the remote
-    node exposes them via its /comments endpoint).
+    Fetch comments from the remote node for this post
+    and store/update them as Comment rows in our DB.
     """
-    origin = (post.origin or "").rstrip("/")
-    if not origin:
+    post_origin = post.origin          # remote post URL
+    if not post_origin:
         return
 
-    # Typical remote comments endpoint: <post-origin>/comments
-    url = origin + "/comments"
+    # Example: remote comments endpoint (adjust to your spec)
+    comments_url = f"{post_origin.rstrip('/')}/comments"
 
     try:
-        resp = requests.get(url, timeout=5)
-        if resp.status_code != 200:
-            logger.warning("Remote comments fetch failed: %s %s", resp.status_code, url)
-            return
-
-        data = resp.json()
-        items = data.get("items") if isinstance(data, dict) else data
-
-        if not isinstance(items, list):
-            return
-
-        for c in items:
-            try:
-                comment_origin = c.get("id") or c.get("origin")
-                if not comment_origin:
-                    continue
-
-                # Build / reuse author (stub) for remote commenter
-                author_data = c.get("author") or {}
-                author = get_or_create_author(author_data)
-
-                content = c.get("comment") or c.get("content", "")
-
-                # Upsert: if we already have this origin, update content; else create
-                Comment.objects.update_or_create(
-                    origin=comment_origin,
-                    defaults={
-                        "post": post,
-                        "author": author,
-                        "content": content,
-                    },
-                )
-            except Exception as inner:
-                logger.warning("Failed to sync one remote comment: %s", inner)
-
-    except Exception as e:
-        logger.exception("Error syncing remote comments: %s", e)
+        resp = requests.get(comments_url, timeout=5)
+    except Exception:
         return
+
+    if resp.status_code >= 300:
+        return
+
+    try:
+        data = resp.json()
+    except Exception:
+        return
+
+    # Adjust this according to the remote JSON format
+    items = data.get("items", []) if isinstance(data, dict) else data
+
+    for item in items:
+        # Skip if wrong type
+        if item.get("type") != "comment":
+            continue
+
+        comment_id = item.get("id")
+        author_data = item.get("author") or {}
+        content = item.get("comment") or item.get("content", "")
+        published = item.get("published")
+
+        if not comment_id:
+            continue
+
+        # 1) Get or create remote Author
+        author_url = author_data.get("id") or author_data.get("url")
+        host = author_data.get("host") or ""
+        display_name = author_data.get("displayName") or "Remote Author"
+
+        if not author_url:
+            continue
+
+        author_obj, _ = Author.objects.get_or_create(
+            url=author_url,
+            defaults={
+                "displayName": display_name,
+                "host": host,
+                "username": f"remote_{display_name[:10]}",
+            },
+        )
+
+        # 2) Get or create Comment by origin (remote ID)
+        defaults = {
+            "post": post,
+            "author": author_obj,
+            "content": content,
+        }
+        if published:
+            defaults["created_at"] = published  # if your field allows raw string, else parse
+
+        Comment.objects.update_or_create(
+            origin=comment_id,
+            defaults=defaults,
+        )

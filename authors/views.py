@@ -380,7 +380,9 @@ class PostDetailView(DetailView):
                 .prefetch_related("likes")
                 .all()
         )
-        # liked_by_me + username_display as before
+
+        user = self.request.user
+
         if user.is_authenticated:
             liked_comment_ids = set(
                 CommentLike.objects
@@ -408,6 +410,10 @@ class PostDetailView(DetailView):
             dn = (getattr(author, "displayName", "") or "").strip()
             if dn:
                 return "".join(ch for ch in dn.lower() if ch.isalnum())  # simple slug
+            for c in comments:
+                c.liked_by_me = c.id in liked_comment_ids
+                c.username_display = compute_username_display(c.author)
+            context["comments"] = comments
             # As a last resort, show nothing (template will skip the @ block)
             return ""
 
