@@ -666,33 +666,30 @@ class SingleFollowingAPIView(View):
                         status=502
                     )
 
-            # HANDLE REMOTE RESPONSE
-            if resp.status_code in (200, 201):
-                # Remote inbox accepted the *request delivery*,
-                # but we still treat it as PENDING until the receiver approves.
-                fr, created = FollowRequest.objects.get_or_create(
-                    sender=author,
-                    receiver=target,
-                    defaults={"status": "PENDING"},
-                )
+                if resp.status_code in (200, 201):
+                    # Do NOT assume the remote author has accepted.
+                    # Record an outgoing FollowRequest in PENDING state instead.
+                    fr, created = FollowRequest.objects.get_or_create(
+                        sender=author,
+                        receiver=target,
+                        defaults={'status': 'PENDING'},
+                    )
+                    # If it existed but was not pending, reopen it
+                    if not created and reopen_follow_request(fr):
+                        return json_response(
+                            {'message': 'Follow request re-opened'},
+                            status=200,
+                        )
 
-                # If it already existed but was DENIED/APPROVED before, reopen as PENDING
-                if not created and fr.status != "PENDING":
-                    if reopen_follow_request(fr):
-                        # reopen_follow_request sets status to PENDING and saves
-                        pass
-                    else:
-                        # fallback: ensure it's PENDING
-                        fr.status = "PENDING"
-                        fr.save(update_fields=["status"])
-
-                return json_response(
-                    {
-                        "message": "Follow request sent to remote author.",
-                        "status": fr.status,
-                    },
-                    status=201 if created else 200,
-                )
+                    return json_response(
+                        {'message': 'Follow request created' if created else 'Follow request already exists'},
+                        status=201 if created else 200,
+                    )
+                else:
+                    return json_response(
+                        {'error': f'Remote inbox responded with {resp.status_code}: {resp.text}'},
+                        status=resp.status_code
+                    )
 
             else:
                 return json_response(
