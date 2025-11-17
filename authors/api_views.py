@@ -668,48 +668,30 @@ class SingleFollowingAPIView(View):
 
             # HANDLE REMOTE RESPONSE
             if resp.status_code in (200, 201):
-                # Remote node accepted the follow; treat our request as approved
-                fr, fr_created = FollowRequest.objects.get_or_create(
+                # Remote inbox accepted the *request delivery*,
+                # but we still treat it as PENDING until the receiver approves.
+                fr, created = FollowRequest.objects.get_or_create(
                     sender=author,
                     receiver=target,
-                    defaults={"status": "APPROVED"},
+                    defaults={"status": "PENDING"},
                 )
-                if not fr_created and fr.status != "APPROVED":
-                    fr.status = "APPROVED"
-                    fr.save(update_fields=["status"])
 
-                # Make sure our side now considers this "following"
-                follow, created = Follow.objects.get_or_create(
-                    follower=author,
-                    following=target,
-                )
+                # If it already existed but was DENIED/APPROVED before, reopen as PENDING
+                if not created and fr.status != "PENDING":
+                    if reopen_follow_request(fr):
+                        # reopen_follow_request sets status to PENDING and saves
+                        pass
+                    else:
+                        # fallback: ensure it's PENDING
+                        fr.status = "PENDING"
+                        fr.save(update_fields=["status"])
 
                 return json_response(
                     {
-                        "message": (
-                            "Now following remote author"
-                            if created
-                            else "Already following remote author"
-                        )
+                        "message": "Follow request sent to remote author.",
+                        "status": fr.status,
                     },
                     status=201 if created else 200,
-                )
-
-            # 4xx from remote inbox → treat as denied
-            if 400 <= resp.status_code < 500:
-                fr, _ = FollowRequest.objects.get_or_create(
-                    sender=author,
-                    receiver=target,
-                )
-                fr.status = "DENIED"
-                fr.save(update_fields=["status"])
-
-                return json_response(
-                    {
-                        "error": f"Remote inbox rejected follow request "
-                                 f"({resp.status_code})"
-                    },
-                    status=resp.status_code,
                 )
 
             else:
