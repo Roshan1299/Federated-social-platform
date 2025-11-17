@@ -1325,7 +1325,7 @@ def serve_image(request, image_id):
 
 
 @csrf_exempt
-def receive_remote_image(request):
+def receive_image_api(request):
     """
     Receives an image pushed from a remote node.
     Compatible with older and newer federation code.
