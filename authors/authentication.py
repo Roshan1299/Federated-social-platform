@@ -103,13 +103,14 @@ def http_basic_auth_required(view_func):
                         status=403,  # 403 Forbidden for disabled nodes
                         headers={'WWW-Authenticate': 'Basic realm="API"'}
                     )
+                
+            if _is_request_from_disabled_node(request):
+                return HttpResponse(
+                    'Requests from disabled remote nodes are not allowed',
+                    status=403,
+                    headers={'WWW-Authenticate': 'Basic realm="API"'}
+                )
 
-                if _is_request_from_disabled_node(request):
-                    return HttpResponse(
-                        'Request from disabled remote node',
-                        status=403,
-                        headers={'WWW-Authenticate': 'Basic realm="API"'}
-                    )
 
             # Set the authenticated user on the request and mark that this
             # request was authenticated via HTTP Basic Auth. Views can use
@@ -286,6 +287,5 @@ def _is_request_from_disabled_node(request):
     if (author != "" and author_host != local_node):
         for node in RemoteNode.objects.all():
             if normalize_host(node.base_url) == normalize_host(author_host):
-                return not node.enabled
-
-    return False
+                return not node.enabled 
+    return (author_host != "" and author_host != local_node)
