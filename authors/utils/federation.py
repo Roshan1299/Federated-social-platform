@@ -1,15 +1,24 @@
 from django.conf import settings
 
-from authors.models import Follow, RemoteNode, Post, Comment, Like
+from authors.models import Follow, RemoteNode, Post, Comment, Like, Author
 from authors.utils.nodes import remote_post
 
 
-from django.conf import settings
-
-from authors.models import Follow, RemoteNode, Post, Comment, Like
-from authors.utils.nodes import remote_post
 
 
+def get_remote_node_for_author(author: Author):
+    # Take the author's host (e.g. "https://team-green.herokuapp.com")
+    host = (author.host or "").rstrip("/")
+    if not host:
+        return None
+
+    # Try to find matching RemoteNode row in our DB
+    try:
+        # base_url is stored like "https://team-green.herokuapp.com"
+        return RemoteNode.objects.get(base_url__icontains=host, enabled=True)
+    except RemoteNode.DoesNotExist:
+        return None
+    
 def get_remote_followers_and_friends(author):
     """
     Get a list of (RemoteNode, remote_author) tuples for remote followers 
@@ -140,17 +149,40 @@ def build_like_payload(like: Like) -> dict:
     }
 
 
-def send_to_remote_inboxes(author, payload: dict):
+def send_to_remote_inboxes(author, payload: dict, post_visibility: str = 'PUBLIC'):
     """
-    Send the given payload to every remote follower and friend's inbox.
+    Send the given payload to every remote follower and friend's inbox,
+    respecting post visibility settings.
 
     For each remote follower/friend:
         - Build inbox URL for that follower on their node
         - Call remote_post(url, payload, base_url=node.base_url)
+        
+    Visibility rules:
+    - PUBLIC: Send to both followers and friends
+    - FRIENDS: Send only to friends (mutual follows)
+    - PUBLIC_UNLISTED: Do not send to any remote nodes (not pushed to inboxes)
     """
+    # Don't send PUBLIC_UNLISTED posts to remote nodes at all
+    if post_visibility == 'PUBLIC_UNLISTED':
+        return  # Early return - don't send unlisted posts to remote nodes
+
     recipients = get_remote_followers_and_friends(author)
 
     for node, remote_author in recipients:
+        # For FRIENDS posts, only send to friends (mutual follows), not to followers
+        if post_visibility == 'FRIENDS':
+            # Check if this is a mutual follow (friend relationship)
+            # remote_author follows the post author, and post author follows remote_author
+            is_friend = (
+                # Check if remote_author follows the post author (they are in followers/friends list, so this is true)
+                # AND check if post author follows remote_author back (mutual)
+                Follow.objects.filter(follower=author, following=remote_author).exists()
+            )
+            
+            if not is_friend:
+                continue  # Skip non-friends for FRIENDS posts
+
         # Build inbox URL using the remote author's canonical author URL
         inbox_url = inbox_url_for_remote(node, remote_author.url)
 
@@ -173,32 +205,51 @@ def send_to_remote_inboxes(author, payload: dict):
 def notify_remote_new_post(post: Post):
     """
     Called when a post is created.
-    Sends the post JSON to all remote followers and friends.
+    Sends the post JSON to all remote followers and friends based on visibility.
     """
     payload = build_post_payload(post)
-    send_to_remote_inboxes(post.author, payload)
+    send_to_remote_inboxes(post.author, payload, post.visibility)
 
 
 def notify_remote_edit_post(post: Post):
     """
     Called when a post is edited.
-    Re-sends the updated post JSON to all remote followers and friends.
+    Re-sends the updated post JSON to all remote followers and friends based on visibility.
     """
     payload = build_post_payload(post)
-    send_to_remote_inboxes(post.author, payload)
+    send_to_remote_inboxes(post.author, payload, post.visibility)
 
 
 def notify_remote_delete_post(post: Post):
     """
     Called when a post is deleted.
-    Sends a simple delete notification.
+    Sends the post object marked as deleted to all remote followers/friends.
+    This ensures they know the post has been deleted.
     """
+    # Send the post with its current visibility but mark as deleted
+    # This will trigger the remote node to update their local copy with deleted=True
     payload = {
-        "type": "delete",
+        "type": "post",
         "id": post.origin,
-        "author": post.author.url,
+        "source": post.source,
+        "origin": post.origin,
+        "title": post.title,
+        "content": post.content,  # Content remains but will be hidden when viewed
+        "contentType": post.contentType,
+        "visibility": post.visibility,  # Keep original visibility
+        "published": post.published.isoformat(),
+        "updated": post.updated.isoformat(),
+        "deleted": True,  # Explicitly mark as deleted for remote update
+        "author": {
+            "type": "author",
+            "id": post.author.url,
+            "host": post.author.host,
+            "displayName": post.author.displayName,
+            "url": post.author.url,
+            "github": post.author.github,
+        },
     }
-    send_to_remote_inboxes(post.author, payload)
+    send_to_remote_inboxes(post.author, payload, post.visibility)
 
 
 def notify_remote_comment(comment: Comment):
@@ -217,3 +268,53 @@ def notify_remote_like(like: Like):
     """
     payload = build_like_payload(like)
     send_to_remote_inboxes(like.author, payload)
+
+
+def send_comment_to_post_owner(comment: Comment) -> bool:
+    # Get the post being commented on
+    post = comment.post
+    remote_author = post.author
+
+    # Find which RemoteNode this author belongs to
+    node = get_remote_node_for_author(remote_author)
+    if not node:
+        return False  # no matching remote node → cannot connect
+
+    # Build inbox URL on that remote node for this author
+    inbox_url = inbox_url_for_remote(node, remote_author.url)
+
+    # Build JSON payload for this comment
+    payload = build_comment_payload(comment)
+
+    # Send payload to remote node using:
+    #   - inbox_url
+    #   - node.base_url (to find username/password in RemoteNode)
+    return remote_post(
+        url=inbox_url,
+        payload=payload,
+        base_url=node.base_url,
+    )
+
+
+def send_like_to_post_owner(like: Like) -> bool:
+    # Get the post that was liked
+    post = like.post
+    remote_author = post.author
+
+    # Find which RemoteNode owns this author
+    node = get_remote_node_for_author(remote_author)
+    if not node:
+        return False  # cannot connect to this node
+
+    # Build inbox URL on that remote node
+    inbox_url = inbox_url_for_remote(node, remote_author.url)
+
+    # Build JSON payload for this like
+    payload = build_like_payload(like)
+
+    # Send payload to remote node using base_url + username + password
+    return remote_post(
+        url=inbox_url,
+        payload=payload,
+        base_url=node.base_url,
+    )

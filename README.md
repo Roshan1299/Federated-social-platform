@@ -133,6 +133,65 @@ The system currently supports conversion of these GitHub event types to posts:
 
 ---
 
+## Node Federation Setup Guide
+
+### Quick Configuration via UI (Recommended)
+
+1. **Login as Superuser/Admin** (the initial user you created is typically a superuser)
+
+2. **Go to Node Configuration page**: Use the "Node Config" link in the navigation menu if you're an admin, or visit `/node_config/`
+
+3. **Configure your node settings**:
+   - Enter your full Heroku app URL (e.g., `https://your-app-name.herokuapp.com/`)
+   - Create a service username and password for node-to-node communication
+   - Click "Save Configuration"
+
+4. **Add Remote Nodes**:
+   - Click "Configure Remote Node" or visit `/configure_remote_node/`
+   - Add the other party's base URL, username, and password
+   - Both parties must add each other as remote nodes
+
+5. **Follow Remote Authors**:
+   - Navigate to the Explore page
+   - Use the "Follow a Remote Author" form to enter the full API URL of the author you want to follow
+   - The format should be: `https://other-node.herokuapp.com/api/authors/<uuid>/`
+
+### Manual Setup via Management Command (Alternative)
+
+For advanced users, there's a management command:
+
+```bash
+python manage.py setup_node \
+  --base-url="https://your-app-name.herokuapp.com/" \
+  --service-username="your_service_user" \
+  --service-password="your_service_pass" \
+  --current-username="your_username"
+```
+
+### Environment Variables (Heroku)
+
+When deploying on Heroku, you can set these configuration variables:
+
+```bash
+heroku config:set \
+  BASE_URL="https://your-app-name.herokuapp.com/" \
+  NODE_SERVICE_USER="service_user" \
+  NODE_SERVICE_PASSWORD="service_pass"
+```
+
+### Connecting with Other Nodes
+
+1. Share your node information with the other party:
+   - Your base URL (e.g., `https://your-app.herokuapp.com/`)
+   - Your service username
+   - Your service password
+
+2. Both parties must add each other as remote nodes through the UI
+
+3. Once connected, you can follow each other using the "Follow Remote Author" feature on the Explore page
+
+---
+
 ## API Documentation
 
 This section details the REST API endpoints for the Social Distribution project.

@@ -40,18 +40,18 @@
   <nav>
     {% if user.is_authenticated %}
       <div class="nav-left">
-        <a href="{% url 'authors:redirect_profile' %}" class="nav-profile">
+        <a href="{% url 'authors:redirect_profile' %}" class="nav-profile" style="display:flex;align-items:center;gap:8px;">
           {% if user.profileImage_id %}
             <img
               src="{% url 'authors:serve_image' user.profileImage_id %}"
               alt="{{ user.displayName|default:user.username }}'s Profile Image"
               class="nav-profile-img"
-              style="width:32px;height:32px;border-radius:50%;object-fit:cover;"
+              style="width:32px;height:32px;border-radius:50%;object-fit:cover;border:1px solid #ccc;"
             />
           {% else %}
             <div class="nav-profile-placeholder" style="font-size:24px;">👤</div>
           {% endif %}
-          <span class="nav-display-name">{{ user.displayName|default:user.username }}</span>
+          <span class="nav-display-name" style="font-weight:500;">{{ user.displayName|default:user.username }}</span>
         </a>
       </div>
   
@@ -71,9 +71,11 @@
           {% endif %}
         </a>
 
-        <!-- Node Admin link for superusers -->
+        <!-- Node Admin links for superusers -->
         {% if user.is_superuser %}
-          <a href="{% url 'authors:remote_nodes_list' %}" class="nav-remote-nodes">Manage Nodes</a>
+          <a href="{% url 'authors:node_config' %}" class="nav-node-config">Node Config</a>
+          <a href="{% url 'authors:configure_remote_node' %}" class="nav-remote-nodes">Add Remote Node</a>
+          <a href="{% url 'authors:federation_guide' %}" class="nav-federation-guide">Federation Guide</a>
         {% endif %}
 
         <form action="{% url 'logout' %}" method="post" class="nav-logout-form">

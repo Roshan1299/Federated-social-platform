@@ -97,6 +97,11 @@ def handle_post(self, recipient, data, request):
             existing_post.visibility = data.get('visibility', existing_post.visibility)
             existing_post.source = data.get('source', existing_post.source)
             existing_post.updated = timezone.now()
+
+            # Check if the post is marked as deleted
+            if data.get('deleted', False):
+                existing_post.deleted = True
+
             existing_post.save()
             
             # Create inbox receipt for updated post (idempotent due to unique_together)

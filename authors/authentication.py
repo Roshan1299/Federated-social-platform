@@ -9,6 +9,29 @@ from django.contrib.auth import authenticate
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from authors.models import Author, RemoteNode
+from urllib.parse import urlparse
+
+
+def normalize_host(url: str) -> str:
+    """
+    Normalize a host/base_url so we can reliably match RemoteNode entries.
+
+    - strips spaces
+    - removes trailing slash
+    - lowercases
+    - keeps just scheme://netloc if it's a full URL
+    """
+    if not url:
+        return ""
+
+    url = url.strip()
+
+    parsed = urlparse(url)
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}".lower()
+
+    # Fallback for weird stored values
+    return url.rstrip("/").lower()
 
 
 def http_basic_auth_required(view_func):
@@ -56,15 +79,29 @@ def http_basic_auth_required(view_func):
             if not isinstance(user, Author):
                 user = Author.objects.get(id=user.pk)
 
-            if (user.is_remote()):
-                # Check if their node is active
-                remote_user_node = get_object_or_404(RemoteNode, base_url__icontains=user.host) 
+            if user.is_remote():
+                incoming_host = normalize_host(user.host)
+
+                remote_user_node = None
+                for node in RemoteNode.objects.all():
+                    if normalize_host(node.base_url) == incoming_host:
+                        remote_user_node = node
+                        break
+
+                if remote_user_node is None:
+                    return HttpResponse(
+                        'Remote node is not configured',
+                        status=404,
+                        headers={'WWW-Authenticate': 'Basic realm="API"'}
+                    )
+
                 if not remote_user_node.enabled:
                     return HttpResponse(
                         'Remote node is disabled',
-                        status=403, # 403 Forbidden for disabled nodes
+                        status=403,  # 403 Forbidden for disabled nodes
                         headers={'WWW-Authenticate': 'Basic realm="API"'}
                     )
+
 
             # Set the authenticated user on the request and mark that this
             # request was authenticated via HTTP Basic Auth. Views can use
@@ -139,15 +176,29 @@ def http_basic_auth_or_session(view_func):
             if not isinstance(user, Author):
                 user = Author.objects.get(id=user.pk)
 
-            if (user.is_remote()):
-                # Check if their node is active
-                remote_user_node = get_object_or_404(RemoteNode, base_url__icontains=user.host) 
+            if user.is_remote():
+                incoming_host = normalize_host(user.host)
+
+                remote_user_node = None
+                for node in RemoteNode.objects.all():
+                    if normalize_host(node.base_url) == incoming_host:
+                        remote_user_node = node
+                        break
+
+                if remote_user_node is None:
+                    return HttpResponse(
+                        'Remote node is not configured',
+                        status=404,
+                        headers={'WWW-Authenticate': 'Basic realm="API"'}
+                    )
+
                 if not remote_user_node.enabled:
                     return HttpResponse(
                         'Remote node is disabled',
-                        status=403, # 403 Forbidden for disabled nodes
+                        status=403,
                         headers={'WWW-Authenticate': 'Basic realm="API"'}
                     )
+
 
             # Set the authenticated user on the request
             request.user = user

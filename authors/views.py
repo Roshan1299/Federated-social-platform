@@ -10,7 +10,7 @@ from django.http import HttpResponse, JsonResponse
 from django.db.models import Q
 from django.conf import settings
 from .models import Author, Post, Follow, FollowRequest, Like, Comment, CommentLike, RemoteNode, InboxReceipt
-from .forms import AuthorCreationForm, AuthorProfileForm, PostForm, RemoteNodeForm
+from .forms import AuthorCreationForm, AuthorProfileForm, PostForm, RemoteNodeForm, NodeConfigurationForm
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
@@ -20,13 +20,23 @@ from django.views.decorators.http import require_POST
 from django.utils.decorators import method_decorator
 from .authentication import http_basic_auth_or_session
 from django.http import HttpResponse, Http404
+from django.conf import settings
 from .models import Image
 from .inbox_handlers import reopen_follow_request
 from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post
 import uuid
 import urllib.parse
+import requests
+from django.conf import settings
 from .api_views import SingleFollowingAPIView
-
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import authenticate
+from .forms import ImageUploadForm
+from .models import Image
+from authors.utils.federation import (
+    send_comment_to_post_owner,
+    send_like_to_post_owner,
+)
 
 def render_post_content(post):
     ''' Rendered HTML for markdown/plain posts. '''
@@ -922,6 +932,21 @@ class FollowRemoteAuthorView(LoginRequiredMixin, View):
         return redirect("authors:author_stream", author_id=author_id)
 
 
+class FederationGuideView(LoginRequiredMixin, View):
+    """
+    A guide page that explains how to connect with other nodes
+    """
+    template_name = "authors/federation_guide.html"
+
+    def get(self, request):
+        context = {
+            'current_user': request.user,
+            'remote_nodes': RemoteNode.objects.all(),
+            'base_url': getattr(settings, 'BASE_URL', request.build_absolute_uri('/').rstrip('/')),
+        }
+        return render(request, self.template_name, context)
+
+
 
 @login_required
 def redirect_to_profile(request):
@@ -975,6 +1000,14 @@ def toggle_like(request, post_id):
         # New like
         liked = True
         messages.success(request, "Liked!")
+
+        # if this is a remote post, send the like to that node
+        local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+        post_host = (post.author.host or "").rstrip("/")
+
+        if post_host and post_host != local_host:
+            send_like_to_post_owner(like)
+            
     if request.headers.get('HX-Request') or request.headers.get('x-requested-with') == 'XMLHttpRequest':
         return JsonResponse({'liked': liked, 'count': post.likes.count()})
     return redirect('authors:post_detail', post_id=post.id)
@@ -1083,11 +1116,17 @@ def add_comment(request, post_id):
         messages.error(request, "Comment cannot be empty.")
         return redirect('authors:post_detail', post_id=post.id)
 
-    Comment.objects.create(
+    comment = Comment.objects.create(
         post=post,
         author=viewer,
         content=content_text,
     )
+    # If this post belongs to a REMOTE node, notify that node
+    local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+    post_host = (post.author.host or "").rstrip("/")
+
+    if post_host and post_host != local_host:
+        send_comment_to_post_owner(comment)
     messages.success(request, "Comment posted!")
     return redirect('authors:post_detail', post_id=post.id)
 
@@ -1142,17 +1181,50 @@ def toggle_comment_like(request, comment_id):
 
     return redirect('authors:post_detail', post_id=post.id)
 
+def push_image_to_remote_nodes(image_obj):
+    """
+    Push the uploaded image to all connected remote nodes (federation).
+    Reads remote nodes from settings.REMOTE_NODES.
+    """
+    REMOTE_NODES = getattr(settings, "REMOTE_NODES", [])
+    for node in REMOTE_NODES:
+        try:
+            # Each remote node should have a public endpoint to receive images
+            url = f"{node['host'].rstrip('/')}/api/images/"
+            headers = {
+                "Content-Type": image_obj.content_type,
+                "Authorization": f"Basic {node['auth']}",
+            }
+
+            response = requests.post(url, headers=headers, data=image_obj.data)
+
+            if response.status_code in (200, 201):
+                print(f"✅ Successfully pushed image to {node['host']}")
+            else:
+                print(f"⚠️ Failed to push image to {node['host']} (status {response.status_code})")
+
+        except Exception as e:
+            print(f"❌ Error pushing image to {node['host']}: {e}")
+
+
+
 def upload_image(request):
-    if request.method == 'POST' and request.FILES.get('image'):
-        img_file = request.FILES['image']
-        image = Image.objects.create(
-            file_name=img_file.name,
-            content_type=img_file.content_type,
-            data=img_file.read()
-        )
-        messages.success(request, f"Image uploaded successfully! ID: {image.id}")
-        return redirect('authors:serve_image', image_id=image.id)
-    return render(request, 'authors/upload_image.html')
+    if request.method == "POST":
+        form = ImageUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            image_file = request.FILES["image"]
+            image = Image.objects.create(
+                file_name=image_file.name,
+                content_type=image_file.content_type,
+                data=image_file.read(),
+            )
+            print(f"✅ Uploaded image {image.id}")
+            # Redirect back to edit profile after upload
+            return redirect("authors:edit_profile", request.user.id)
+    else:
+        form = ImageUploadForm()
+
+    return render(request, "authors/upload_image.html", {"form": form})
 
 def serve_image(request, image_id):
     try:
@@ -1163,6 +1235,165 @@ def serve_image(request, image_id):
     response = HttpResponse(img.data, content_type=img.content_type)
     response['Content-Disposition'] = f'inline; filename={img.file_name}'
     return response
+
+@csrf_exempt
+def receive_remote_image(request):
+    """
+    Receives an image pushed from a remote node.
+    """
+    if request.method != "POST":
+        return HttpResponse("Method Not Allowed", status=405)
+
+    # --- Authenticate remote node ---
+    if "HTTP_AUTHORIZATION" not in request.META:
+        return HttpResponse("Unauthorized", status=401)
+
+    auth_header = request.META["HTTP_AUTHORIZATION"].replace("Basic ", "")
+    import base64
+    username, password = base64.b64decode(auth_header).decode().split(":", 1)
+    user = authenticate(username=username, password=password)
+    if not user:
+        return HttpResponse("Unauthorized", status=401)
+
+    # --- Save the image ---
+    content_type = request.headers.get("Content-Type", "application/octet-stream")
+    file_name = request.headers.get("X-Filename", f"remote_{uuid.uuid4().hex[:8]}.bin")
+    data = request.body
+
+    image = Image.objects.create(
+        file_name=file_name,
+        content_type=content_type,
+        data=data
+    )
+    print(f"✅ Received remote image {image.id} from {username}")
+    return JsonResponse({"status": "ok", "image_id": image.id}, status=201)
+
+class NodeConfigurationView(LoginRequiredMixin, UserPassesTestMixin, View):
+    template_name = "authors/node_configuration.html"
+
+    def test_func(self):
+        return self.request.user.is_superuser
+
+    def get(self, request):
+        initial_data = {}
+        # Prefer settings.BASE_URL if present
+        if hasattr(settings, "BASE_URL"):
+            initial_data["base_url"] = getattr(settings, "BASE_URL")
+
+        form = NodeConfigurationForm(initial=initial_data)
+
+        context = {
+            "form": form,
+            "current_config": {
+                "base_url": getattr(settings, "BASE_URL", ""),
+                "service_username": request.user.username if hasattr(request, "user") else "",
+                "remote_nodes": RemoteNode.objects.all(),
+            },
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request):
+        form = NodeConfigurationForm(request.POST)
+
+        if form.is_valid():
+            base_url = form.cleaned_data["base_url"].rstrip("/")
+            service_username = form.cleaned_data["service_username"]
+            service_password = form.cleaned_data["service_password"]
+
+            # 1) Create or update the service user
+            service_user, created = Author.objects.get_or_create(
+                username=service_username,
+                defaults={
+                    "displayName": f"Node Service User ({service_username})",
+                    "is_active": True,
+                    "is_staff": True,      # often useful for service accounts
+                },
+            )
+            # Update password & display name every time in case they changed
+            service_user.set_password(service_password)
+            service_user.displayName = f"Node Service User ({service_username})"
+            service_user.host = base_url
+            service_user.url = f"{base_url}/api/authors/{service_user.id}/"
+            service_user.save(update_fields=["password", "displayName", "host", "url"])
+
+            # 2) Update the current admin user's host/url to match this node
+            current_user = request.user
+            current_user.host = base_url
+            current_user.url = f"{base_url}/api/authors/{current_user.id}/"
+            current_user.save(update_fields=["host", "url"])
+
+            # 3) Normalize any local authors that still point at localhost
+            from django.db.models import Q
+
+            Author.objects.filter(
+                Q(host__isnull=True)
+                | Q(host__exact="")
+                | Q(host__icontains="localhost")
+            ).update(host=base_url)
+
+            # For authors that have the correct host but missing url, fill it in
+            for author in Author.objects.filter(host=base_url, url__isnull=True):
+                author.url = f"{base_url}/api/authors/{author.id}/"
+                author.save(update_fields=["url"])
+
+            # Re-authenticate current user to keep them logged in
+            from django.contrib.auth import login
+            login(request, current_user)
+
+            messages.success(
+                request,
+                f"Node configuration updated. "
+                f"Service user '{service_username}' is ready for federation."
+            )
+            return redirect("authors:node_config")
+
+        else:
+            messages.error(request, "Please correct the errors below.")
+
+        context = {
+            "form": form,
+            "current_config": {
+                "base_url": getattr(settings, "BASE_URL", ""),
+                "service_username": request.user.username if hasattr(request, "user") else "",
+                "remote_nodes": RemoteNode.objects.all(),
+            },
+        }
+        return render(request, self.template_name, context)
+
+
+class ConfigureRemoteNodeView(LoginRequiredMixin, UserPassesTestMixin, View):
+    """
+    A view to help users add remote nodes through the UI
+    """
+    template_name = "authors/configure_remote_node.html"
+
+    def test_func(self):
+        # Only allow superusers (node admins) to access this view
+        return self.request.user.is_superuser
+
+    def get(self, request):
+        form = RemoteNodeForm()
+        context = {
+            'form': form,
+            'remote_nodes': RemoteNode.objects.all()
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request):
+        form = RemoteNodeForm(request.POST)
+
+        if form.is_valid():
+            remote_node = form.save()
+            messages.success(request, f"Remote node '{remote_node.name}' added successfully!")
+            return redirect('authors:configure_remote_node')
+        else:
+            messages.error(request, "Please correct the errors below.")
+
+        context = {
+            'form': form,
+            'remote_nodes': RemoteNode.objects.all()
+        }
+        return render(request, self.template_name, context)
 
 
 # Views for Node Admin Management of Remote Nodes

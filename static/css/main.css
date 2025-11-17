@@ -1431,6 +1431,23 @@ nav button:hover {
   font-weight: 500;
 }
 
+.profile-avatar {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  overflow: hidden;          /* crop overflow */
+  border: 2px solid #ccc;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;         /* fill without distortion */
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   nav {
@@ -1469,3 +1486,4 @@ nav button:hover {
     gap: 10px;
   }
 }
+

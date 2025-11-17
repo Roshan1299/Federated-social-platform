@@ -47,31 +47,28 @@ def JsonResponse(*args, **kwargs):
     return _original_JsonResponse(*args, **kwargs)
 # ==================== Helper Functions for FQID Support ====================
 
-def _get_author_by_id_or_fqid(author_id=None, author_fqid=None):
-    """Get author by UUID (author_id) or FQID (author_fqid / full URL).
 
-    Behavior:
-    - If `author_fqid` is provided, perform a strict FQID lookup against the
-      `url` field (no UUID fallback). This mirrors the comment/like FQID helpers.
-    - If `author_id` is provided, perform a UUID/serial lookup against `id`.
-    """
-    # Prefer explicit FQID lookups when provided (strict - no UUID fallback)
+def _get_author_by_id_or_fqid(author_id=None, author_fqid=None):
+    """Get author by UUID (author_id) or FQID (author_fqid / full URL)."""
+
     if author_fqid:
         fqid_norm = author_fqid.rstrip('/') if isinstance(author_fqid, str) else author_fqid
         fqid_with_slash = fqid_norm + '/'
-        try:
-            return Author.objects.get(Q(url=fqid_norm) | Q(url=fqid_with_slash))
-        except Author.DoesNotExist:
+
+        qs = Author.objects.filter(Q(url=fqid_norm) | Q(url=fqid_with_slash))
+
+        if not qs.exists():
             raise Http404("Author not found")
 
-    # UUID/serial lookup
+        # If multiple somehow exist, pick a stable one instead of exploding
+        return qs.order_by("id").first()
+
     if author_id:
         try:
             return Author.objects.get(id=author_id)
         except (Author.DoesNotExist, ValueError):
             raise Http404("Author not found")
 
-    # Nothing provided
     raise Http404("Author identifier required")
 
 
@@ -303,7 +300,7 @@ def build_author_dict(author, request):
         "displayName": author.displayName,
         "url": author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/",
         "github": author.github,
-        "profileImage": profile_image_url,
+        "profileImage": request.build_absolute_uri(author.profileImage.file_name) if author.profileImage else None,
         "web": f"{request.scheme}://{request.get_host()}{web_url}",
     }
 
@@ -340,8 +337,7 @@ def build_post_dict(post, request):
     
     # Add image if present - use serve_image endpoint
     if post.image:
-        image_path = reverse('authors:serve_image', args=[post.image.id])
-        data["image"] = request.build_absolute_uri(image_path)
+        data["image"] = request.build_absolute_uri(post.image.file_name)
 
     # Add likes metadata for this entry
     likes_url = f"{entry_url}/likes"
