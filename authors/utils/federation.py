@@ -21,6 +21,10 @@ def get_remote_followers_and_friends(author):
         - A "friend" is a mutual follow (A follows B and B follows A)
         - If a follower/friend's host != our BASE_URL -> treat as remote
         - Match the remote host to a RemoteNode by base_url
+    
+    Note: When posts are sent to remote inboxes, the receiving node will
+    create InboxReceipt records. This allows the receiving node to correctly
+    display friends-only posts even if Follow relationships become stale.
     """
     local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
     results = {}  # Use a dict to avoid duplicates
