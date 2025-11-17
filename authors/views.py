@@ -315,7 +315,7 @@ class PostDetailView(DetailView):
         # If the post's author lives on a remote node, pull their comments into our DB
         if post_host and post_host != local_host:
             sync_remote_comments_for_post(post) 
-
+            
         # relationship checks
         is_follower = user.is_authenticated and Follow.objects.filter(
             follower=user, following=author
@@ -1195,18 +1195,22 @@ def add_comment(request, post_id):
         author=viewer,
         content=content_text,
     )
-    # If this post belongs to a REMOTE node, notify that node
-    # Figure out if this post belongs to a local author or a remote author
+    # Figure out hosts
     local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
     post_host = (post.author.host or "").rstrip("/")
+    viewer_host = (getattr(getattr(viewer, "author", None), "host", "") or "").rstrip("/")
+    # if your request.user *is* Author, then:
+    if not viewer_host and hasattr(viewer, "host"):
+        viewer_host = (viewer.host or "").rstrip("/")
 
+    # 1) If this is a REMOTE post, send the comment TO THE POST OWNER'S NODE
     if post_host and post_host != local_host:
-        # Case 1: this is a REMOTE post (host != our BASE_URL)
-        # → send the comment to the remote post owner
+        # e.g. you comment on a Team-Green post -> send to Team-Green inbox
         send_comment_to_post_owner(comment)
-    else:
-        # Case 2: this is a LOCAL post (we own the author/node)
-        # → send this new comment to all remote followers / friends
+
+    # 2) If THIS commenter is LOCAL, fan out to THEIR remote followers
+    #    (so when YOU comment on YOUR local post, your remote followers see it)
+    if (not viewer_host) or (viewer_host == local_host):
         notify_remote_comment(comment)
 
     return redirect('authors:post_detail', post_id=post.id)
