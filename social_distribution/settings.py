@@ -151,3 +151,8 @@ AUTH_USER_MODEL = 'authors.Author'
 
 # Logout redirect
 LOGOUT_REDIRECT_URL = 'login'
+
+# Federation base URL used to build canonical URLs for authors/posts/likes/etc.
+# In production (Heroku), set BASE_URL in your config vars to:
+#   https://dark-blue1-74095fb398f8.herokuapp.com
+BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")

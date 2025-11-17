@@ -1140,30 +1140,26 @@ def serve_image(request, image_id):
 
 
 class NodeConfigurationView(LoginRequiredMixin, UserPassesTestMixin, View):
-    """
-    A view to help users configure their node for federation
-    """
     template_name = "authors/node_configuration.html"
 
     def test_func(self):
-        # Only allow superusers (node admins) to access this view
         return self.request.user.is_superuser
 
     def get(self, request):
-        # Pre-populate the form with current settings if available
         initial_data = {}
-        if hasattr(settings, 'BASE_URL'):
-            initial_data['base_url'] = settings.BASE_URL
+        # Prefer settings.BASE_URL if present
+        if hasattr(settings, "BASE_URL"):
+            initial_data["base_url"] = getattr(settings, "BASE_URL")
 
         form = NodeConfigurationForm(initial=initial_data)
 
         context = {
-            'form': form,
-            'current_config': {
-                'base_url': getattr(settings, 'BASE_URL', ''),
-                'service_username': request.user.username if hasattr(request, 'user') else '',
-                'remote_nodes': RemoteNode.objects.all()
-            }
+            "form": form,
+            "current_config": {
+                "base_url": getattr(settings, "BASE_URL", ""),
+                "service_username": request.user.username if hasattr(request, "user") else "",
+                "remote_nodes": RemoteNode.objects.all(),
+            },
         }
         return render(request, self.template_name, context)
 
@@ -1171,49 +1167,67 @@ class NodeConfigurationView(LoginRequiredMixin, UserPassesTestMixin, View):
         form = NodeConfigurationForm(request.POST)
 
         if form.is_valid():
-            # Save configuration
-            base_url = form.cleaned_data['base_url']
-            service_username = form.cleaned_data['service_username']
-            service_password = form.cleaned_data['service_password']
+            base_url = form.cleaned_data["base_url"].rstrip("/")
+            service_username = form.cleaned_data["service_username"]
+            service_password = form.cleaned_data["service_password"]
 
-            # Update or create the service user
-            # First, find and delete all existing service users with the pattern
-            existing_service_users = Author.objects.filter(
-                displayName__startswith="Node Service User"
+            # 1) Create or update the service user
+            service_user, created = Author.objects.get_or_create(
+                username=service_username,
+                defaults={
+                    "displayName": f"Node Service User ({service_username})",
+                    "is_active": True,
+                    "is_staff": True,      # often useful for service accounts
+                },
             )
-            # Delete all existing service users (to avoid duplicates)
-            existing_service_users.delete()
-
-            # Create new service user
-            service_user = Author.objects.create_user(username=service_username)
+            # Update password & display name every time in case they changed
             service_user.set_password(service_password)
             service_user.displayName = f"Node Service User ({service_username})"
-            service_user.save()
-            created = True
+            service_user.host = base_url
+            service_user.url = f"{base_url}/api/authors/{service_user.id}/"
+            service_user.save(update_fields=["password", "displayName", "host", "url"])
 
-            # Update current user's host and url
+            # 2) Update the current admin user's host/url to match this node
             current_user = request.user
-            old_username = current_user.username  # Store original username
-            current_user.host = base_url.rstrip("/")
-            current_user.url = f"{base_url.rstrip('/')}/api/authors/{current_user.id}/"
+            current_user.host = base_url
+            current_user.url = f"{base_url}/api/authors/{current_user.id}/"
             current_user.save(update_fields=["host", "url"])
 
-            # Re-authenticate the same user to maintain session
+            # 3) Normalize any local authors that still point at localhost
+            from django.db.models import Q
+
+            Author.objects.filter(
+                Q(host__isnull=True)
+                | Q(host__exact="")
+                | Q(host__icontains="localhost")
+            ).update(host=base_url)
+
+            # For authors that have the correct host but missing url, fill it in
+            for author in Author.objects.filter(host=base_url, url__isnull=True):
+                author.url = f"{base_url}/api/authors/{author.id}/"
+                author.save(update_fields=["url"])
+
+            # Re-authenticate current user to keep them logged in
             from django.contrib.auth import login
             login(request, current_user)
 
-            messages.success(request, f"Node configuration updated successfully! Service user '{service_username}' created/updated.")
-            return redirect('authors:node_config')
+            messages.success(
+                request,
+                f"Node configuration updated. "
+                f"Service user '{service_username}' is ready for federation."
+            )
+            return redirect("authors:node_config")
+
         else:
             messages.error(request, "Please correct the errors below.")
 
         context = {
-            'form': form,
-            'current_config': {
-                'base_url': getattr(settings, 'BASE_URL', ''),
-                'service_username': request.user.username if hasattr(request, 'user') else '',
-                'remote_nodes': RemoteNode.objects.all()
-            }
+            "form": form,
+            "current_config": {
+                "base_url": getattr(settings, "BASE_URL", ""),
+                "service_username": request.user.username if hasattr(request, "user") else "",
+                "remote_nodes": RemoteNode.objects.all(),
+            },
         }
         return render(request, self.template_name, context)
 
