@@ -622,75 +622,13 @@ class SingleFollowingAPIView(View):
                     status=502
                 )
 
-            if target_host and target_host != local_base:
-                # Look up RemoteNode configuration for this host
-                remote_node = None
-                for node in RemoteNode.objects.filter(enabled=True):
-                    node_base = node.base_url.rstrip('/')
-                    if node_base == target_host:
-                        remote_node = node
-                        break
-
-                if remote_node is None:
-                    return json_response(
-                        {'error': f'No RemoteNode configured for host {target_host}'},
-                        status=502
-                    )
-
-                payload = {
-                    'type': 'follow',
-                    'actor': build_author_dict(author, request),
-                    'object': build_author_dict(target, request),
-                }
-
-                # Build inbox URL from target.url
-                target_fqid = target.url
-                parsed = urllib.parse.urlparse(target_fqid)
-                base = f"{parsed.scheme}://{parsed.netloc}"
-                path_parts = parsed.path.rstrip('/').split('/')
-                remote_author_id = path_parts[-1] if path_parts else ''
-                inbox_url = f"{base}/api/authors/{remote_author_id}/inbox/"
-
-                # Use HTTP Basic Auth with the configured RemoteNode credentials
-                auth = (
-                    (remote_node.username, remote_node.password)
-                    if remote_node.username and remote_node.password
-                    else None
+            if resp.status_code in (200, 201):
+                # Create the Follow relationship immediately (idempotent).
+                follow, created = Follow.objects.get_or_create(follower=author, following=target)
+                return json_response(
+                    {'message': 'Following created' if created else 'Already following'},
+                    status=201 if created else 200
                 )
-
-                try:
-                    resp = requests.post(inbox_url, json=payload, auth=auth, timeout=10)
-                except Exception as e:
-                    return json_response(
-                        {'error': f'Failed to send follow request to remote inbox: {str(e)}'},
-                        status=502
-                    )
-
-                if resp.status_code in (200, 201):
-                    # Do NOT assume the remote author has accepted.
-                    # Record an outgoing FollowRequest in PENDING state instead.
-                    fr, created = FollowRequest.objects.get_or_create(
-                        sender=author,
-                        receiver=target,
-                        defaults={'status': 'PENDING'},
-                    )
-                    # If it existed but was not pending, reopen it
-                    if not created and reopen_follow_request(fr):
-                        return json_response(
-                            {'message': 'Follow request re-opened'},
-                            status=200,
-                        )
-
-                    return json_response(
-                        {'message': 'Follow request created' if created else 'Follow request already exists'},
-                        status=201 if created else 200,
-                    )
-                else:
-                    return json_response(
-                        {'error': f'Remote inbox responded with {resp.status_code}: {resp.text}'},
-                        status=resp.status_code
-                    )
-
             else:
                 return json_response(
                     {'error': f'Remote inbox responded with {resp.status_code}: {resp.text}'},
