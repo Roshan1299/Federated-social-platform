@@ -1161,26 +1161,19 @@ class NodeConfigurationView(LoginRequiredMixin, UserPassesTestMixin, View):
             service_password = form.cleaned_data['service_password']
 
             # Update or create the service user
-            # First, try to get an existing service user and update it, or create new one
-            try:
-                # Try to find existing service user by display name pattern
-                existing_service_user = Author.objects.get(
-                    displayName__startswith="Node Service User"
-                )
-                # Update the existing service user
-                service_user = existing_service_user
-                service_user.username = service_username
-                service_user.set_password(service_password)
-                service_user.displayName = f"Node Service User ({service_username})"
-                service_user.save()
-                created = False
-            except Author.DoesNotExist:
-                # Create new service user if none exists
-                service_user = Author.objects.create_user(username=service_username)
-                service_user.set_password(service_password)
-                service_user.displayName = f"Node Service User ({service_username})"
-                service_user.save()
-                created = True
+            # First, find and delete all existing service users with the pattern
+            existing_service_users = Author.objects.filter(
+                displayName__startswith="Node Service User"
+            )
+            # Delete all existing service users (to avoid duplicates)
+            existing_service_users.delete()
+
+            # Create new service user
+            service_user = Author.objects.create_user(username=service_username)
+            service_user.set_password(service_password)
+            service_user.displayName = f"Node Service User ({service_username})"
+            service_user.save()
+            created = True
 
             # Update current user's host and url
             current_user = request.user
