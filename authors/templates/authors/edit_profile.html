@@ -20,7 +20,7 @@
           {% endfor %}
         </div>
       {% endif %}
-      
+
       <div class="profile-image-section">
         <h3>Profile Picture</h3>
 
@@ -41,13 +41,15 @@
             <div class="form-error">{{ form.profileImage.errors }}</div>
           {% endif %}
           <small class="form-hint">
-            Need a new image? <a href="{% url 'authors:upload_image' %}">Upload here</a>, then come back and select it.
+            Need a new image? <a href="{% url 'authors:upload_image' %}?next={{ request.path }}" class="btn btn-sm btn-outline-primary">
+              Upload New Image
+          </a>, then come back and select it.
             <br>Allowed formats: JPG, PNG, GIF (max 5MB)
           </small>
         </div>
       </div>
 
-      <!-- ✅ PROFILE INFO SECTION -->
+      <!-- ✅ PROFILE INFO SECTION -->e
       <div class="profile-info-section">
         <h3>Profile Information</h3>
 

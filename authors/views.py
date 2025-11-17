@@ -1302,6 +1302,9 @@ def push_image_to_remote_nodes(image_obj):
 
 
 def upload_image(request):
+    # Get ?next= url or hidden input
+    next_url = request.GET.get("next") or request.POST.get("next")
+
     if request.method == "POST":
         form = ImageUploadForm(request.POST, request.FILES)
         if form.is_valid():
@@ -1311,13 +1314,21 @@ def upload_image(request):
                 content_type=image_file.content_type,
                 data=image_file.read(),
             )
-            print(f"✅ Uploaded image {image.id}")
-            # Redirect back to edit profile after upload
+
+            # Go back where user came from
+            if next_url:
+                return redirect(next_url)
+
+            # Fallback
             return redirect("authors:edit_profile", request.user.id)
+
     else:
         form = ImageUploadForm()
 
-    return render(request, "authors/upload_image.html", {"form": form})
+    return render(request, "authors/upload_image.html", {
+        "form": form,
+        "next": next_url,
+    })
 
 def serve_image(request, image_id):
     try:
