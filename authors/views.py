@@ -449,11 +449,11 @@ class AuthorPostsView(ListView):
         # Viewing own posts → show all (not deleted)
         if current_user.is_authenticated and current_user == author:
             queryset = Post.objects.filter(author=author, deleted=False)
-        # Viewing someone you follow → show PUBLIC + FRIENDS
+        # Viewing someone you follow → show PUBLIC + PUBLIC_UNLISTED + FRIENDS
         elif current_user.is_authenticated and Follow.objects.filter(follower=current_user, following=author).exists():
             queryset = Post.objects.filter(
                 author=author,
-                visibility__in=["PUBLIC", "FRIENDS"],
+                visibility__in=["PUBLIC", "PUBLIC_UNLISTED", "FRIENDS"],
                 deleted=False
             )
         # Otherwise → only PUBLIC
