@@ -26,7 +26,7 @@ from .utils.federation import notify_remote_new_post, notify_remote_edit_post, n
 import uuid
 import urllib.parse
 from .api_views import SingleFollowingAPIView
-from authors.utils.federation import send_comment_to_post_owner, send_like_to_post_owner
+from authors.utils.federation import send_comment_to_post_owner, send_like_to_post_owner, send_comment_like_to_post_owner
 
 
 
@@ -1113,6 +1113,14 @@ def toggle_comment_like(request, comment_id):
     else:
         # If new like --> add it
         messages.success(request, "Liked comment.")
+
+    # If this post belongs to a REMOTE node, notify that node
+    local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+    post_host = (post.author.host or "").rstrip("/")
+
+    if post_host and post_host != local_host:
+        send_comment_like_to_post_owner(like)
+        
 
     return redirect('authors:post_detail', post_id=post.id)
 
