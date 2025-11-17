@@ -26,7 +26,7 @@ from django.contrib.auth import authenticate
 from .forms import ImageUploadForm
 from .models import Image
 from .inbox_handlers import reopen_follow_request
-from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post, send_unfollow_to_remote_author
+from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post, send_unfollow_to_remote_author, notify_remote_comment
 import uuid
 import urllib.parse
 import requests
@@ -315,7 +315,7 @@ class PostDetailView(DetailView):
         # If the post's author lives on a remote node, pull their comments into our DB
         if post_host and post_host != local_host:
             sync_remote_comments_for_post(post) 
-            
+
         # relationship checks
         is_follower = user.is_authenticated and Follow.objects.filter(
             follower=user, following=author
@@ -1196,12 +1196,19 @@ def add_comment(request, post_id):
         content=content_text,
     )
     # If this post belongs to a REMOTE node, notify that node
+    # Figure out if this post belongs to a local author or a remote author
     local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
     post_host = (post.author.host or "").rstrip("/")
 
     if post_host and post_host != local_host:
+        # Case 1: this is a REMOTE post (host != our BASE_URL)
+        # → send the comment to the remote post owner
         send_comment_to_post_owner(comment)
-    messages.success(request, "Comment posted!")
+    else:
+        # Case 2: this is a LOCAL post (we own the author/node)
+        # → send this new comment to all remote followers / friends
+        notify_remote_comment(comment)
+
     return redirect('authors:post_detail', post_id=post.id)
 
 
