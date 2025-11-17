@@ -9,7 +9,7 @@ from .views import (
     toggle_like, PostLikesView, add_comment, toggle_comment_like,
     FollowersListView, FollowingListView, AuthorDeletedPostsAdminView,
     RemoteNodeListView, AddRemoteNodeView, EditRemoteNodeView, DeleteRemoteNodeView,
-    FollowRemoteAuthorView, FederationGuideView
+    FollowRemoteAuthorView, FederationGuideView, NodeManagementView
 )
 
 # Import new API views
@@ -121,13 +121,13 @@ urlpatterns = [
     re_path(r'^api/entries/(?P<entry_fqid>.+)/likes$', LikesAPIView.as_view(), name="entry_fqid_likes_api"),
     re_path(r'^api/entries/(?P<entry_fqid>.+)$', SingleEntryAPIView.as_view(), name="entry_fqid_api"),
     
+    # Comment Likes with FQID - MUST come before general comment FQID route
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments/(?P<comment_fqid>.+)/likes$', 
+            CommentLikesAPIView.as_view(), name="comment_fqid_likes_api"),
+    
     # Comment with FQID in path
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments?/(?P<comment_fqid>.+)$', 
         CommentsAPIView.as_view(), name="remote_comment_api"),
-    
-    # Comment Likes with FQID
-    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments/(?P<comment_fqid>.+)/likes$', 
-            CommentLikesAPIView.as_view(), name="comment_fqid_likes_api"),
     
     # Commented API with FQID
     re_path(r'^api/authors/(?P<author_fqid>.+)/commented$', CommentsAPIView.as_view(), name="author_fqid_commented_api"),
@@ -145,6 +145,9 @@ urlpatterns = [
     path('upload_image/', views.upload_image, name='upload_image'),
     path('image/<int:image_id>/', views.serve_image, name='serve_image'),
     path('api/images/', views.receive_remote_image, name='receive_remote_image'),
+
+        # ========== Node Management Landing Page ==========
+    path('node_management/', NodeManagementView.as_view(), name='node_management'),
 
     # ========== Node Admin Management Routes ==========
     path('node_admin/remote_nodes/', RemoteNodeListView.as_view(), name='remote_nodes_list'),

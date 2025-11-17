@@ -288,3 +288,47 @@ class RemoteNode(models.Model):
     def __str__(self):
         return f"{self.name} ({self.base_url})"
 
+
+class InboxReceipt(models.Model):
+    """
+    InboxReceipt model - tracks which posts were delivered to which author's inbox.
+    
+    This model solves the problem of stale Follow relationships in distributed systems:
+    - When a remote node sends a post to an author's inbox, we create a receipt
+    - The stream view uses receipts to determine if friends-only remote posts should be visible
+    - For local posts, we rely on Follow relationships (always current)
+    - For remote posts, we trust the sending node's visibility decision (captured in receipt)
+    
+    Example scenario:
+    1. Local author A and B both follow remote author R
+    2. R follows both A and B back (mutual friends)
+    3. R unfollows A (but doesn't notify our node)
+    4. R creates friends-only post, R's node sends to B's inbox (correctly)
+    5. Without receipts: Both A and B see the post (wrong - stale Follow data)
+    6. With receipts: Only B sees it (correct - only B received it in inbox)
+    """
+    id = models.AutoField(primary_key=True)
+    recipient = models.ForeignKey(
+        Author, 
+        on_delete=models.CASCADE, 
+        related_name='inbox_receipts',
+        help_text="The author who received this post in their inbox"
+    )
+    post = models.ForeignKey(
+        Post, 
+        on_delete=models.CASCADE, 
+        related_name='inbox_receipts',
+        help_text="The post that was delivered to the inbox"
+    )
+    received_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ('recipient', 'post')
+        indexes = [
+            models.Index(fields=['recipient', 'post']),
+            models.Index(fields=['received_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.post.title} → {self.recipient.displayName}'s inbox"
+

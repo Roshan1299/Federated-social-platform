@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Node Management{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Node Management</h2>
+    <p class="mb-4">
+        Manage your local node configuration and connections to remote nodes.
+    </p>
+
+    <div class="row gy-4">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-body d-flex flex-column">
+                    <h4 class="card-title">Node Configuration</h4>
+                    <p class="card-text flex-grow-1">
+                        Configure this node’s base URL and service credentials used for federation.
+                    </p>
+                    <a href="{% url 'authors:node_config' %}" class="btn btn-primary mt-auto">
+                        Open Node Configuration
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-body d-flex flex-column">
+                    <h4 class="card-title">Add Remote Node</h4>
+                    <p class="card-text flex-grow-1">
+                        Add or manage remote nodes that this server federates with.
+                    </p>
+                    <a href="{% url 'authors:configure_remote_node' %}" class="btn btn-outline-primary mt-auto">
+                        Add Remote Node
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

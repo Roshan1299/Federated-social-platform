@@ -8,7 +8,8 @@ from django.core.paginator import Paginator
 from django.views import View
 from django.http import HttpResponse, JsonResponse
 from django.db.models import Q
-from .models import Author, Post, Follow, FollowRequest, Like, Comment, CommentLike, RemoteNode
+from django.conf import settings
+from .models import Author, Post, Follow, FollowRequest, Like, Comment, CommentLike, RemoteNode, InboxReceipt
 from .forms import AuthorCreationForm, AuthorProfileForm, PostForm, RemoteNodeForm, NodeConfigurationForm
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.decorators import login_required
@@ -20,22 +21,22 @@ from django.utils.decorators import method_decorator
 from .authentication import http_basic_auth_or_session
 from django.http import HttpResponse, Http404
 from django.conf import settings
-from .models import Image
-from .inbox_handlers import reopen_follow_request
-from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post
-import uuid
-import urllib.parse
-import requests
-from django.conf import settings
-from .api_views import SingleFollowingAPIView
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate
 from .forms import ImageUploadForm
 from .models import Image
-from authors.utils.federation import (
-    send_comment_to_post_owner,
-    send_like_to_post_owner,
-)
+from .inbox_handlers import reopen_follow_request
+from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post, send_unfollow_to_remote_author, notify_remote_comment
+import uuid
+import urllib.parse
+import requests
+import logging
+from django.conf import settings
+from .api_views import SingleFollowingAPIView
+from authors.utils.remote_read import sync_remote_comments_for_post
+from authors.utils.federation import send_comment_to_post_owner, send_like_to_post_owner, send_comment_like_to_post_owner
+
+
 
 def render_post_content(post):
     ''' Rendered HTML for markdown/plain posts. '''
@@ -308,7 +309,14 @@ class PostDetailView(DetailView):
         user = self.request.user
         author = post.author
 
-                # relationship checks
+        local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+        post_host = (post.author.host or "").rstrip("/")
+
+        # If the post's author lives on a remote node, pull their comments into our DB
+        if post_host and post_host != local_host:
+            sync_remote_comments_for_post(post) 
+            
+        # relationship checks
         is_follower = user.is_authenticated and Follow.objects.filter(
             follower=user, following=author
         ).exists()
@@ -372,6 +380,15 @@ class PostDetailView(DetailView):
                 .prefetch_related("likes")
                 .all()
         )
+        # liked_by_me + username_display as before
+        if user.is_authenticated:
+            liked_comment_ids = set(
+                CommentLike.objects
+                .filter(author=user, comment__in=comments)
+                .values_list("comment_id", flat=True)
+            )
+        else:
+            liked_comment_ids = set()
 
         def compute_username_display(author):
             # Try the Django username first
@@ -546,11 +563,21 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
         '''
         Returns posts for the author's stream:
         - Public posts from all authors (anyone can see in stream)
-        - Friends-only posts from mutual friends
+        - Friends-only posts from mutual friends (with inbox receipt tracking for remote posts)
+        - Unlisted posts from followed authors (with inbox receipt tracking for remote posts)
         - All posts from the author themselves
-        - Public unlisted posts from followed authors (only in stream for followers)
+        
+        Inbox receipt logic:
+        - For LOCAL posts (friends-only & unlisted): Use Follow relationships (always current)
+        - For REMOTE posts (friends-only & unlisted): Only show if received in user's inbox
+          (solves the stale Follow relationship problem in distributed systems)
+        
+        This prevents scenarios where:
+        - Remote author unfollows a local author but our node doesn't know
+        - Local author would still see unlisted/friends-only posts through stale Follow data
         '''
         user = self.request.user
+        local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
 
         # Get all mutual friends (both follow each other)
         followed_by_user = Follow.objects.filter(follower=user).values_list('following', flat=True)
@@ -562,29 +589,76 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
         # All public posts should appear in everyone's stream
         public_posts = Post.objects.filter(visibility='PUBLIC', deleted=False)
 
-        # Friends-only posts from mutual friends and the user's own friends-only posts
-        friends_posts_mutual = Post.objects.filter(
+        # Friends-only posts logic with inbox receipt tracking:
+        # SPLIT INTO LOCAL and REMOTE queries
+        
+        # 1. Local friends-only posts from mutual friends (trust Follow relationships)
+        local_mutual_friends = Author.objects.filter(
+            id__in=mutual_friends,
+            host=local_host
+        ).values_list('id', flat=True)
+        
+        friends_posts_local = Post.objects.filter(
             visibility='FRIENDS',
-            author__in=mutual_friends,
+            author__in=local_mutual_friends,
             deleted=False
         )
+        
+        # 2. Remote friends-only posts (only if received in inbox)
+        # Get posts that were delivered to this user's inbox
+        inbox_post_ids = InboxReceipt.objects.filter(
+            recipient=user
+        ).values_list('post_id', flat=True)
+        
+        friends_posts_remote = Post.objects.filter(
+            id__in=inbox_post_ids,
+            visibility='FRIENDS',
+            deleted=False
+        ).exclude(author__host=local_host)
+        
+        # User's own friends-only posts
         friends_posts_author = Post.objects.filter(
             visibility='FRIENDS',
             author=user,
             deleted=False
         )
 
+        # Unlisted posts logic with inbox receipt tracking:
+        # SPLIT INTO LOCAL and REMOTE queries
+        
+        # 1. Local unlisted posts from followed authors (trust Follow relationships)
+        local_followed_authors = Author.objects.filter(
+            id__in=followed_authors,
+            host=local_host
+        ).values_list('id', flat=True)
+        
+        unlisted_posts_local = Post.objects.filter(
+            visibility='PUBLIC_UNLISTED',
+            author__in=local_followed_authors,
+            deleted=False
+        ).exclude(author=user)
+        
+        # 2. Remote unlisted posts (only if received in inbox)
+        unlisted_posts_remote = Post.objects.filter(
+            id__in=inbox_post_ids,
+            visibility='PUBLIC_UNLISTED',
+            deleted=False
+        ).exclude(author__host=local_host).exclude(author=user)
+
         # All posts from the author themselves (they should see their own posts regardless of visibility)
         my_posts = Post.objects.filter(author=user, deleted=False)
 
-        # Public unlisted posts from followed authors (excluding own posts to avoid duplication)
-        unlisted_posts_followed = Post.objects.filter(
-            visibility='PUBLIC_UNLISTED',
-            author__in=followed_authors,
-        ).exclude(author=user).filter(deleted=False)
-
         # Combine all posts
-        queryset = (public_posts | friends_posts_mutual | friends_posts_author | my_posts | unlisted_posts_followed).distinct().order_by('-updated')
+        queryset = (
+            public_posts | 
+            friends_posts_local | 
+            friends_posts_remote | 
+            friends_posts_author | 
+            unlisted_posts_local |
+            unlisted_posts_remote |
+            my_posts
+        ).distinct().order_by('-updated')
+        
         return queryset
 
     def get_context_data(self, **kwargs):
@@ -717,37 +791,84 @@ class FollowingListView(LoginRequiredMixin, ListView):
 @login_required
 @require_POST
 def follow_author(request, author_id):
-    '''
-     Send a follow request to another author.
-     '''
+    """
+    Send a follow request to another author.
+
+    - If the target is LOCAL → create/refresh a FollowRequest (current behaviour).
+    - If the target is REMOTE → use SingleFollowingAPIView.put to send a federated
+      Follow to their inbox (same logic as the "enter remote URL" flow).
+    """
     author_to_follow = get_object_or_404(Author, id=author_id)
+
     if author_to_follow == request.user:  # Prevent following oneself
         messages.error(request, "You cannot follow yourself.")
-        return redirect('authors:author_profile', author_id=author_id)
+        return redirect("authors:author_profile", author_id=author_id)
 
-    existing_follow = Follow.objects.filter(follower=request.user, following=author_to_follow).exists()
-    if existing_follow:  # Already following
+    # Already following?
+    if Follow.objects.filter(follower=request.user, following=author_to_follow).exists():
         messages.info(request, f"You are already following {author_to_follow.displayName}.")
-        return redirect('authors:author_profile', author_id=author_id)
+        return redirect("authors:author_profile", author_id=author_id)
 
-    # Either create or update the existing follow request
+    # 🔹 Case 1: remote author → use the same federation path as FollowRemoteAuthorView
+    if hasattr(author_to_follow, "is_remote") and author_to_follow.is_remote():
+        remote_author_url = author_to_follow.url
+        if not remote_author_url:
+            messages.error(
+                request,
+                "This remote author does not have a URL configured, so a follow cannot be sent.",
+            )
+            return redirect("authors:author_profile", author_id=author_id)
+
+        # Reuse SingleFollowingAPIView.put just like FollowRemoteAuthorView
+        api_view = SingleFollowingAPIView()
+        api_response = api_view.put(
+            request,
+            author_id=str(request.user.id),
+            following_fqid=remote_author_url,
+        )
+
+        if 200 <= api_response.status_code < 300:
+            # SingleFollowingAPIView already creates the Follow row on success
+            messages.success(
+                request,
+                f"Follow request sent to remote author {author_to_follow.displayName}.",
+            )
+        else:
+            error_msg = getattr(api_response, "content", b"").decode(errors="ignore")
+            messages.error(
+                request,
+                f"Failed to follow remote author (status {api_response.status_code}). {error_msg}",
+            )
+
+        return redirect("authors:author_profile", author_id=author_id)
+
+    # 🔹 Case 2: local author → keep existing FollowRequest behaviour
     follow_request, created = FollowRequest.objects.get_or_create(
         sender=request.user,
         receiver=author_to_follow,
-        defaults={'status': 'PENDING'}
+        defaults={"status": "PENDING"},
     )
 
     if not created:
         # If it exists and was denied or approved before, reset to pending
-        # Chose this method rather than delete-and-recreate to preserve history
         if reopen_follow_request(follow_request):
-            messages.info(request, f"Follow request re-sent to {author_to_follow.displayName}.")
+            messages.info(
+                request,
+                f"Follow request re-sent to {author_to_follow.displayName}.",
+            )
         else:
-            messages.info(request, f"Follow request already pending.")
+            messages.info(
+                request,
+                f"Follow request to {author_to_follow.displayName} is already pending.",
+            )
     else:
-        messages.success(request, f"Follow request sent to {author_to_follow.displayName}!")
+        messages.success(
+            request,
+            f"Follow request sent to {author_to_follow.displayName}!",
+        )
 
-    return redirect('authors:author_profile', author_id=author_id)
+    return redirect("authors:author_profile", author_id=author_id)
+
 
 @login_required
 def cancel_follow_request(request, author_id):
@@ -776,7 +897,18 @@ def unfollow_author(request, author_id):
     Unfollow an author.
     '''
     author_to_unfollow = get_object_or_404(Author, id=author_id)
-    Follow.objects.filter(follower=request.user, following=author_to_unfollow).delete()  # Remove follow relationship
+
+    # Remove local follow relationship
+    Follow.objects.filter(follower=request.user, following=author_to_unfollow).delete()
+
+    # If this is a remote author, notify their node so they stop
+    # treating us as a follower / friend.
+    try:
+        if author_to_unfollow.is_remote():
+            send_unfollow_to_remote_author(request.user, author_to_unfollow)
+    except Exception:
+        pass
+
     messages.success(request, f"You have unfollowed {author_to_unfollow.displayName}.")
     return redirect('authors:author_profile', author_id=author_id)
 
@@ -1063,13 +1195,24 @@ def add_comment(request, post_id):
         author=viewer,
         content=content_text,
     )
-    # If this post belongs to a REMOTE node, notify that node
+    # Figure out hosts
     local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
     post_host = (post.author.host or "").rstrip("/")
+    viewer_host = (getattr(getattr(viewer, "author", None), "host", "") or "").rstrip("/")
+    # if your request.user *is* Author, then:
+    if not viewer_host and hasattr(viewer, "host"):
+        viewer_host = (viewer.host or "").rstrip("/")
 
+    # 1) If this is a REMOTE post, send the comment TO THE POST OWNER'S NODE
     if post_host and post_host != local_host:
+        # e.g. you comment on a Team-Green post -> send to Team-Green inbox
         send_comment_to_post_owner(comment)
-    messages.success(request, "Comment posted!")
+
+    # 2) If THIS commenter is LOCAL, fan out to THEIR remote followers
+    #    (so when YOU comment on YOUR local post, your remote followers see it)
+    if (not viewer_host) or (viewer_host == local_host):
+        notify_remote_comment(comment)
+
     return redirect('authors:post_detail', post_id=post.id)
 
 
@@ -1112,14 +1255,22 @@ def toggle_comment_like(request, comment_id):
     if not can_like:
         return HttpResponse("Forbidden", status=403)
 
-    like, created = CommentLike.objects.get_or_create(author=viewer, comment=comment)
+    comment_like, created = CommentLike.objects.get_or_create(author=viewer, comment=comment)
     if not created:
         # If already liked → remove like
-        like.delete()
+        comment_like.delete()
         messages.info(request, "Unliked comment.")
     else:
         # If new like --> add it
         messages.success(request, "Liked comment.")
+
+    # If this post belongs to a REMOTE node, notify that node
+    local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+    comment_host = (comment.author.host or "").rstrip("/")
+
+    if comment_host and comment_host != local_host:
+        send_comment_like_to_post_owner(comment_like)
+        
 
     return redirect('authors:post_detail', post_id=post.id)
 
@@ -1209,6 +1360,18 @@ def receive_remote_image(request):
     )
     print(f"✅ Received remote image {image.id} from {username}")
     return JsonResponse({"status": "ok", "image_id": image.id}, status=201)
+
+
+class NodeManagementView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
+    """
+    Landing page for all node-related admin actions.
+    Accessible only to superusers (node admins).
+    """
+    template_name = "authors/node_management.html"
+
+    def test_func(self):
+        return self.request.user.is_superuser
+    
 
 class NodeConfigurationView(LoginRequiredMixin, UserPassesTestMixin, View):
     template_name = "authors/node_configuration.html"

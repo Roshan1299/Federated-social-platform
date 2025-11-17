@@ -282,7 +282,3 @@ class ToDisabledNodeTests(TestCase):
                 found = True
                 break
         self.assertTrue(found)
-
-    """
-    TODO: Will need to test for PUBLIC posts not being sent to disabled nodes!
-    """

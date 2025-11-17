@@ -20,12 +20,14 @@ from .inbox_handlers import (
     handle_comment as ih_handle_comment,
     handle_like as ih_handle_like,
     handle_follow_request as ih_handle_follow_request,
+    handle_unfollow as ih_handle_unfollow,
     reopen_follow_request as reopen_follow_request,
 )
 from .utils.federation import (
     notify_remote_new_post,
     notify_remote_edit_post,
     notify_remote_delete_post,
+    send_unfollow_to_remote_author,
 )
 import requests
 import urllib.parse
@@ -441,6 +443,8 @@ class InboxAPIView(View):
             
             if object_type == 'follow':
                 return self.handle_follow_request(recipient, data, request)
+            elif object_type == 'unfollow':
+                return self.handle_unfollow(recipient, data, request)
             elif object_type == 'post':
                 return self.handle_post(recipient, data, request)
             elif object_type == 'like':
@@ -459,6 +463,10 @@ class InboxAPIView(View):
         """Delegate follow handling to inbox_handlers_updated.handle_follow_request"""
         return ih_handle_follow_request(self, recipient, data, request)
     
+    def handle_unfollow(self, recipient, data, request):
+        """Delegate unfollow handling to inbox_handlers.handle_unfollow"""
+        return ih_handle_unfollow(self, recipient, data, request)
+
     def handle_post(self, recipient, data, request):
         """Delegate post handling to inbox_handlers_updated.handle_post"""
         return ih_handle_post(self, recipient, data, request)
@@ -572,35 +580,6 @@ class SingleFollowingAPIView(View):
         elif getattr(target, 'url', None):
             parsed_t = urllib.parse.urlparse(target.url)
             target_host = f"{parsed_t.scheme}://{parsed_t.netloc}".rstrip('/')
-
-        '''
-        if target_host and target_host != local_base:
-            payload = {
-                'type': 'follow',
-                'actor': build_author_dict(author, request),
-                'object': build_author_dict(target, request),
-            }
-
-            # Build inbox URL from target.url
-            target_fqid = target.url
-            parsed = urllib.parse.urlparse(target_fqid)
-            base = f"{parsed.scheme}://{parsed.netloc}"
-            path_parts = parsed.path.rstrip('/').split('/')
-            remote_author_id = path_parts[-1] if path_parts else ''
-            inbox_url = f"{base}/api/authors/{remote_author_id}/inbox/"
-
-            try:
-                resp = requests.post(inbox_url, json=payload, timeout=10)
-            except Exception as e:
-                return json_response({'error': f'Failed to send follow request to remote inbox: {str(e)}'}, status=502)
-
-            if resp.status_code in (200, 201):
-                # Create the Follow relationship immediately (idempotent).
-                follow, created = Follow.objects.get_or_create(follower=author, following=target)
-                return json_response({'message': 'Following created' if created else 'Already following'}, status=201 if created else 200)
-            else:
-                return json_response({'error': f'Remote inbox responded with {resp.status_code}: {resp.text}'}, status=resp.status_code)
-        '''
         
         if target_host and target_host != local_base:
             # Look up RemoteNode configuration for this host
@@ -675,10 +654,20 @@ class SingleFollowingAPIView(View):
             return HttpResponse('Not Found', status=404)
 
         if Follow.objects.filter(follower=author, following=target).exists():
+            # Remove local relationship
             Follow.objects.filter(follower=author, following=target).delete()
+
+            # If target is remote, notify their node
+            try:
+                if getattr(target, "is_remote", None) and target.is_remote():
+                    send_unfollow_to_remote_author(author, target)
+            except Exception:
+                pass  # don't fail the API if federation call dies
+
             return json_response({'message': 'Unfollowed'}, status=204)
 
         return HttpResponse('Not Found', status=404)
+
 
 
 @method_decorator(http_basic_auth_or_session, name='dispatch')
@@ -1323,16 +1312,12 @@ class ImageEntryAPIView(View):
         if not post.image:
             return HttpResponse("No image found", status=404)
         
-        # Return the image file
-        with open(post.image.path, 'rb') as f:
-            image_data = f.read()
+        # Get the image data from the database
+        image = post.image
+        image_data = bytes(image.data)
         
-        # Determine content type
-        content_type = 'image/jpeg'
-        if post.image.name.endswith('.png'):
-            content_type = 'image/png'
-        elif post.image.name.endswith('.gif'):
-            content_type = 'image/gif'
+        # Use the content_type from the Image model
+        content_type = image.content_type or 'image/jpeg'
         
         return HttpResponse(image_data, content_type=content_type)
 

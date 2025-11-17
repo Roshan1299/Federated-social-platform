@@ -1,7 +1,7 @@
 import uuid
 from django.http import JsonResponse
 from django.utils import timezone
-from .models import Author, Post, Comment, Like, CommentLike, FollowRequest
+from .models import Author, Post, Comment, Like, CommentLike, FollowRequest, Follow
 
 import typing
 
@@ -70,11 +70,49 @@ def handle_follow_request(self, recipient, data, request):
         return JsonResponse({'error': f'Failed to process follow request: {str(e)}'}, status=400)
 
 
+def handle_unfollow(self, recipient, data, request):
+    """
+    Handle an incoming unfollow from another node.
+
+    Expected payload shape (we only really need 'actor'):
+    {
+        "type": "unfollow",
+        "actor": { ... remote author ... },
+        "object": { ... our recipient author ... }   # optional
+    }
+    """
+    try:
+        actor_data = data.get("actor", {}) or {}
+        if not actor_data:
+            return JsonResponse({"error": "Unfollow must include actor"}, status=400)
+
+        # Ensure we have a stub Author for the remote actor
+        actor = get_or_create_author(actor_data)
+
+        # Remove any follow relationship actor -> recipient
+        Follow.objects.filter(follower=actor, following=recipient).delete()
+
+        # Also clear any pending follow requests from this actor to this recipient
+        FollowRequest.objects.filter(sender=actor, receiver=recipient, status="PENDING").delete()
+
+        return JsonResponse({"message": "Unfollow processed"}, status=200)
+    except Exception as e:
+        return JsonResponse(
+            {"error": f"Failed to process unfollow: {str(e)}"},
+            status=400,
+        )
+
+
 def handle_post(self, recipient, data, request):
     """
     Handle incoming post/entry from another node.
+    
+    Creates an InboxReceipt to track that this post was delivered to the recipient's inbox.
     """
     try:
+        # avoid circular dependency
+        from .models import InboxReceipt
+        
         # Extract origin - the globally unique identifier
         origin = data.get('origin') or data.get('id')
         
@@ -84,12 +122,17 @@ def handle_post(self, recipient, data, request):
         # STEP 1: Check if we already have this post (by origin, NOT by UUID!)
         existing_post = Post.objects.filter(origin=origin).first()
         
+        # Determine visibility, mapping unlisted to PUBLIC_UNLISTED
+        visibility = data.get('visibility', 'PUBLIC').upper()
+        if data.get('unlisted', False):
+            visibility = 'PUBLIC_UNLISTED'
+
         if existing_post:
             # Post already exists - update it
             existing_post.title = data.get('title', existing_post.title)
             existing_post.content = data.get('content', existing_post.content)
             existing_post.contentType = data.get('contentType', existing_post.contentType)
-            existing_post.visibility = data.get('visibility', existing_post.visibility)
+            existing_post.visibility = visibility
             existing_post.source = data.get('source', existing_post.source)
             existing_post.updated = timezone.now()
 
@@ -98,7 +141,13 @@ def handle_post(self, recipient, data, request):
                 existing_post.deleted = True
 
             existing_post.save()
-
+            
+            # Create inbox receipt for updated post (idempotent due to unique_together)
+            InboxReceipt.objects.get_or_create(
+                recipient=recipient,
+                post=existing_post
+            )
+            
             return JsonResponse({'message': 'Post updated'}, status=200)
         
         # STEP 2: Get or create the author
@@ -113,9 +162,15 @@ def handle_post(self, recipient, data, request):
             title=data.get('title', 'Untitled'),
             content=data.get('content', ''),
             contentType=data.get('contentType', 'text/plain'),
-            visibility=data.get('visibility', 'PUBLIC'),
+            visibility=visibility,
             source=data.get('source', origin),
             origin=origin,
+        )
+        
+        # STEP 4: Create inbox receipt to track delivery
+        InboxReceipt.objects.create(
+            recipient=recipient,
+            post=post
         )
         
         return JsonResponse({'message': 'Post received'}, status=201)

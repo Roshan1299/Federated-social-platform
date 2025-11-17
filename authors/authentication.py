@@ -4,6 +4,7 @@ Provides HTTP Basic Auth for node-to-node communication
 """
 import base64
 from functools import wraps
+import json
 from django.http import JsonResponse, HttpResponse
 from django.contrib.auth import authenticate
 from django.conf import settings
@@ -79,7 +80,8 @@ def http_basic_auth_required(view_func):
             if not isinstance(user, Author):
                 user = Author.objects.get(id=user.pk)
 
-            if user.is_remote():
+            if user.is_remote(): # This doesn't actually check if request is coming from remote since all go through a service user
+                # Log somehow so the frontend can see we got here
                 incoming_host = normalize_host(user.host)
 
                 remote_user_node = None
@@ -101,6 +103,13 @@ def http_basic_auth_required(view_func):
                         status=403,  # 403 Forbidden for disabled nodes
                         headers={'WWW-Authenticate': 'Basic realm="API"'}
                     )
+                
+            if _is_request_from_disabled_node(request):
+                return HttpResponse(
+                    'Requests from disabled remote nodes are not allowed',
+                    status=403,
+                    headers={'WWW-Authenticate': 'Basic realm="API"'}
+                )
 
 
             # Set the authenticated user on the request and mark that this
@@ -253,3 +262,30 @@ class BasicAuthMiddleware:
         
         response = self.get_response(request)
         return response
+
+def _is_request_from_disabled_node(request):
+    """
+    Check if the request is from a disabled remote node by checking the author in its body
+    Returns: True, if the request is a json request with an author from a remote node that is disabled.
+             False, otherwise.
+    """
+    content_type = request.META.get("CONTENT_TYPE", "")
+    if not content_type.startswith("application/json"):
+        return False
+    body = request.body.decode("utf-8") if request.body else ""
+    if not body:
+        return False
+    data = json.loads(body)
+    author = data.get("author")
+    if not author:
+        return False
+    author_host = author.get("host")
+    if not author_host:
+        return False
+
+    local_node = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+    if (author != "" and author_host != local_node):
+        for node in RemoteNode.objects.all():
+            if normalize_host(node.base_url) == normalize_host(author_host):
+                return not node.enabled 
+    return (author_host != "" and author_host != local_node)

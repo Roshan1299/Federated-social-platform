@@ -97,7 +97,9 @@
       {% for c in comments %}
         <div class="comment-card">
           <div class="comment-header">
-            <a href="{% url 'authors:author_profile' c.author.id %}" class="comment-author">{{ c.author.displayName }}</a>
+            <a href="{% url 'authors:author_profile' c.author.id %}" class="comment-author">
+              {{ c.author.displayName }}
+            </a>
             <span class="comment-date">{{ c.created_at|date:"Y-m-d H:i" }}</span>
           </div>
           <div class="comment-content">{{ c.content|linebreaksbr }}</div>
@@ -121,6 +123,7 @@
     {% endif %}
   </section>
 </div>
+
 
 <!-- 📋 Copy Link Script -->
 <script>
