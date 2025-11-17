@@ -30,8 +30,10 @@ from .utils.federation import notify_remote_new_post, notify_remote_edit_post, n
 import uuid
 import urllib.parse
 import requests
+import logging
 from django.conf import settings
 from .api_views import SingleFollowingAPIView
+from authors.utils.remote_read import fetch_remote_comments_for_post
 from authors.utils.federation import send_comment_to_post_owner, send_like_to_post_owner, send_comment_like_to_post_owner
 
 
@@ -371,6 +373,22 @@ class PostDetailView(DetailView):
                 .prefetch_related("likes")
                 .all()
         )
+
+        context["comments"] = comments
+
+        local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+        post_host = (post.author.host or "").rstrip("/")
+
+        remote_comments = []
+        if post_host and post_host != local_host:
+            try:
+                remote_comments = fetch_remote_comments_for_post(post)
+            except Exception as e:
+                logging.error(f"Error fetching remote comments for post {post.id} from {post_host}: {e}")
+
+        # Expose extra remote comments to template
+        # (These are not stored in our DB, just displayed read-only)
+        context["remote_comments"] = remote_comments
 
         def compute_username_display(author):
             # Try the Django username first
