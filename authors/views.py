@@ -1160,21 +1160,38 @@ class NodeConfigurationView(LoginRequiredMixin, UserPassesTestMixin, View):
             service_username = form.cleaned_data['service_username']
             service_password = form.cleaned_data['service_password']
 
-            # Create or update the service user
-            service_user, created = Author.objects.get_or_create(username=service_username)
-            service_user.set_password(service_password)
-            service_user.displayName = f"Node Service User ({service_username})"
-            service_user.save()
+            # Update or create the service user
+            # First, try to get an existing service user and update it, or create new one
+            try:
+                # Try to find existing service user by display name pattern
+                existing_service_user = Author.objects.get(
+                    displayName__startswith="Node Service User"
+                )
+                # Update the existing service user
+                service_user = existing_service_user
+                service_user.username = service_username
+                service_user.set_password(service_password)
+                service_user.displayName = f"Node Service User ({service_username})"
+                service_user.save()
+                created = False
+            except Author.DoesNotExist:
+                # Create new service user if none exists
+                service_user = Author.objects.create_user(username=service_username)
+                service_user.set_password(service_password)
+                service_user.displayName = f"Node Service User ({service_username})"
+                service_user.save()
+                created = True
 
             # Update current user's host and url
             current_user = request.user
+            old_username = current_user.username  # Store original username
             current_user.host = base_url.rstrip("/")
             current_user.url = f"{base_url.rstrip('/')}/api/authors/{current_user.id}/"
             current_user.save(update_fields=["host", "url"])
 
-            # Update session to prevent logout
-            from django.contrib.auth import update_session_auth_hash
-            update_session_auth_hash(request, current_user)
+            # Re-authenticate the same user to maintain session
+            from django.contrib.auth import login
+            login(request, current_user)
 
             messages.success(request, f"Node configuration updated successfully! Service user '{service_username}' created/updated.")
             return redirect('authors:node_config')
