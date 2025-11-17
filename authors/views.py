@@ -638,21 +638,14 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
             deleted=False
         ).exclude(author=user)
         
-        # 2. Remote unlisted posts from followed authors
-        # Since PUBLIC_UNLISTED posts should be visible to followers,
-        # include remote PUBLIC_UNLISTED posts from followed authors,
-        # similar to how local PUBLIC_UNLISTED posts are handled
-        remote_followed_authors = Author.objects.filter(
-            id__in=followed_authors
-        ).exclude(
-            host=local_host  # Exclude local authors
-        ).values_list('id', flat=True)
-        
+        # 2. Remote unlisted posts (only if received in inbox)
+        # Since we now push PUBLIC_UNLISTED posts to remote followers' inboxes, 
+        # they should appear here if the user is a follower
         unlisted_posts_remote = Post.objects.filter(
+            id__in=inbox_post_ids,
             visibility='PUBLIC_UNLISTED',
-            author__in=remote_followed_authors,
             deleted=False
-        ).exclude(author=user)
+        ).exclude(author__host=local_host).exclude(author=user)
 
         # All posts from the author themselves (they should see their own posts regardless of visibility)
         my_posts = Post.objects.filter(author=user, deleted=False)

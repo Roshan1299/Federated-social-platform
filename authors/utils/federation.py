@@ -162,9 +162,19 @@ def build_comment_like_payload(comment_like):
 
 
 def send_to_remote_inboxes(author, payload: dict, post_visibility: str = 'PUBLIC'):
-    # Don't send PUBLIC_UNLISTED posts to remote nodes at all
-    if post_visibility == 'PUBLIC_UNLISTED':
-        return  # Early return - don't send unlisted posts to remote nodes
+    # PUBLIC_UNLISTED posts should be sent to followers' inboxes like PUBLIC posts
+    # Only FRIENDS posts have special restrictions
+    if post_visibility == 'FRIENDS':
+        # Will be handled by the friend-specific logic below
+        pass  # Continue to processing
+    elif post_visibility == 'PUBLIC_UNLISTED':
+        # Send to all followers (both local and remote), same as PUBLIC
+        pass  # Continue to processing  
+    elif post_visibility == 'PUBLIC':
+        # Send to all followers (both local and remote)
+        pass  # Continue to processing
+    else:
+        return  # For any other unexpected visibilities
 
     recipients = get_remote_followers_and_friends(author)
 
