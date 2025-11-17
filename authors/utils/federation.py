@@ -1,15 +1,24 @@
 from django.conf import settings
 
-from authors.models import Follow, RemoteNode, Post, Comment, Like
+from authors.models import Follow, RemoteNode, Post, Comment, Like, Author
 from authors.utils.nodes import remote_post
 
 
-from django.conf import settings
-
-from authors.models import Follow, RemoteNode, Post, Comment, Like
-from authors.utils.nodes import remote_post
 
 
+def get_remote_node_for_author(author: Author):
+    # Take the author's host (e.g. "https://team-green.herokuapp.com")
+    host = (author.host or "").rstrip("/")
+    if not host:
+        return None
+
+    # Try to find matching RemoteNode row in our DB
+    try:
+        # base_url is stored like "https://team-green.herokuapp.com"
+        return RemoteNode.objects.get(base_url__icontains=host, enabled=True)
+    except RemoteNode.DoesNotExist:
+        return None
+    
 def get_remote_followers_and_friends(author):
     """
     Get a list of (RemoteNode, remote_author) tuples for remote followers 
@@ -213,3 +222,53 @@ def notify_remote_like(like: Like):
     """
     payload = build_like_payload(like)
     send_to_remote_inboxes(like.author, payload)
+
+
+def send_comment_to_post_owner(comment: Comment) -> bool:
+    # Get the post being commented on
+    post = comment.post
+    remote_author = post.author
+
+    # Find which RemoteNode this author belongs to
+    node = get_remote_node_for_author(remote_author)
+    if not node:
+        return False  # no matching remote node → cannot connect
+
+    # Build inbox URL on that remote node for this author
+    inbox_url = inbox_url_for_remote(node, remote_author.url)
+
+    # Build JSON payload for this comment
+    payload = build_comment_payload(comment)
+
+    # Send payload to remote node using:
+    #   - inbox_url
+    #   - node.base_url (to find username/password in RemoteNode)
+    return remote_post(
+        url=inbox_url,
+        payload=payload,
+        base_url=node.base_url,
+    )
+
+
+def send_like_to_post_owner(like: Like) -> bool:
+    # Get the post that was liked
+    post = like.post
+    remote_author = post.author
+
+    # Find which RemoteNode owns this author
+    node = get_remote_node_for_author(remote_author)
+    if not node:
+        return False  # cannot connect to this node
+
+    # Build inbox URL on that remote node
+    inbox_url = inbox_url_for_remote(node, remote_author.url)
+
+    # Build JSON payload for this like
+    payload = build_like_payload(like)
+
+    # Send payload to remote node using base_url + username + password
+    return remote_post(
+        url=inbox_url,
+        payload=payload,
+        base_url=node.base_url,
+    )

@@ -26,6 +26,8 @@ from .utils.federation import notify_remote_new_post, notify_remote_edit_post, n
 import uuid
 import urllib.parse
 from .api_views import SingleFollowingAPIView
+from authors.utils.federation import send_comment_to_post_owner, send_like_to_post_owner
+
 
 
 def render_post_content(post):
@@ -933,6 +935,14 @@ def toggle_like(request, post_id):
         # New like
         liked = True
         messages.success(request, "Liked!")
+
+        # if this is a remote post, send the like to that node
+        local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+        post_host = (post.author.host or "").rstrip("/")
+
+        if post_host and post_host != local_host:
+            send_like_to_post_owner(like)
+            
     if request.headers.get('HX-Request') or request.headers.get('x-requested-with') == 'XMLHttpRequest':
         return JsonResponse({'liked': liked, 'count': post.likes.count()})
     return redirect('authors:post_detail', post_id=post.id)
@@ -1046,6 +1056,12 @@ def add_comment(request, post_id):
         author=viewer,
         content=content_text,
     )
+    # If this post belongs to a REMOTE node, notify that node
+    local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+    post_host = (post.author.host or "").rstrip("/")
+
+    if post_host and post_host != local_host:
+        send_comment_to_post_owner(comment)
     messages.success(request, "Comment posted!")
     return redirect('authors:post_detail', post_id=post.id)
 
