@@ -2,7 +2,7 @@ import uuid
 from django.http import JsonResponse
 from django.utils import timezone
 from .models import Author, Post, Comment, Like, CommentLike, FollowRequest, Follow
-
+from authors.utils.image_sync import fetch_and_store_remote_image
 import typing
 
 def get_or_create_author(author_data):
@@ -106,29 +106,32 @@ def handle_unfollow(self, recipient, data, request):
 def handle_post(self, recipient, data, request):
     """
     Handle incoming post/entry from another node.
-    
-    Creates an InboxReceipt to track that this post was delivered to the recipient's inbox.
+    Downloads remote images if present.
+    Creates InboxReceipt to track delivery.
     """
     try:
-        # avoid circular dependency
         from .models import InboxReceipt
-        
-        # Extract origin - the globally unique identifier
+        from authors.utils.image_sync import fetch_and_store_remote_image
+
+        # -----------------------------------------
+        # STEP 0 — Validate origin
+        # -----------------------------------------
         origin = data.get('origin') or data.get('id')
-        
         if not origin:
             return JsonResponse({'error': 'Post must have origin or id field'}, status=400)
-        
-        # STEP 1: Check if we already have this post (by origin, NOT by UUID!)
+
+        # -----------------------------------------
+        # STEP 1 — Lookup existing post
+        # -----------------------------------------
         existing_post = Post.objects.filter(origin=origin).first()
-        
-        # Determine visibility, mapping unlisted to PUBLIC_UNLISTED
+
+        # Normalize visibility
         visibility = data.get('visibility', 'PUBLIC').upper()
         if data.get('unlisted', False):
             visibility = 'PUBLIC_UNLISTED'
 
         if existing_post:
-            # Post already exists - update it
+            # Update existing post
             existing_post.title = data.get('title', existing_post.title)
             existing_post.content = data.get('content', existing_post.content)
             existing_post.contentType = data.get('contentType', existing_post.contentType)
@@ -136,27 +139,43 @@ def handle_post(self, recipient, data, request):
             existing_post.source = data.get('source', existing_post.source)
             existing_post.updated = timezone.now()
 
-            # Check if the post is marked as deleted
             if data.get('deleted', False):
                 existing_post.deleted = True
 
             existing_post.save()
-            
-            # Create inbox receipt for updated post (idempotent due to unique_together)
+
             InboxReceipt.objects.get_or_create(
                 recipient=recipient,
                 post=existing_post
             )
-            
+
             return JsonResponse({'message': 'Post updated'}, status=200)
-        
-        # STEP 2: Get or create the author
+
+        # -----------------------------------------
+        # STEP 2 — Author
+        # -----------------------------------------
         author_data = data.get('author', {})
         if not author_data:
-            return JsonResponse({'error': 'Post must have author with id/url'}, status=400)
+            return JsonResponse({'error': 'Post must have author'}, status=400)
+
         author = get_or_create_author(author_data)
-        
-        # STEP 3: Create the new post
+
+        # -----------------------------------------
+        # STEP 3 — Image support
+        # -----------------------------------------
+        remote_image_url = (
+            data.get("image")
+            or data.get("image_url")
+            or data.get("imageUrl")
+        )
+
+        local_image = None
+        if remote_image_url:
+            local_image = fetch_and_store_remote_image(remote_image_url)
+
+        # -----------------------------------------
+        # STEP 4 — Create NEW post
+        # -----------------------------------------
         post = Post.objects.create(
             author=author,
             title=data.get('title', 'Untitled'),
@@ -165,16 +184,19 @@ def handle_post(self, recipient, data, request):
             visibility=visibility,
             source=data.get('source', origin),
             origin=origin,
+            image=local_image,
         )
-        
-        # STEP 4: Create inbox receipt to track delivery
+
+        # -----------------------------------------
+        # STEP 5 — Record inbox delivery
+        # -----------------------------------------
         InboxReceipt.objects.create(
             recipient=recipient,
             post=post
         )
-        
+
         return JsonResponse({'message': 'Post received'}, status=201)
-        
+
     except Exception as e:
         return JsonResponse({'error': f'Failed to process post: {str(e)}'}, status=400)
 
