@@ -105,33 +105,28 @@ def handle_unfollow(self, recipient, data, request):
 
 def handle_post(self, recipient, data, request):
     """
-    Handle incoming post/entry from another node.
-    Downloads remote images if present.
-    Creates InboxReceipt to track delivery.
+    Handle incoming post from remote node.
+    Includes: downloading + attaching remote images.
     """
     try:
         from .models import InboxReceipt
         from authors.utils.image_sync import fetch_and_store_remote_image
 
-        # -----------------------------------------
-        # STEP 0 — Validate origin
-        # -----------------------------------------
         origin = data.get('origin') or data.get('id')
         if not origin:
-            return JsonResponse({'error': 'Post must have origin or id field'}, status=400)
+            return JsonResponse({'error': 'Post must have origin/id'}, status=400)
 
-        # -----------------------------------------
-        # STEP 1 — Lookup existing post
-        # -----------------------------------------
+        # Check if post already exists
         existing_post = Post.objects.filter(origin=origin).first()
 
-        # Normalize visibility
         visibility = data.get('visibility', 'PUBLIC').upper()
         if data.get('unlisted', False):
             visibility = 'PUBLIC_UNLISTED'
 
+        # -----------------------------
+        # UPDATE EXISTING POST
+        # -----------------------------
         if existing_post:
-            # Update existing post
             existing_post.title = data.get('title', existing_post.title)
             existing_post.content = data.get('content', existing_post.content)
             existing_post.contentType = data.get('contentType', existing_post.contentType)
@@ -139,30 +134,35 @@ def handle_post(self, recipient, data, request):
             existing_post.source = data.get('source', existing_post.source)
             existing_post.updated = timezone.now()
 
+            # If updated remote post contains a new image
+            remote_image_url = (
+                data.get("image")
+                or data.get("image_url")
+                or data.get("imageUrl")
+            )
+            if remote_image_url:
+                existing_post.image = fetch_and_store_remote_image(remote_image_url)
+
+            # Handle deletion
             if data.get('deleted', False):
                 existing_post.deleted = True
 
             existing_post.save()
-
-            InboxReceipt.objects.get_or_create(
-                recipient=recipient,
-                post=existing_post
-            )
-
+            InboxReceipt.objects.get_or_create(recipient=recipient, post=existing_post)
             return JsonResponse({'message': 'Post updated'}, status=200)
 
-        # -----------------------------------------
-        # STEP 2 — Author
-        # -----------------------------------------
+        # -----------------------------
+        # NEW POST
+        # -----------------------------
         author_data = data.get('author', {})
         if not author_data:
             return JsonResponse({'error': 'Post must have author'}, status=400)
 
         author = get_or_create_author(author_data)
 
-        # -----------------------------------------
-        # STEP 3 — Image support
-        # -----------------------------------------
+        # -----------------------------
+        # Fetch remote image if available
+        # -----------------------------
         remote_image_url = (
             data.get("image")
             or data.get("image_url")
@@ -173,9 +173,9 @@ def handle_post(self, recipient, data, request):
         if remote_image_url:
             local_image = fetch_and_store_remote_image(remote_image_url)
 
-        # -----------------------------------------
-        # STEP 4 — Create NEW post
-        # -----------------------------------------
+        # -----------------------------
+        # Create local post
+        # -----------------------------
         post = Post.objects.create(
             author=author,
             title=data.get('title', 'Untitled'),
@@ -184,16 +184,10 @@ def handle_post(self, recipient, data, request):
             visibility=visibility,
             source=data.get('source', origin),
             origin=origin,
-            image=local_image,
+            image=local_image,  # ⭐ THIS IS WHAT FIXES EXPLORE
         )
 
-        # -----------------------------------------
-        # STEP 5 — Record inbox delivery
-        # -----------------------------------------
-        InboxReceipt.objects.create(
-            recipient=recipient,
-            post=post
-        )
+        InboxReceipt.objects.create(recipient=recipient, post=post)
 
         return JsonResponse({'message': 'Post received'}, status=201)
 
