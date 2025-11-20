@@ -529,17 +529,32 @@ class PostAPIView(View):
             if not is_friend:
                 return HttpResponse("Forbidden", status=403)
 
+        # --- profile image handling ---
+        profile_image_url = None
+        profile_image = getattr(post.author, "profileImage", None)
+        if profile_image:
+            # If it's your custom Image model, use serve_image
+            try:
+                profile_image_url = request.build_absolute_uri(
+                    reverse('authors:serve_image', args=[profile_image.id])
+                )
+            except AttributeError:
+                # Fallback in case profileImage is some other type (e.g. a bare URL string)
+                profile_image_url = profile_image
+
         data = {
             "type": "post",
-            "id": request.build_absolute_uri(reverse('authors:post_detail', kwargs={'post_id': post.id})),
+            "id": request.build_absolute_uri(
+                reverse('authors:post_detail', kwargs={'post_id': post.id})
+            ),
             "author": {
                 "type": "author",
-                "id": post.author.url, 
+                "id": post.author.url,
                 "host": post.author.host,
                 "displayName": post.author.displayName,
                 "url": post.author.url,
                 "github": post.author.github,
-                "profileImage": post.author.profileImage.name if post.author.profileImage else None,
+                "profileImage": profile_image_url,
             },
             "title": post.title,
             "contentType": post.contentType,
@@ -547,13 +562,20 @@ class PostAPIView(View):
             "visibility": post.visibility,
             "published": post.published.isoformat(),
             "updated": post.updated.isoformat(),
-            # add image if exists
-            "image": post.image_url if post.image else None,
         }
-        if post.image:
-            data["image"] = request.build_absolute_uri(
-                reverse('authors:serve_image', args=[post.image.id])
-            )
+
+        # --- post image handling ---
+        image_url = None
+        if getattr(post, "image", None):
+            try:
+                image_url = request.build_absolute_uri(
+                    reverse('authors:serve_image', args=[post.image.id])
+                )
+            except AttributeError:
+                # If for some reason image is stored differently, fail soft
+                image_url = None
+
+        data["image"] = image_url
         
         return JsonResponse(data)
     
