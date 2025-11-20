@@ -314,7 +314,7 @@ def build_post_dict(post, request):
     entry_url = f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/entries/{post.id}"
     
     data = {
-        "type": "post",
+        "type": "entry",
         # Use canonical origin as the id when available
         "id": post.origin or entry_url,
         "author": build_author_dict(author, request),
@@ -447,7 +447,7 @@ class InboxAPIView(View):
                 return self.handle_follow_request(recipient, data, request)
             elif object_type == 'unfollow':
                 return self.handle_unfollow(recipient, data, request)
-            elif object_type == 'post':
+            elif object_type == 'post' or object_type == 'entry':
                 return self.handle_post(recipient, data, request)
             elif object_type == 'like':
                 return self.handle_like(recipient, data, request)
