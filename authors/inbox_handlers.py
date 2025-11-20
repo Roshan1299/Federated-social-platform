@@ -162,11 +162,13 @@ def handle_post(self, recipient, data, request):
         content_type = (data.get("contentType") or "").strip()
         content = data.get("content", "") or ""
 
-        local_image = None
+        local_image = None  # define once
 
         # 1) If we got an explicit image URL, try to download that
         if remote_image_url:
+            print("REMOTE IMAGE URL:", remote_image_url)
             local_image = fetch_and_store_remote_image(remote_image_url)
+            print("LOCAL IMAGE:", local_image)
 
         # 2) If no URL image, but content is base64, decode and store
         if (not local_image) and ("base64" in content_type.lower()) and content:
@@ -187,6 +189,7 @@ def handle_post(self, recipient, data, request):
                     content_type=clean_type,
                     data=img_bytes,
                 )
+                print("LOCAL BASE64 IMAGE:", local_image)
             except Exception as e:
                 print("Failed to decode inline base64 image:", e)
 
@@ -209,6 +212,7 @@ def handle_post(self, recipient, data, request):
             if data.get("deleted", False):
                 existing_post.deleted = True
 
+            # only overwrite image if we actually got one
             if local_image:
                 existing_post.image = local_image
 
@@ -241,7 +245,7 @@ def handle_post(self, recipient, data, request):
             visibility=visibility,
             source=data.get("source", origin),
             origin=origin,
-            image=local_image,  # may be None if no image provided
+            image=local_image,  # now non-null when fetch succeeds
         )
 
         InboxReceipt.objects.create(
