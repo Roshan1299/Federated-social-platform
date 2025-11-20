@@ -4,6 +4,7 @@ from django.utils import timezone
 from .models import Author, Post, Comment, Like, CommentLike, FollowRequest, Follow
 from authors.utils.image_sync import fetch_and_store_remote_image
 import typing
+import base64
 
 def get_or_create_author(author_data):
     """Normalize incoming author payload and return an Author instance."""
@@ -177,6 +178,39 @@ def handle_post(self, recipient, data, request):
                 or data.get("image_url")
                 or data.get("imageUrl")
             )
+
+            # ---------------------------------------------
+            # Handle base64 inline images (content contains base64)
+            # ---------------------------------------------
+            if not local_image:
+                content_type = data.get("contentType", "")
+                content = data.get("content", "")
+
+                if "base64" in content_type and content:
+                    try:
+                        # Strip "image/png;base64" → "image/png"
+                        clean_type = content_type.split(";")[0]
+
+                        # Decode base64 to bytes
+                        img_bytes = base64.b64decode(content)
+
+                        # Pick extension
+                        ext = "png"
+                        if "jpeg" in clean_type or "jpg" in clean_type:
+                            ext = "jpg"
+                        elif "gif" in clean_type:
+                            ext = "gif"
+
+                        # Store in Image model
+                        from .models import Image
+                        local_image = Image.objects.create(
+                            file_name=f"remote_post_{uuid.uuid4()}.{ext}",
+                            content_type=clean_type,
+                            data=img_bytes
+                        )
+                    except Exception as e:
+                        print("Failed to decode inline base64 image:", e)
+
 
             if remote_image_url:
                 existing_post.image = fetch_and_store_remote_image(remote_image_url)
