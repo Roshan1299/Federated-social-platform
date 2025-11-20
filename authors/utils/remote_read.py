@@ -1,5 +1,3 @@
-# authors/utils/remote_read.py
-
 import logging
 import requests
 from django.conf import settings
