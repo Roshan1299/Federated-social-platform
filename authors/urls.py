@@ -15,7 +15,7 @@ from .views import (
 # Import new API views
 from .api_views import (
     InboxAPIView, FollowersAPIView, SingleFollowerAPIView, EntriesAPIView, AuthorsListAPIView, AuthorAPIView,
-    SingleEntryAPIView, CommentsAPIView, LikesAPIView, LikedAPIView, ImageEntryAPIView,
+    SingleEntryAPIView, CommentsAPIView, LikesAPIView, LikedAPIView, ImageEntryAPIView, AuthorImageAPIView,
     CommentLikesAPIView, FollowingAPIView, SingleFollowingAPIView
     , FollowRequestsAPIView
 )
@@ -67,6 +67,9 @@ urlpatterns = [
     # Authors API
     path("api/authors/", AuthorsListAPIView.as_view(), name="authors_api"),
     path("api/authors/<uuid:author_id>/", AuthorAPIView.as_view(), name="author_api"),
+    
+    # Author Image API
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/image/?$', AuthorImageAPIView.as_view(), name="author_image_api"),
 
     # Inbox API (important)
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/inbox/?$', InboxAPIView.as_view(), name="inbox_api"),

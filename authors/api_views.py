@@ -289,10 +289,11 @@ def build_author_dict(author, request):
     """Helper function to build author JSON object"""
     web_url = reverse('authors:author_profile', kwargs={'author_id': author.id})
     
-    # Build profileImage URL using serve_image endpoint
+    # Build profileImage URL using API endpoint /api/authors/{author_id}/image
     profile_image_url = None
     if author.profileImage:
-        image_path = reverse('authors:serve_image', args=[author.profileImage.id])
+        # Use the proper API endpoint for profile images
+        image_path = reverse('authors:author_image_api', args=[author.id])
         profile_image_url = request.build_absolute_uri(image_path)
     
     return {
@@ -302,7 +303,7 @@ def build_author_dict(author, request):
         "displayName": author.displayName,
         "url": author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/",
         "github": author.github,
-        "profileImage": request.build_absolute_uri(author.profileImage.file_name) if author.profileImage else None,
+        "profileImage": profile_image_url,
         "web": f"{request.scheme}://{request.get_host()}{web_url}",
     }
 
@@ -313,7 +314,7 @@ def build_post_dict(post, request):
     entry_url = f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/entries/{post.id}"
     
     data = {
-        "type": "post",
+        "type": "entry",
         # Use canonical origin as the id when available
         "id": post.origin or entry_url,
         "author": build_author_dict(author, request),
@@ -337,9 +338,10 @@ def build_post_dict(post, request):
         }
     }
     
-    # Add image if present - use serve_image endpoint
+    # Add image if present - use proper API endpoint /api/authors/{author_id}/entries/{entry_id}/image
     if post.image:
-        data["image"] = request.build_absolute_uri(post.image.file_name)
+        image_path = reverse('authors:image_entry_api', args=[author.id, post.id])
+        data["image"] = request.build_absolute_uri(image_path)
 
     # Add likes metadata for this entry
     likes_url = f"{entry_url}/likes"
@@ -445,7 +447,7 @@ class InboxAPIView(View):
                 return self.handle_follow_request(recipient, data, request)
             elif object_type == 'unfollow':
                 return self.handle_unfollow(recipient, data, request)
-            elif object_type == 'post':
+            elif object_type == 'post' or object_type == 'entry':
                 return self.handle_post(recipient, data, request)
             elif object_type == 'like':
                 return self.handle_like(recipient, data, request)
@@ -1321,6 +1323,32 @@ class ImageEntryAPIView(View):
         
         return HttpResponse(image_data, content_type=content_type)
 
+
+@method_decorator(http_basic_auth_or_session, name='dispatch')
+class AuthorImageAPIView(View):
+    """
+    GET /api/authors/{AUTHOR_SERIAL}/image
+    GET /api/authors/{AUTHOR_FQID}/image
+    Get the profile image from an author as binary data
+    """
+    
+    def get(self, request, author_id=None, author_fqid=None):
+        """Get profile image from author - handles both UUID and FQID"""
+        author = _get_author_by_id_or_fqid(author_id=author_id, author_fqid=author_fqid)
+        
+        if not author.profileImage:
+            return HttpResponse("No profile image found", status=404)
+        
+        # Get the image data from the database
+        image = author.profileImage
+        image_data = bytes(image.data)
+        
+        # Use the content_type from the Image model
+        content_type = image.content_type or 'image/jpeg'
+        
+        return HttpResponse(image_data, content_type=content_type)
+
+
 @method_decorator(http_basic_auth_or_session, name='dispatch')
 class AuthorAPIView(View):
     def get(self, request, author_id=None, author_fqid=None):
@@ -1345,21 +1373,8 @@ class AuthorAPIView(View):
                     except Author.DoesNotExist:
                         return JsonResponse({"error": "Author not found"}, status=404)
         
-        web_url = reverse('authors:author_profile', kwargs={'author_id': author.id})
-        author_id_url = author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/"
-        data = {
-            "type": "author",
-            "id": author_id_url,
-            "host": author.host or f"{request.scheme}://{request.get_host()}",
-            "displayName": author.displayName,
-            "github": author.github,
-            "profileImage": (
-                request.build_absolute_uri(
-                    reverse('authors:serve_image', args=[author.profileImage.id])
-                ) if author.profileImage else None
-            ),
-            "web": f"{request.scheme}://{request.get_host()}{web_url}",
-        }
+        # Use build_author_dict for consistency
+        data = build_author_dict(author, request)
         return JsonResponse(data)
 
 '''
@@ -1389,24 +1404,8 @@ class AuthorsListAPIView(View):
 
         items = []
         for author in page_obj:
-            web_url = reverse('authors:author_profile', kwargs={'author_id': author.id})
-            author_id_url = author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/"
-            
-            # Build profileImage URL using serve_image endpoint
-            profile_image_url = None
-            if author.profileImage:
-                image_path = reverse('authors:serve_image', args=[author.profileImage.id])
-                profile_image_url = request.build_absolute_uri(image_path)
-            
-            items.append({
-                "type": "author",
-                "id": author_id_url,
-                "host": author.host or f"{request.scheme}://{request.get_host()}",
-                "displayName": author.displayName,
-                "github": author.github,
-                "profileImage": profile_image_url,
-                "web": f"{request.scheme}://{request.get_host()}{web_url}",
-            })
+            # Use build_author_dict for consistency
+            items.append(build_author_dict(author, request))
 
         response_data = {
             "type": "authors",
