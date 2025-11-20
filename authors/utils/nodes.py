@@ -12,6 +12,47 @@ If the login is wrong → the remote node rejects the data.
 """
 import requests
 from authors.models import RemoteNode
+import base64
+from django.conf import settings
+
+def push_image_to_remote_nodes(image_obj):
+    """
+    Push an uploaded image to ALL remote nodes listed in RemoteNode DB.
+    Compatible with all CMPUT404 teams.
+    """
+
+    remote_nodes = RemoteNode.objects.filter(enabled=True)
+
+    for node in remote_nodes:
+        url = f"{node.base_url.rstrip('/')}/api/images/"
+
+        auth_string = f"{node.username}:{node.password}"
+        auth_encoded = base64.b64encode(auth_string.encode()).decode()
+
+        headers = {
+            "Authorization": f"Basic {auth_encoded}",
+            "Content-Type": image_obj.content_type,
+            "X-File-Name": image_obj.file_name,
+        }
+
+        try:
+            response = requests.post(
+                url,
+                headers=headers,
+                data=image_obj.data,
+                timeout=10,
+            )
+
+            if response.status_code in (200, 201):
+                print(f"✅ Image {image_obj.id} pushed to {node.base_url}")
+            else:
+                print(f"⚠️ Failed to push image to {node.base_url} "
+                      f"(status {response.status_code})")
+
+        except Exception as e:
+            print(f"❌ Error pushing image to {node.base_url}: {e}")
+
+
 
 # Looks up remote node login information
 def get_auth_for_base(base_url: str):

@@ -2,28 +2,49 @@ import uuid
 from django.http import JsonResponse
 from django.utils import timezone
 from .models import Author, Post, Comment, Like, CommentLike, FollowRequest, Follow
-
+from authors.utils.image_sync import fetch_and_store_remote_image
 import typing
 
 def get_or_create_author(author_data):
-    """Normalize incoming author payload and return an Author instance.
+    """Normalize incoming author payload and return an Author instance."""
 
-    This centralizes stub-author creation for remote authors. Prefers
-    the 'id' or 'url' field from the incoming author object and sets
-    reasonable defaults for username/displayName/host/github.
-    """
-    author_id = (author_data or {}).get('id') or (author_data or {}).get('url')
-    author_username = author_id.split('/')[-2] if author_id and '/' in author_id else 'remote_author'
+    raw_id = (author_data or {}).get("id") or (author_data or {}).get("url")
+    if not raw_id:
+        return None
+
+    # Extract username part safely
+    try:
+        username_part = raw_id.rstrip("/").split("/")[-1]
+    except Exception:
+        username_part = "remote"
+
+    display_name = (
+        author_data.get("displayName")
+        or author_data.get("username")
+        or username_part
+    )
+
+    host = author_data.get("host") or raw_id.split("/api/authors/")[0]
 
     author, created = Author.objects.get_or_create(
-        url=author_id,
+        url=raw_id,
         defaults={
-            'username': f"remote_{author_username}_{uuid.uuid4().hex[:8]}",
-            'displayName': (author_data or {}).get('displayName', 'Unknown'),
-            'host': (author_data or {}).get('host', ''),
-            'github': (author_data or {}).get('github'),
-        }
+            "username": f"remote_{username_part}_{uuid.uuid4().hex[:6]}",
+            "displayName": display_name,
+            "host": host,
+            "github": author_data.get("github", ""),
+        },
     )
+
+    # Update stale displayName
+    if not created:
+        changed = False
+        if author.displayName in ["", author.url]:
+            author.displayName = display_name
+            changed = True
+
+        if changed:
+            author.save(update_fields=["displayName"])
 
     return author
 
@@ -105,30 +126,38 @@ def handle_unfollow(self, recipient, data, request):
 
 def handle_post(self, recipient, data, request):
     """
-    Handle incoming post/entry from another node.
-    
-    Creates an InboxReceipt to track that this post was delivered to the recipient's inbox.
+    Handle incoming post from a remote node.
+    Includes:
+    - creating/updating post
+    - fetching & attaching remote images
+    - inbox receipts
     """
+
     try:
-        # avoid circular dependency
         from .models import InboxReceipt
-        
-        # Extract origin - the globally unique identifier
+        from authors.utils.image_sync import fetch_and_store_remote_image
+
+        # ---------------------------------------------------------
+        # EXTRACT ORIGIN (canonical global post URL)
+        # ---------------------------------------------------------
         origin = data.get('origin') or data.get('id')
-        
         if not origin:
-            return JsonResponse({'error': 'Post must have origin or id field'}, status=400)
-        
-        # STEP 1: Check if we already have this post (by origin, NOT by UUID!)
+            return JsonResponse({'error': 'Post must have origin/id'}, status=400)
+
+        # ---------------------------------------------------------
+        # CHECK IF POST ALREADY EXISTS
+        # ---------------------------------------------------------
         existing_post = Post.objects.filter(origin=origin).first()
-        
-        # Determine visibility, mapping unlisted to PUBLIC_UNLISTED
+
+        # Normalize visibility
         visibility = data.get('visibility', 'PUBLIC').upper()
         if data.get('unlisted', False):
             visibility = 'PUBLIC_UNLISTED'
 
+        # ---------------------------------------------------------
+        # UPDATE EXISTING POST
+        # ---------------------------------------------------------
         if existing_post:
-            # Post already exists - update it
             existing_post.title = data.get('title', existing_post.title)
             existing_post.content = data.get('content', existing_post.content)
             existing_post.contentType = data.get('contentType', existing_post.contentType)
@@ -136,27 +165,57 @@ def handle_post(self, recipient, data, request):
             existing_post.source = data.get('source', existing_post.source)
             existing_post.updated = timezone.now()
 
-            # Check if the post is marked as deleted
+            # Update deleted flag
             if data.get('deleted', False):
                 existing_post.deleted = True
 
+            # ---------------------------------------------
+            # UPDATE EXISTING POST IMAGE
+            # ---------------------------------------------
+            remote_image_url = (
+                data.get("image")
+                or data.get("image_url")
+                or data.get("imageUrl")
+            )
+
+            if remote_image_url:
+                existing_post.image = fetch_and_store_remote_image(remote_image_url)
+
             existing_post.save()
-            
-            # Create inbox receipt for updated post (idempotent due to unique_together)
+
+            # Avoid duplicate receipts
             InboxReceipt.objects.get_or_create(
                 recipient=recipient,
                 post=existing_post
             )
-            
+
             return JsonResponse({'message': 'Post updated'}, status=200)
-        
-        # STEP 2: Get or create the author
+
+        # ---------------------------------------------------------
+        # NEW POST — CREATE AUTHOR IF NEEDED
+        # ---------------------------------------------------------
         author_data = data.get('author', {})
         if not author_data:
-            return JsonResponse({'error': 'Post must have author with id/url'}, status=400)
+            return JsonResponse({'error': 'Post must include author'}, status=400)
+
         author = get_or_create_author(author_data)
-        
-        # STEP 3: Create the new post
+
+        # ---------------------------------------------------------
+        # DOWNLOAD REMOTE IMAGE (IF PROVIDED)
+        # ---------------------------------------------------------
+        remote_image_url = (
+            data.get("image")
+            or data.get("image_url")
+            or data.get("imageUrl")
+        )
+
+        local_image = None
+        if remote_image_url:
+            local_image = fetch_and_store_remote_image(remote_image_url)
+
+        # ---------------------------------------------------------
+        # CREATE NEW POST
+        # ---------------------------------------------------------
         post = Post.objects.create(
             author=author,
             title=data.get('title', 'Untitled'),
@@ -165,19 +224,21 @@ def handle_post(self, recipient, data, request):
             visibility=visibility,
             source=data.get('source', origin),
             origin=origin,
+            image=local_image,      # ⭐ Remote image displayed in Explore/Stream
         )
-        
-        # STEP 4: Create inbox receipt to track delivery
+
         InboxReceipt.objects.create(
             recipient=recipient,
             post=post
         )
-        
-        return JsonResponse({'message': 'Post received'}, status=201)
-        
-    except Exception as e:
-        return JsonResponse({'error': f'Failed to process post: {str(e)}'}, status=400)
 
+        return JsonResponse({'message': 'Post received'}, status=201)
+
+    except Exception as e:
+        return JsonResponse(
+            {'error': f'Failed to process post: {str(e)}'},
+            status=400
+        )
 
 def handle_comment(self, recipient, data, request):
     """

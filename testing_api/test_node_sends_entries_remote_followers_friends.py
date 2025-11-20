@@ -160,9 +160,9 @@ class NodeSendsEntriesToRemoteFollowersFriendsTest(TestCase):
                         'http://another-remote.com/api/authors/11111111-2222-3333-4444-555555555555/inbox')
 
     @patch('authors.utils.federation.remote_post')
-    def test_public_unlisted_post_not_sent_to_remote_nodes(self, mock_remote_post):
+    def test_public_unlisted_post_sent_to_remote_followers_and_friends(self, mock_remote_post):
         """
-        EDGE CASE 3: A PUBLIC_UNLISTED post should NOT be sent to remote nodes.
+        EDGE CASE 3: A PUBLIC_UNLISTED post should be sent to remote followers and friends, similar to PUBLIC posts.
         """
         # Mock remote_post to return True (successful delivery)
         mock_remote_post.return_value = True
@@ -170,7 +170,7 @@ class NodeSendsEntriesToRemoteFollowersFriendsTest(TestCase):
         # Create a public unlisted post
         unlisted_post = Post.objects.create(
             title='Public Unlisted Post',
-            content='This unlisted post should not be pushed to remote nodes',
+            content='This unlisted post should be sent to remote followers and friends',
             contentType='text/plain',
             visibility='PUBLIC_UNLISTED',
             author=self.local_author
@@ -179,8 +179,24 @@ class NodeSendsEntriesToRemoteFollowersFriendsTest(TestCase):
         # Call the function directly to trigger sending
         notify_remote_new_post(unlisted_post)
         
-        # Verify that remote_post was NOT called (unlisted posts should not be pushed)
-        self.assertEqual(mock_remote_post.call_count, 0)
+        # Verify that remote_post was called for both remote follower and friend (like PUBLIC posts)
+        self.assertEqual(mock_remote_post.call_count, 2,
+                        f"Expected 2 calls to remote_post, but got {mock_remote_post.call_count}. "
+                        f"PUBLIC_UNLISTED posts should be sent to all remote followers and friends.")
+        
+        # Check that calls were made with appropriate parameters
+        calls_made = mock_remote_post.call_args_list
+        called_urls = [call[1]['url'] for call in calls_made]
+        
+        # Should have sent to both remote follower and friend's inbox
+        expected_inboxes = [
+            'http://remote-node.com/api/authors/87654321-4321-8765-2109-210987654321/inbox',
+            'http://another-remote.com/api/authors/11111111-2222-3333-4444-555555555555/inbox'
+        ]
+        
+        for expected_inbox in expected_inboxes:
+            self.assertIn(expected_inbox, called_urls,
+                         f"Expected inbox URL {expected_inbox} was not found in calls: {called_urls}")
 
     @patch('authors.utils.federation.remote_post')
     def test_remote_node_failure_does_not_break_local_posting(self, mock_remote_post):

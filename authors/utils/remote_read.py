@@ -1,63 +1,93 @@
+# authors/utils/remote_read.py
+
 import logging
 import requests
 from django.conf import settings
-from authors.models import Comment, Post
-from authors.inbox_handlers import get_or_create_author
+from authors.models import Comment, Author
 
-logger = logging.getLogger(__name__)
-
-def sync_remote_comments_for_post(post: Post):
+def sync_remote_comments_for_post(post):
     """
-    Fetch comments for this post from the remote node
-    and STORE them as local Comment rows.
-
-    After this runs, post.comments.all() will include
-    both local and remote comments (as long as the remote
-    node exposes them via its /comments endpoint).
+    Fetch comments from the remote node for this post
+    and store/update them as Comment rows in our DB.
     """
-    origin = (post.origin or "").rstrip("/")
-    if not origin:
+
+    # 1) Figure out the *remote* post URL
+
+    # Try origin (usual place to store remote URL)
+    post_url = (getattr(post, "origin", "") or "").strip()
+
+    # Fallback: some projects store the remote URL in `source`
+    if not post_url:
+        post_url = (getattr(post, "source", "") or "").strip()
+
+    # As a last resort, construct from author's host + our post.id
+    # Adjust this if your remote uses a different pattern.
+    if not post_url:
+        host = (post.author.host or "").rstrip("/")
+        # Typical Social Distribution style, adjust if your remote uses something else:
+        post_url = f"{host}/api/authors/{post.author.id}/posts/{post.id}"
+
+    if not post_url.startswith("http"):
         return
 
-    # Typical remote comments endpoint: <post-origin>/comments
-    url = origin + "/comments"
+    comments_url = post_url.rstrip("/") + "/comments/"
 
     try:
-        resp = requests.get(url, timeout=5)
-        if resp.status_code != 200:
-            logger.warning("Remote comments fetch failed: %s %s", resp.status_code, url)
-            return
-
-        data = resp.json()
-        items = data.get("items") if isinstance(data, dict) else data
-
-        if not isinstance(items, list):
-            return
-
-        for c in items:
-            try:
-                comment_origin = c.get("id") or c.get("origin")
-                if not comment_origin:
-                    continue
-
-                # Build / reuse author (stub) for remote commenter
-                author_data = c.get("author") or {}
-                author = get_or_create_author(author_data)
-
-                content = c.get("comment") or c.get("content", "")
-
-                # Upsert: if we already have this origin, update content; else create
-                Comment.objects.update_or_create(
-                    origin=comment_origin,
-                    defaults={
-                        "post": post,
-                        "author": author,
-                        "content": content,
-                    },
-                )
-            except Exception as inner:
-                logger.warning("Failed to sync one remote comment: %s", inner)
-
-    except Exception as e:
-        logger.exception("Error syncing remote comments: %s", e)
+        resp = requests.get(comments_url, timeout=5)
+    except Exception:
         return
+
+    if resp.status_code >= 300:
+        return
+
+    try:
+        data = resp.json()
+    except Exception:
+        return
+
+    # Many nodes return: {"type": "comments", "items": [ ... ]}
+    items = data.get("items", []) if isinstance(data, dict) else data
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        if item.get("type", "").lower() not in ("comment",):
+            continue
+
+        comment_id = item.get("id")
+        if not comment_id:
+            continue
+
+        author_data = item.get("author") or {}
+        content = item.get("comment") or item.get("content", "") or ""
+
+        # 3) Get or create Author for the remote commenter
+        author_url = author_data.get("id") or author_data.get("url")
+        if not author_url:
+            continue
+
+        host = (author_data.get("host") or "").strip()
+        display_name = (author_data.get("displayName") or "Remote Author").strip()
+        username_guess = f"remote_{display_name[:10]}" if display_name else "remote_user"
+
+        author_obj, _ = Author.objects.get_or_create(
+            url=author_url,
+            defaults={
+                "displayName": display_name or "Remote Author",
+                "host": host,
+                "username": username_guess,
+            },
+        )
+
+        defaults = {
+            "post": post,
+            "author": author_obj,
+            "content": content,
+        }
+
+        # Use `origin` to dedupe by remote ID
+        Comment.objects.update_or_create(
+            origin=comment_id,
+            defaults=defaults,
+        )

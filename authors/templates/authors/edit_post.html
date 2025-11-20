@@ -36,7 +36,9 @@
       <label for="{{ form.image.id_for_label }}">Image (Optional)</label>
       {{ form.image }}
       <small class="form-hint">
-        Need a new image? <a href="{% url 'authors:upload_image' %}" target="_blank">Upload here</a>, 
+        Need a new image? <a href="{% url 'authors:upload_image' %}?next={{ request.path }}" class="btn btn-sm btn-outline-primary">
+          Upload New Image
+      </a>, 
         then come back and select it.
       </small>
     </div>

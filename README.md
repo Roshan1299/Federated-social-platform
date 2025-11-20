@@ -378,7 +378,6 @@ Creates a new post for an authenticated author.
     *   `content` (required): The actual content of the post
     *   `contentType` (required): The type of content ('text/plain', 'text/markdown', 'image/png', etc.)
     *   `visibility` (required): The visibility of the post ('PUBLIC', 'PUBLIC_UNLISTED', 'FRIENDS')
-    
     *   `image` (optional): URL to an image if the post includes one
 
 #### Example Request:
@@ -392,8 +391,7 @@ curl -X POST http://127.0.0.1:8000/api/posts/ \
     "description": "A short description",
     "content": "Hello world!",
     "contentType": "text/plain",
-    "visibility": "PUBLIC",
-    
+    "visibility": "PUBLIC"
   }'
 ```
 
@@ -424,6 +422,61 @@ curl -X POST http://127.0.0.1:8000/api/posts/ \
     "updated": "2023-01-01T00:00:00Z"
 }
 ```
+
+#### Example Error Responses:
+
+*   **Code:** `400 Bad Request`
+```json
+{
+    "error": "Invalid request data - missing required field",
+    "details": {
+        "title": ["This field is required."],
+        "content": ["This field is required."]
+    }
+}
+```
+
+*   **Code:** `401 Unauthorized`
+```json
+{
+    "detail": "Authentication required"
+}
+```
+
+*   **Code:** `403 Forbidden`
+```json
+{
+    "detail": "You do not have permission to create posts"
+}
+```
+
+*   **Code:** `415 Unsupported Media Type` (when image format is not supported)
+
+#### Response Fields:
+
+| Field          | Type   | Description                                                                 | Example                                                              |
+|----------------|--------|-----------------------------------------------------------------------------|----------------------------------------------------------------------|
+| `type`         | string | The type of the object. Always "post".                                     | `"post"`                                                             |
+| `id`           | URL    | The fully qualified API URL for this post. This is the unique identifier.    | `"http://127.0.0.1:8000/api/posts/..."`                             |
+| `author`       | object | The author object containing information about the post creator.            | See author response format                                             |
+| `title`        | string | The title of the post.                                                      | `"My New Post"`                                                      |
+| `description`  | string | A short description or summary of the post. Can be null.                    | `"A short description"`                                              |
+| `content`      | string | The actual content of the post.                                             | `"Hello world!"`                                                     |
+| `contentType`  | string | The content type of the post.                                               | `"text/plain"`, `"text/markdown"`, `"image/png"`, etc.              |
+| `visibility`   | string | The visibility setting of the post.                                         | `"PUBLIC"`, `"PUBLIC_UNLISTED"`, `"FRIENDS"`                         |
+| `published`    | datetime | When the post was published (ISO 8601 format).                              | `"2023-01-01T00:00:00Z"`                                            |
+| `updated`      | datetime | When the post was last updated (ISO 8601 format).                           | `"2023-01-01T00:00:00Z"`                                            |
+| `image`        | URL    | URL to the post image (if applicable). Can be null.                         | `"http://127.0.0.1:8000/media/post_images/post_image.png"`          |
+
+#### Status Codes:
+
+| Status Code | Description |
+|-------------|-------------|
+| 201 | Post created successfully |
+| 400 | Invalid request data or missing required fields |
+| 401 | Authentication required |
+| 403 | User does not have permission to create posts |
+| 415 | Unsupported media type for image content |
 
 ### Get a Single Post
 
@@ -516,10 +569,9 @@ curl -X PUT http://127.0.0.1:8000/api/posts/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
   }'
 ```
 
-
 #### Example Response:
 
-*   **Code:** `201 Created`
+*   **Code:** `200 OK` (for successful update)
 *   **Content:**
 ```json
 {
@@ -530,9 +582,69 @@ curl -X PUT http://127.0.0.1:8000/api/posts/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
     "content": "Updated post content",
     "contentType": "text/plain",
     "visibility": "FRIENDS",
-    "updated": "2025-10-17T00:00:00Z"
+    "updated": "2025-10-17T00:00:00Z",
+    "published": "2023-01-01T00:00:00Z"
 }
 ```
+
+#### Example Error Responses:
+
+*   **Code:** `400 Bad Request`
+```json
+{
+    "error": "Invalid request data - missing required field",
+    "details": {
+        "title": ["This field is required."]
+    }
+}
+```
+
+*   **Code:** `401 Unauthorized`
+```json
+{
+    "detail": "Authentication required"
+}
+```
+
+*   **Code:** `403 Forbidden`
+```json
+{
+    "detail": "You do not have permission to edit this post"
+}
+```
+
+*   **Code:** `404 Not Found`
+```json
+{
+    "error": "Post not found."
+}
+```
+
+#### Status Codes:
+
+| Status Code | Description |
+|-------------|-------------|
+| 200 | Post updated successfully |
+| 204 | Post deleted successfully (for DELETE operations) |
+| 400 | Invalid request data or missing required fields |
+| 401 | Authentication required |
+| 403 | User does not have permission to edit this post |
+| 404 | Post not found |
+| 415 | Unsupported media type for image content |
+
+#### Response Fields:
+
+| Field          | Type   | Description                                                                 | Example                                                              |
+|----------------|--------|-----------------------------------------------------------------------------|----------------------------------------------------------------------|
+| `type`         | string | The type of the object. Always "post".                                     | `"post"`                                                             |
+| `id`           | URL    | The fully qualified API URL for this post. This is the unique identifier.    | `"http://127.0.0.1:8000/api/posts/..."`                             |
+| `title`        | string | The title of the post.                                                      | `"Updated Title"`                                                    |
+| `description`  | string | A short description or summary of the post. Can be null.                    | `"Updated Description"`                                              |
+| `content`      | string | The actual content of the post.                                             | `"Updated post content"`                                             |
+| `contentType`  | string | The content type of the post.                                               | `"text/plain"`, `"text/markdown"`, `"image/png"`, etc.              |
+| `visibility`   | string | The visibility setting of the post.                                         | `"PUBLIC"`, `"PUBLIC_UNLISTED"`, `"FRIENDS"`                         |
+| `updated`      | datetime | When the post was last updated (ISO 8601 format).                           | `"2025-10-17T00:00:00Z"`                                            |
+| `published`    | datetime | When the post was originally published (ISO 8601 format).                   | `"2023-01-01T00:00:00Z"`                                            |
 
 
 ### Delete a Post
