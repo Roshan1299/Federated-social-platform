@@ -163,7 +163,7 @@ def handle_post(self, recipient, data, request):
             existing_post.content = data.get('content', existing_post.content)
             existing_post.contentType = data.get('contentType', existing_post.contentType)
             existing_post.visibility = visibility
-            existing_post.source = data.get('source', existing_post.source)
+            #existing_post.source = data.get('source', existing_post.source)
             existing_post.updated = timezone.now()
 
             # Update deleted flag
