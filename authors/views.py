@@ -556,6 +556,8 @@ class PostAPIView(View):
             "visibility": post.visibility,
             "published": post.published.isoformat(),
             "updated": post.updated.isoformat(),
+            # add image if exists
+            "image": post.image_url if post.image else None,
         }
         if post.image:
             data["image"] = request.build_absolute_uri(
