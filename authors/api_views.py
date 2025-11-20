@@ -441,6 +441,10 @@ class InboxAPIView(View):
             
             # Parse the incoming JSON
             data = json.loads(request.body)
+
+            # DEBUG:
+            print("INBOX PAYLOAD:", data.get("id"), "image:", data.get("image"))
+            
             object_type = data.get('type', '').lower()
             
             if object_type == 'follow':
