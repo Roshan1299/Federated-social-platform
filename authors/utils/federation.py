@@ -3,6 +3,7 @@ from django.conf import settings
 from authors.models import Follow, RemoteNode, Post, Comment, Like, Author
 from authors.utils.nodes import remote_post
 from django.urls import reverse
+from urllib.parse import urlparse
 
 def get_remote_node_for_author(author: Author):
     # Take the author's host (e.g. "https://team-green.herokuapp.com")
@@ -111,11 +112,21 @@ def build_post_payload(post: Post) -> dict:
         },
     }
 
-    # Include image URL if the post has an image
+    # Safely build image URL using the origin's host
     if post.image_id:
-        base_url = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+        # Try to get scheme+host from the origin first
+        host_base = ""
+        if post.origin:
+            parsed = urlparse(post.origin)
+            if parsed.scheme and parsed.netloc:
+                host_base = f"{parsed.scheme}://{parsed.netloc}"
+
+        # Fallback to BASE_URL if origin is missing or weird
+        if not host_base:
+            host_base = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+
         image_path = reverse("authors:image_entry_api", args=[post.author.id, post.id])
-        payload["image"] = f"{base_url}{image_path}"
+        payload["image"] = f"{host_base}{image_path}"
 
     return payload
 
