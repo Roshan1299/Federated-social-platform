@@ -130,112 +130,28 @@ def handle_post(self, recipient, data, request):
     Handle incoming post from a remote node.
     Includes:
     - creating/updating post
-    - fetching & attaching remote images
+    - fetching & attaching remote images (URL or base64)
     - inbox receipts
     """
-
     try:
-        from .models import InboxReceipt
-        from authors.utils.image_sync import fetch_and_store_remote_image
+        from .models import InboxReceipt, Image
 
         # ---------------------------------------------------------
         # EXTRACT ORIGIN (canonical global post URL)
         # ---------------------------------------------------------
-        origin = data.get('origin') or data.get('id')
+        origin = data.get("origin") or data.get("id")
         if not origin:
-            return JsonResponse({'error': 'Post must have origin/id'}, status=400)
+            return JsonResponse({"error": "Post must have origin/id"}, status=400)
 
         # ---------------------------------------------------------
-        # CHECK IF POST ALREADY EXISTS
+        # NORMALIZE VISIBILITY
         # ---------------------------------------------------------
-        existing_post = Post.objects.filter(origin=origin).first()
-
-        # Normalize visibility
-        visibility = data.get('visibility', 'PUBLIC').upper()
-        if data.get('unlisted', False):
-            visibility = 'PUBLIC_UNLISTED'
+        visibility = (data.get("visibility") or "PUBLIC").upper()
+        if data.get("unlisted", False):
+            visibility = "PUBLIC_UNLISTED"
 
         # ---------------------------------------------------------
-        # UPDATE EXISTING POST
-        # ---------------------------------------------------------
-        if existing_post:
-            existing_post.title = data.get('title', existing_post.title)
-            existing_post.content = data.get('content', existing_post.content)
-            existing_post.contentType = data.get('contentType', existing_post.contentType)
-            existing_post.visibility = visibility
-            existing_post.source = data.get('source', existing_post.source)
-            existing_post.updated = timezone.now()
-
-            # Update deleted flag
-            if data.get('deleted', False):
-                existing_post.deleted = True
-
-            # ---------------------------------------------
-            # UPDATE EXISTING POST IMAGE
-            # ---------------------------------------------
-            remote_image_url = (
-                data.get("image")
-                or data.get("image_url")
-                or data.get("imageUrl")
-            )
-
-            # ---------------------------------------------
-            # Handle base64 inline images (content contains base64)
-            # ---------------------------------------------
-            if not local_image:
-                content_type = data.get("contentType", "")
-                content = data.get("content", "")
-
-                if "base64" in content_type and content:
-                    try:
-                        # Strip "image/png;base64" → "image/png"
-                        clean_type = content_type.split(";")[0]
-
-                        # Decode base64 to bytes
-                        img_bytes = base64.b64decode(content)
-
-                        # Pick extension
-                        ext = "png"
-                        if "jpeg" in clean_type or "jpg" in clean_type:
-                            ext = "jpg"
-                        elif "gif" in clean_type:
-                            ext = "gif"
-
-                        # Store in Image model
-                        from .models import Image
-                        local_image = Image.objects.create(
-                            file_name=f"remote_post_{uuid.uuid4()}.{ext}",
-                            content_type=clean_type,
-                            data=img_bytes
-                        )
-                    except Exception as e:
-                        print("Failed to decode inline base64 image:", e)
-
-
-            if remote_image_url:
-                existing_post.image = fetch_and_store_remote_image(remote_image_url)
-
-            existing_post.save()
-
-            # Avoid duplicate receipts
-            InboxReceipt.objects.get_or_create(
-                recipient=recipient,
-                post=existing_post
-            )
-
-            return JsonResponse({'message': 'Post updated'}, status=200)
-
-        # ---------------------------------------------------------
-        # NEW POST — CREATE AUTHOR IF NEEDED
-        # ---------------------------------------------------------
-        author_data = data.get('author', {})
-        if not author_data:
-            return JsonResponse({'error': 'Post must include author'}, status=400)
-
-        author = get_or_create_author(author_data)
-
-        # ---------------------------------------------------------
-        # DOWNLOAD REMOTE IMAGE (IF PROVIDED)
+        # COMMON IMAGE INPUTS
         # ---------------------------------------------------------
         remote_image_url = (
             data.get("image")
@@ -243,36 +159,106 @@ def handle_post(self, recipient, data, request):
             or data.get("imageUrl")
         )
 
+        content_type = data.get("contentType", "") or ""
+        content = data.get("content", "") or ""
+
         local_image = None
+
+        # 1) If we got an explicit image URL, try to download that
         if remote_image_url:
             local_image = fetch_and_store_remote_image(remote_image_url)
+
+        # 2) If no URL image, but content is base64, decode and store
+        if (not local_image) and ("base64" in content_type) and content:
+            try:
+                # e.g. "image/png;base64" -> "image/png"
+                clean_type = content_type.split(";")[0]
+
+                img_bytes = base64.b64decode(content)
+
+                ext = "png"
+                if "jpeg" in clean_type or "jpg" in clean_type:
+                    ext = "jpg"
+                elif "gif" in clean_type:
+                    ext = "gif"
+
+                local_image = Image.objects.create(
+                    file_name=f"remote_post_{uuid.uuid4()}.{ext}",
+                    content_type=clean_type,
+                    data=img_bytes,
+                )
+            except Exception as e:
+                # Fail soft: keep the post, just without an image
+                print("Failed to decode inline base64 image:", e)
+
+        # ---------------------------------------------------------
+        # CHECK IF POST ALREADY EXISTS
+        # ---------------------------------------------------------
+        existing_post = Post.objects.filter(origin=origin).first()
+
+        if existing_post:
+            # ---------- UPDATE EXISTING POST ----------
+            existing_post.title = data.get("title", existing_post.title)
+            existing_post.content = data.get("content", existing_post.content)
+            existing_post.contentType = data.get(
+                "contentType", existing_post.contentType
+            )
+            existing_post.visibility = visibility
+            existing_post.source = data.get("source", existing_post.source)
+            existing_post.updated = timezone.now()
+
+            if data.get("deleted", False):
+                existing_post.deleted = True
+
+            # Update image if we actually got one
+            if local_image:
+                existing_post.image = local_image
+
+            existing_post.save()
+
+            InboxReceipt.objects.get_or_create(
+                recipient=recipient,
+                post=existing_post,
+            )
+
+            return JsonResponse({"message": "Post updated"}, status=200)
+
+        # ---------------------------------------------------------
+        # NEW POST — CREATE AUTHOR IF NEEDED
+        # ---------------------------------------------------------
+        author_data = data.get("author", {})
+        if not author_data:
+            return JsonResponse({"error": "Post must include author"}, status=400)
+
+        author = get_or_create_author(author_data)
 
         # ---------------------------------------------------------
         # CREATE NEW POST
         # ---------------------------------------------------------
         post = Post.objects.create(
             author=author,
-            title=data.get('title', 'Untitled'),
-            content=data.get('content', ''),
-            contentType=data.get('contentType', 'text/plain'),
+            title=data.get("title", "Untitled"),
+            content=content,
+            contentType=content_type or "text/plain",
             visibility=visibility,
-            source=data.get('source', origin),
+            source=data.get("source", origin),
             origin=origin,
-            image=local_image,      # ⭐ Remote image displayed in Explore/Stream
+            image=local_image,  # may be None if no image provided
         )
 
         InboxReceipt.objects.create(
             recipient=recipient,
-            post=post
+            post=post,
         )
 
-        return JsonResponse({'message': 'Post received'}, status=201)
+        return JsonResponse({"message": "Post received"}, status=201)
 
     except Exception as e:
         return JsonResponse(
-            {'error': f'Failed to process post: {str(e)}'},
-            status=400
+            {"error": f"Failed to process post: {str(e)}"},
+            status=400,
         )
+    
 
 def handle_comment(self, recipient, data, request):
     """
