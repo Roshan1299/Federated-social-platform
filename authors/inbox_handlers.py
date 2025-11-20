@@ -159,7 +159,7 @@ def handle_post(self, recipient, data, request):
             or data.get("imageUrl")
         )
 
-        content_type = data.get("contentType", "") or ""
+        content_type = (data.get("contentType") or "").strip()
         content = data.get("content", "") or ""
 
         local_image = None
@@ -169,7 +169,7 @@ def handle_post(self, recipient, data, request):
             local_image = fetch_and_store_remote_image(remote_image_url)
 
         # 2) If no URL image, but content is base64, decode and store
-        if (not local_image) and ("base64" in content_type) and content:
+        if (not local_image) and ("base64" in content_type.lower()) and content:
             try:
                 # e.g. "image/png;base64" -> "image/png"
                 clean_type = content_type.split(";")[0]
@@ -188,7 +188,6 @@ def handle_post(self, recipient, data, request):
                     data=img_bytes,
                 )
             except Exception as e:
-                # Fail soft: keep the post, just without an image
                 print("Failed to decode inline base64 image:", e)
 
         # ---------------------------------------------------------
@@ -210,7 +209,6 @@ def handle_post(self, recipient, data, request):
             if data.get("deleted", False):
                 existing_post.deleted = True
 
-            # Update image if we actually got one
             if local_image:
                 existing_post.image = local_image
 
@@ -258,7 +256,7 @@ def handle_post(self, recipient, data, request):
             {"error": f"Failed to process post: {str(e)}"},
             status=400,
         )
-    
+
 
 def handle_comment(self, recipient, data, request):
     """

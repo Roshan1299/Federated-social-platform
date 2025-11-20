@@ -2,6 +2,7 @@ from django.conf import settings
 
 from authors.models import Follow, RemoteNode, Post, Comment, Like, Author
 from authors.utils.nodes import remote_post
+from django.urls import reverse
 
 def get_remote_node_for_author(author: Author):
     # Take the author's host (e.g. "https://team-green.herokuapp.com")
@@ -88,8 +89,8 @@ def build_minimal_author_dict(author: Author) -> dict:
 
 # Convert Post to JSON for remote sending
 def build_post_payload(post: Post) -> dict:
-    return {
-        "type": "entry",
+    payload = {
+        "type": "entry",  # or "post" is also fine; your InboxAPIView handles both
         "id": post.origin,
         "source": post.source,
         "origin": post.origin,
@@ -109,6 +110,15 @@ def build_post_payload(post: Post) -> dict:
             "github": post.author.github,
         },
     }
+
+    # Include image URL if the post has an image
+    if post.image_id:
+        base_url = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+        image_path = reverse("authors:image_entry_api", args=[post.author.id, post.id])
+        payload["image"] = f"{base_url}{image_path}"
+
+    return payload
+
 
 # Convert a Comment into JSON for remote nodes
 def build_comment_payload(comment: Comment) -> dict:
