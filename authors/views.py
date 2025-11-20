@@ -33,7 +33,7 @@ import requests
 import logging
 from django.conf import settings
 from .api_views import SingleFollowingAPIView
-from authors.utils.remote_read import sync_remote_comments_for_post
+from authors.utils.remote_read import sync_remote_comments_for_post, sync_remote_likes_for_post, sync_remote_comment_likes_for_post
 from authors.utils.federation import send_comment_to_post_owner, send_like_to_post_owner, send_comment_like_to_post_owner
 
 
@@ -315,7 +315,8 @@ class PostDetailView(DetailView):
         # If the post's author lives on a remote node, pull their comments into our DB
         if post_host and post_host != local_host:
             sync_remote_comments_for_post(post) 
-            
+            sync_remote_likes_for_post(post)
+            sync_remote_comment_likes_for_post(post)
         # relationship checks
         is_follower = user.is_authenticated and Follow.objects.filter(
             follower=user, following=author
