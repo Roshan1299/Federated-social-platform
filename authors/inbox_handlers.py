@@ -137,7 +137,7 @@ def handle_post(self, recipient, data, request):
         from .models import InboxReceipt, Image
 
         # ---------------------------------------------------------
-        # EXTRACT ORIGIN (canonical global post URL)
+        # EXTRACT ORIGIN
         # ---------------------------------------------------------
         origin = data.get("origin") or data.get("id")
         if not origin:
@@ -151,7 +151,7 @@ def handle_post(self, recipient, data, request):
             visibility = "PUBLIC_UNLISTED"
 
         # ---------------------------------------------------------
-        # COMMON IMAGE INPUTS
+        # IMAGE HANDLING
         # ---------------------------------------------------------
         remote_image_url = (
             data.get("image")
@@ -162,7 +162,7 @@ def handle_post(self, recipient, data, request):
         content_type = (data.get("contentType") or "").strip()
         content = data.get("content", "") or ""
 
-        local_image = None  # define once
+        local_image = None
 
         # 1) If we got an explicit image URL, try to download that
         if remote_image_url:
@@ -173,9 +173,7 @@ def handle_post(self, recipient, data, request):
         # 2) If no URL image, but content is base64, decode and store
         if (not local_image) and ("base64" in content_type.lower()) and content:
             try:
-                # e.g. "image/png;base64" -> "image/png"
                 clean_type = content_type.split(";")[0]
-
                 img_bytes = base64.b64decode(content)
 
                 ext = "png"
@@ -189,7 +187,6 @@ def handle_post(self, recipient, data, request):
                     content_type=clean_type,
                     data=img_bytes,
                 )
-                print("LOCAL BASE64 IMAGE:", local_image)
             except Exception as e:
                 print("Failed to decode inline base64 image:", e)
 
@@ -199,7 +196,6 @@ def handle_post(self, recipient, data, request):
         existing_post = Post.objects.filter(origin=origin).first()
 
         if existing_post:
-            # ---------- UPDATE EXISTING POST ----------
             existing_post.title = data.get("title", existing_post.title)
             existing_post.content = data.get("content", existing_post.content)
             existing_post.contentType = data.get(
@@ -212,7 +208,6 @@ def handle_post(self, recipient, data, request):
             if data.get("deleted", False):
                 existing_post.deleted = True
 
-            # only overwrite image if we actually got one
             if local_image:
                 existing_post.image = local_image
 
@@ -226,7 +221,7 @@ def handle_post(self, recipient, data, request):
             return JsonResponse({"message": "Post updated"}, status=200)
 
         # ---------------------------------------------------------
-        # NEW POST — CREATE AUTHOR IF NEEDED
+        # NEW POST
         # ---------------------------------------------------------
         author_data = data.get("author", {})
         if not author_data:
@@ -234,9 +229,6 @@ def handle_post(self, recipient, data, request):
 
         author = get_or_create_author(author_data)
 
-        # ---------------------------------------------------------
-        # CREATE NEW POST
-        # ---------------------------------------------------------
         post = Post.objects.create(
             author=author,
             title=data.get("title", "Untitled"),
@@ -245,7 +237,7 @@ def handle_post(self, recipient, data, request):
             visibility=visibility,
             source=data.get("source", origin),
             origin=origin,
-            image=local_image,  # now non-null when fetch succeeds
+            image=local_image,  # may be None
         )
 
         InboxReceipt.objects.create(
@@ -260,6 +252,7 @@ def handle_post(self, recipient, data, request):
             {"error": f"Failed to process post: {str(e)}"},
             status=400,
         )
+
 
 
 def handle_comment(self, recipient, data, request):
