@@ -1387,8 +1387,26 @@ class AuthorAPIView(View):
         if not request.user.is_authenticated or str(request.user.id) != str(author.id):
             return HttpResponse("Forbidden", status=403)
         
-        data = build_author_dict(author, request)
-        return JsonResponse(data)
+        try:
+            data = json.loads(request.body)
+            
+            # Update fields
+            author.displayName = data.get('displayName', author.displayName)
+            author.github = data.get('github', author.github)
+            author.description = data.get('description', author.description)
+            author.host = data.get('host', author.host)
+            
+            author.save()
+
+            
+            # Use build_author_dict for consistency
+            response_data = build_author_dict(author, request)
+            return JsonResponse(response_data)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        except Exception as e:
+            print("Error updating author:", str(e))
+            return JsonResponse({'error': str(e)}, status=500) 
         
 
 '''
