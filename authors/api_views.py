@@ -332,7 +332,7 @@ def build_post_dict(post, request):
             "type": "comments",
             "page": 1,
             "size": 5,
-            "post": entry_url,
+            "entry": entry_url,
             "id": f"{entry_url}/comments",
             "comments": []  # Can be populated if needed
         }
@@ -352,7 +352,7 @@ def build_post_dict(post, request):
         "type": "likes",
         "page": 1,
         "size": 5,
-        "post": entry_url,
+        "entry": entry_url,
         "id": likes_url,
         "web": web_url,
         "src": []  # can be populated with like objects
@@ -381,7 +381,7 @@ def build_comment_dict(comment, request):
             "type": "likes",
             "page": 1,
             "size": 5,
-            "post": f"{request.scheme}://{request.get_host()}/api/authors/{comment.post.author.id}/entries/{comment.post.id}",
+            "entry": f"{request.scheme}://{request.get_host()}/api/authors/{comment.post.author.id}/entries/{comment.post.id}",
             "id": f"{request.scheme}://{request.get_host()}/api/authors/{comment.post.author.id}/entries/{comment.post.id}/comments/{comment.id}/likes",
             "web": f"{request.scheme}://{request.get_host()}/authors/{comment.post.author.id}/entries/{comment.post.id}/",
             "src": []
@@ -1112,7 +1112,7 @@ class CommentsAPIView(View):
                 "type": "comments",
                 "page": page_num,
                 "size": page_size,
-                "post": post_url,
+                "entry": post_url,
                 "id": f"{post_url}/comments",
                 "comments": items
             }

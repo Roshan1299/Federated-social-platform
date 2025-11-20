@@ -116,7 +116,7 @@ def build_comment_payload(comment: Comment) -> dict:
         "type": "comment",
         "id": comment.origin,
         "comment": comment.content,
-        "post": comment.post.origin,
+        "entry": comment.post.origin,
         "published": comment.created_at.isoformat(),
         "author": {
             "type": "author",
@@ -239,7 +239,7 @@ def notify_remote_delete_post(post: Post):
     # Send the post with its current visibility but mark as deleted
     # This will trigger the remote node to update their local copy with deleted=True
     payload = {
-        "type": "post",
+        "type": "entry",
         "id": post.origin,
         "source": post.source,
         "origin": post.origin,
