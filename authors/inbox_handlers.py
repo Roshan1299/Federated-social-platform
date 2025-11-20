@@ -153,26 +153,11 @@ def handle_post(self, recipient, data, request):
         # ---------------------------------------------------------
         # IMAGE HANDLING
         # ---------------------------------------------------------
-        if existing_post:
-            existing_post.title = data.get('title', existing_post.title)
-            existing_post.content = data.get('content', existing_post.content)
-            existing_post.contentType = data.get('contentType', existing_post.contentType)
-            existing_post.visibility = visibility
-            #existing_post.source = data.get('source', existing_post.source)
-            existing_post.updated = timezone.now()
-
-            # Update deleted flag
-            if data.get('deleted', False):
-                existing_post.deleted = True
-
-            # ---------------------------------------------
-            # UPDATE EXISTING POST IMAGE
-            # ---------------------------------------------
-            remote_image_url = (
-                data.get("image")
-                or data.get("image_url")
-                or data.get("imageUrl")
-            )
+        remote_image_url = (
+            data.get("image")
+            or data.get("image_url")
+            or data.get("imageUrl")
+        )
 
         content_type = (data.get("contentType") or "").strip()
         content = data.get("content", "") or ""
@@ -267,6 +252,7 @@ def handle_post(self, recipient, data, request):
             {"error": f"Failed to process post: {str(e)}"},
             status=400,
         )
+
 
 
 
