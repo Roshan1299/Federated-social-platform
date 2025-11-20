@@ -1376,6 +1376,38 @@ class AuthorAPIView(View):
         # Use build_author_dict for consistency
         data = build_author_dict(author, request)
         return JsonResponse(data)
+    
+    def put(self, request, author_id=None, author_fqid=None):
+        """Update author info - only the author themselves may update"""
+        identifier = author_fqid or author_id
+
+        author = _get_author_by_id_or_fqid(author_id=author_id, author_fqid=author_fqid)  # to raise 404 if not found
+
+        # Check that authenticated user is the author
+        if not request.user.is_authenticated or str(request.user.id) != str(author.id):
+            return HttpResponse("Forbidden", status=403)
+        
+        try:
+            data = json.loads(request.body)
+            
+            # Update fields
+            author.displayName = data.get('displayName', author.displayName)
+            author.github = data.get('github', author.github)
+            author.description = data.get('description', author.description)
+            author.host = data.get('host', author.host)
+            
+            author.save()
+
+            
+            # Use build_author_dict for consistency
+            response_data = build_author_dict(author, request)
+            return JsonResponse(response_data)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        except Exception as e:
+            print("Error updating author:", str(e))
+            return JsonResponse({'error': str(e)}, status=500) 
+        
 
 '''
 AuthorsListAPIView: returns a JSON list of all authors.

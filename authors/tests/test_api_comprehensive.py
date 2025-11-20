@@ -456,3 +456,42 @@ class APIResponseFormatTestCase(TestCase):
         self.assertIn('host', data)
         self.assertIn('web', data)
         self.assertIn('profileImage', data)
+
+
+class APIAuthorPutTestCase(TestCase):
+    """Test updating author profiles via API PUT requests"""
+    
+    def setUp(self):
+        self.client = Client()
+        
+        self.author = Author.objects.create_user(
+            username='testuser',
+            password='testpass123',
+            displayName='Test User',
+            host='http://testserver',
+            url='http://testserver/api/authors/1/'
+        )
+
+    def test_update_author_profile(self):
+        """Test that an author can update their profile via PUT request"""
+        self.client.login(username='testuser', password='testpass123')
+        
+        updated_data = {
+            "displayName": "Updated User",
+            "host": "http://updatedserver",
+            "description": "Updated description",
+        }
+        
+        response = self.client.put(
+            reverse('authors:author_api', kwargs={'author_id': self.author.id}),
+            data=json.dumps(updated_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        
+        # Refresh author from database
+        self.author.refresh_from_db()
+        
+        self.assertEqual(self.author.displayName, "Updated User")
+        self.assertEqual(self.author.host, "http://updatedserver") 
+        self.assertEqual(self.author.description, "Updated description")
