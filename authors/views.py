@@ -35,6 +35,8 @@ from django.conf import settings
 from .api_views import SingleFollowingAPIView
 from authors.utils.remote_read import sync_remote_comments_for_post, sync_remote_likes_for_post, sync_remote_comment_likes_for_post
 from authors.utils.federation import send_comment_to_post_owner, send_like_to_post_owner, send_comment_like_to_post_owner
+from authors.utils.image_sync import fetch_and_store_remote_image
+
 
 
 
@@ -317,6 +319,13 @@ class PostDetailView(DetailView):
             sync_remote_comments_for_post(post) 
             sync_remote_likes_for_post(post)
             sync_remote_comment_likes_for_post(post)
+
+            remote_image_url = getattr(post, "image_url", "") or ""
+            if remote_image_url and not post.image_id:
+                img = fetch_and_store_remote_image(remote_image_url)
+                if img:
+                    post.image = img
+                    post.save(update_fields=["image"])
         # relationship checks
         is_follower = user.is_authenticated and Follow.objects.filter(
             follower=user, following=author
