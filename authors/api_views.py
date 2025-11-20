@@ -1376,6 +1376,20 @@ class AuthorAPIView(View):
         # Use build_author_dict for consistency
         data = build_author_dict(author, request)
         return JsonResponse(data)
+    
+    def put(self, request, author_id=None, author_fqid=None):
+        """Update author info - only the author themselves may update"""
+        identifier = author_fqid or author_id
+
+        author = _get_author_by_id_or_fqid(author_id=author_id, author_fqid=author_fqid)  # to raise 404 if not found
+
+        # Check that authenticated user is the author
+        if not request.user.is_authenticated or str(request.user.id) != str(author.id):
+            return HttpResponse("Forbidden", status=403)
+        
+        data = build_author_dict(author, request)
+        return JsonResponse(data)
+        
 
 '''
 AuthorsListAPIView: returns a JSON list of all authors.
