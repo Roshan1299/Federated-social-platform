@@ -94,6 +94,7 @@ def build_post_payload(post: Post) -> dict:
         "source": post.source,
         "origin": post.origin,
         "title": post.title,
+        "description": post.content[:100],  # First 100 chars as description
         "content": post.content,
         "contentType": post.contentType,
         "visibility": post.visibility,
