@@ -88,6 +88,20 @@ def build_minimal_author_dict(author: Author) -> dict:
         "github": author.github,
     }
 
+def build_profile_image_url(author):
+    """
+    Build full profile image URL for federation payloads.
+    Returns None if author has no profile image.
+    """
+    if not author.profileImage_id:
+        return None
+
+    # Build absolute URL for /api/authors/<id>/image/
+    path = reverse("authors:author_image_api", args=[author.id])
+
+    # Use author's host (remote nodes expect consistency)
+    return f"{author.host.rstrip('/')}{path}"
+
 # Convert Post to JSON for remote sending
 def build_post_payload(post: Post) -> dict:
     payload = {
@@ -109,6 +123,7 @@ def build_post_payload(post: Post) -> dict:
             "displayName": post.author.displayName,
             "url": post.author.url,
             "github": post.author.github,
+            "profileImage": build_profile_image_url(post.author),
         },
     }
 
