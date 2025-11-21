@@ -56,7 +56,7 @@ def get_or_create_author(author_data):
         changed_fields.append("github")
 
     # --- sync description ---
-    incoming_desc = author_data.get("description")
+    incoming_desc = author_data.get("description", "")
     if incoming_desc is not None and incoming_desc != author.description:
         author.description = incoming_desc
         changed_fields.append("description")

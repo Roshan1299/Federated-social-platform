@@ -1348,11 +1348,9 @@ class ImageEntryAPIView(View):
         return HttpResponse(image_data, content_type=content_type)
 
 
-@method_decorator(http_basic_auth_or_session, name='dispatch')
 class AuthorImageAPIView(View):
     """
     GET /api/authors/{AUTHOR_SERIAL}/image
-    GET /api/authors/{AUTHOR_FQID}/image
     Get the profile image from an author as binary data
     """
     
