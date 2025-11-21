@@ -26,7 +26,7 @@ from django.contrib.auth import authenticate
 from .forms import ImageUploadForm
 from .models import Image
 from .inbox_handlers import reopen_follow_request
-from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post, send_unfollow_to_remote_author, notify_remote_comment
+from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post, send_unfollow_to_remote_author, notify_remote_comment, notify_remote_author_update
 import uuid
 import urllib.parse
 import requests
@@ -176,6 +176,11 @@ class AuthorEditView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
         # Don't deactivate the user when saving profile changes
         user.save()
 
+        try:
+            notify_remote_author_update(user)
+        except Exception as e:
+            print("Failed to notify remote on profile edit:", e)
+            
         success_url = reverse('authors:author_profile', kwargs={'author_id': user.id})
         return redirect(success_url)
     
@@ -1323,6 +1328,10 @@ def upload_image(request):
             if request.user.is_authenticated:
                 request.user.profileImage = image
                 request.user.save(update_fields=["profileImage"])
+                try:
+                    notify_remote_author_update(request.user)
+                except Exception as e:
+                    print("Failed to notify remote on profile image change:", e)
 
             # Go back where the user came from
             if next_url:
@@ -1492,6 +1501,11 @@ class NodeConfigurationView(LoginRequiredMixin, UserPassesTestMixin, View):
             for author in Author.objects.filter(host=base_url, url__isnull=True):
                 author.url = f"{base_url}/api/authors/{author.id}/"
                 author.save(update_fields=["url"])
+
+                try:
+                    notify_remote_author_update(author)
+                except Exception as e:
+                    print("Failed to notify remote on profile edit:", e)
 
             # Re-authenticate current user to keep them logged in
             from django.contrib.auth import login

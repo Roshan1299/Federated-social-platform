@@ -44,10 +44,10 @@ def get_or_create_author(author_data):
     changed_fields = []
 
     # --- keep displayName fresh ---
-    if not created:
-        if author.displayName in ["", author.url] and display_name:
-            author.displayName = display_name
-            changed_fields.append("displayName")
+    if display_name and author.displayName != display_name:
+        author.displayName = display_name
+        changed_fields.append("displayName")
+
 
     # --- sync profileImage from remote, if provided ---
     profile_image_url = author_data.get("profileImage")
