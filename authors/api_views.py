@@ -22,6 +22,7 @@ from .inbox_handlers import (
     handle_follow_request as ih_handle_follow_request,
     handle_unfollow as ih_handle_unfollow,
     reopen_follow_request as reopen_follow_request,
+    get_or_create_author
 )
 from .utils.federation import (
     notify_remote_new_post,
@@ -29,7 +30,6 @@ from .utils.federation import (
     notify_remote_delete_post,
     send_unfollow_to_remote_author,
     notify_remote_author_update,
-    get_or_create_author,
 )
 import requests
 import urllib.parse
