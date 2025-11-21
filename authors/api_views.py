@@ -256,6 +256,10 @@ def _update_author_from_payload(author, data):
         author.description = data['description']
         updated = True
 
+    if 'profileImage' in data and author.profileImage is not None:
+        author.profileImage.file_name = data['profileImage']
+        updated = True 
+
     if updated:
         author.save()
     
