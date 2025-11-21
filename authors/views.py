@@ -1320,6 +1320,10 @@ def upload_image(request):
                 data=img_file.read(),
             )
 
+            if request.user.is_authenticated:
+                request.user.profileImage = image
+                request.user.save(update_fields=["profileImage"])
+
             # Go back where the user came from
             if next_url:
                 return redirect(next_url)

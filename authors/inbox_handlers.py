@@ -9,7 +9,8 @@ import base64
 def get_or_create_author(author_data):
     """Normalize incoming author payload and return an Author instance."""
 
-    raw_id = (author_data or {}).get("id") or (author_data or {}).get("url")
+    author_data = author_data or {}
+    raw_id = author_data.get("id") or author_data.get("url")
     if not raw_id:
         return None
 
@@ -37,15 +38,29 @@ def get_or_create_author(author_data):
         },
     )
 
-    # Update stale displayName
-    if not created:
-        changed = False
-        if author.displayName in ["", author.url]:
-            author.displayName = display_name
-            changed = True
+    changed_fields = []
 
-        if changed:
-            author.save(update_fields=["displayName"])
+    # --- keep displayName fresh ---
+    if not created:
+        if author.displayName in ["", author.url] and display_name:
+            author.displayName = display_name
+            changed_fields.append("displayName")
+
+    # --- sync profileImage from remote, if provided ---
+    profile_image_url = author_data.get("profileImage")
+    if profile_image_url and isinstance(profile_image_url, str):
+        try:
+            img = fetch_and_store_remote_image(profile_image_url)
+        except Exception as e:
+            img = None
+            print("Failed to sync remote profile image:", e)
+
+        if img and (not author.profileImage_id or author.profileImage_id != img.id):
+            author.profileImage = img
+            changed_fields.append("profileImage")
+
+    if changed_fields:
+        author.save(update_fields=changed_fields)
 
     return author
 
