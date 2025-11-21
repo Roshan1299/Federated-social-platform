@@ -237,6 +237,29 @@ def _get_like_by_id_or_fqid(like_id=None, like_fqid=None, author_id=None, entry_
                 raise Http404("Like not found")
     else:
         raise Http404("Like identifier required")
+    
+def _update_author_from_payload(author, data):
+    """Update an Author instance from incoming payload data.
+    Only updates fields that are present in the payload.
+    """
+    updated = False
+
+    if 'displayName' in data:
+        author.displayName = data['displayName']
+        updated = True
+
+    if 'github' in data:
+        author.github = data['github']
+        updated = True
+
+    if 'description' in data:
+        author.description = data['description']
+        updated = True
+
+    if updated:
+        author.save()
+    
+    return updated
 
 
 # ==================== Access Control Helper ====================
@@ -449,7 +472,12 @@ class InboxAPIView(View):
             print("INBOX PAYLOAD:", data.get("id"), "image:", data.get("image"))
             
             object_type = data.get('type', '').lower()
-            
+
+            # Update author info from payload if present. Allows edit profile to make changes. 
+            if (data.get('author') is not None): # for comments, posts, likes 
+                author_data = data.get('author')
+                _update_author_from_payload(recipient, author_data)
+
             if object_type == 'follow':
                 return self.handle_follow_request(recipient, data, request)
             elif object_type == 'unfollow':
