@@ -20,21 +20,43 @@ def fetch_and_store_remote_image(remote_image_url: str):
         print("🌐 Invalid image URL:", remote_image_url, "error:", e)
         return None
 
-    remote_host = f"{parsed.scheme}://{parsed.netloc}".rstrip("/") + "/"
+    remote_netloc = parsed.netloc.lower()
+    print("🌐 FETCH IMAGE:", remote_image_url)
+    print("  Parsed netloc:", remote_netloc)
 
-    # Find the RemoteNode for this host
-    node = (
-        RemoteNode.objects
-        .filter(base_url__startswith=remote_host, enabled=True)
-        .order_by("id")
-        .first()
+    # 🔹 Find the RemoteNode by host, ignoring scheme (http/https)
+    node = None
+    for candidate in RemoteNode.objects.filter(enabled=True):
+        try:
+            c_parsed = urlparse(candidate.base_url)
+            c_netloc = c_parsed.netloc.lower()
+        except Exception:
+            continue
+
+        if c_netloc == remote_netloc:
+            node = candidate
+            break
+
+    print(
+        "  Using RemoteNode:",
+        getattr(node, "base_url", None),
+        "username:", getattr(node, "username", None),
     )
 
-    print("🌐 FETCH IMAGE:", remote_image_url)
-    print("  Resolved remote_host:", remote_host)
-    print("  Using RemoteNode:",
-          node.base_url if node else None,
-          "username:", getattr(node, "username", None))
+    # 🔹 If schemes differ and RemoteNode uses https, upgrade the URL
+    if node:
+        try:
+            node_parsed = urlparse(node.base_url)
+            if parsed.scheme != node_parsed.scheme and node_parsed.scheme in ("https", "http"):
+                # Replace scheme+netloc at the start of the URL
+                original_prefix = f"{parsed.scheme}://{parsed.netloc}"
+                new_prefix = f"{node_parsed.scheme}://{node_parsed.netloc}"
+                if remote_image_url.startswith(original_prefix):
+                    new_url = remote_image_url.replace(original_prefix, new_prefix, 1)
+                    print("  Upgrading image URL:", remote_image_url, "→", new_url)
+                    remote_image_url = new_url
+        except Exception as e:
+            print("  ⚠️ Failed to normalize scheme for image URL:", e)
 
     auth = None
     if node and node.username and node.password:
@@ -47,7 +69,6 @@ def fetch_and_store_remote_image(remote_image_url: str):
         return None
 
     print("  ↳ Status:", resp.status_code)
-    # If it's not 200, log a short preview of the body
     if resp.status_code != 200:
         try:
             print("  ↳ Body preview:", resp.text[:200])
