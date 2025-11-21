@@ -14,6 +14,9 @@ def get_or_create_author(author_data):
     if not raw_id:
         return None
 
+    print("👤 get_or_create_author raw_id:", raw_id)
+    print("   incoming profileImage:", author_data.get("profileImage"))
+
     # Extract username part safely
     try:
         username_part = raw_id.rstrip("/").split("/")[-1]
