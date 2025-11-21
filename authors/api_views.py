@@ -28,6 +28,8 @@ from .utils.federation import (
     notify_remote_edit_post,
     notify_remote_delete_post,
     send_unfollow_to_remote_author,
+    notify_remote_author_update,
+    get_or_create_author,
 )
 import requests
 import urllib.parse
@@ -457,6 +459,23 @@ class InboxAPIView(View):
                 return self.handle_like(recipient, data, request)
             elif object_type == 'comment':
                 return self.handle_comment(recipient, data, request)
+            
+            # Might cause issues when connecting to other groups nodes
+            elif object_type == 'author':
+                # Author profile update (e.g., new displayName/profileImage)
+                # We don't really care which inbox it came through; we just
+                # refresh/create our stub for that remote author.
+                remote_author = get_or_create_author(data)
+                if remote_author is None:
+                    return json_response(
+                        {'error': 'Author payload missing id/url'},
+                        status=400
+                    )
+                return json_response(
+                    {'message': 'Author updated', 'id': remote_author.url},
+                    status=200
+                )
+            
             else:
                 return json_response({'error': f'Unknown object type: {object_type}'}, status=400)
                 
@@ -1401,7 +1420,7 @@ class AuthorAPIView(View):
             author.host = data.get('host', author.host)
             
             author.save()
-
+            notify_remote_author_update(author)
             
             # Use build_author_dict for consistency
             response_data = build_author_dict(author, request)

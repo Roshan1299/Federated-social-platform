@@ -5,6 +5,19 @@ from authors.utils.nodes import remote_post
 from django.urls import reverse
 from urllib.parse import urlparse
 
+def notify_remote_author_update(author: Author):
+    payload = {
+        "type": "author",
+        "id": author.url,
+        "host": author.host,
+        "displayName": author.displayName,
+        "url": author.url,
+        "github": author.github,
+        "profileImage": build_profile_image_url(author),
+    }
+    send_to_remote_inboxes(author, payload)
+
+
 def get_remote_node_for_author(author: Author):
     # Take the author's host (e.g. "https://team-green.herokuapp.com")
     host = (author.host or "").rstrip("/")
