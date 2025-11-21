@@ -38,6 +38,7 @@ def get_or_create_author(author_data):
             "displayName": display_name,
             "host": host,
             "github": author_data.get("github", ""),
+            "description": author_data.get("description", "") or "",
         },
     )
 
@@ -48,6 +49,17 @@ def get_or_create_author(author_data):
         author.displayName = display_name
         changed_fields.append("displayName")
 
+    # --- sync github ---
+    incoming_github = author_data.get("github")
+    if incoming_github is not None and incoming_github != author.github:
+        author.github = incoming_github
+        changed_fields.append("github")
+
+    # --- sync description ---
+    incoming_desc = author_data.get("description")
+    if incoming_desc is not None and incoming_desc != author.description:
+        author.description = incoming_desc
+        changed_fields.append("description")
 
     # --- sync profileImage from remote, if provided ---
     profile_image_url = author_data.get("profileImage")

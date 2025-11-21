@@ -305,6 +305,7 @@ def build_author_dict(author, request):
         "displayName": author.displayName,
         "url": author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/",
         "github": author.github,
+        "description": author.description,
         "profileImage": profile_image_url,
         "web": f"{request.scheme}://{request.get_host()}{web_url}",
     }

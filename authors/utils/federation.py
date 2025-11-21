@@ -13,6 +13,7 @@ def notify_remote_author_update(author: Author):
         "displayName": author.displayName,
         "url": author.url,
         "github": author.github,
+        "description": author.description,
         "profileImage": build_profile_image_url(author),
     }
     send_to_remote_inboxes(author, payload)
@@ -99,6 +100,7 @@ def build_minimal_author_dict(author: Author) -> dict:
         "displayName": author.displayName,
         "url": author.url,
         "github": author.github,
+        "description": author.description,
     }
 
 def build_profile_image_url(author):
