@@ -203,11 +203,26 @@ def handle_post(self, recipient, data, request):
         # 2) If no URL image, but content is base64, decode and store
         if (not local_image) and ("base64" in content_type.lower()) and content:
             try:
-                clean_type = content_type.split(";")[0]
-                img_bytes = base64.b64decode(content)
+                # e.g. contentType: "image/png;base64" or "image/png;base64; charset=utf-8"
+                clean_type = content_type.split(";")[0].strip()  # "image/png"
 
-                ext = "png"
-                if "jpeg" in clean_type or "jpg" in clean_type:
+                raw_data = content
+
+                # If content is a full data URL like:
+                # "data:image/png;base64,AAAA..."
+                if raw_data.startswith("data:"):
+                    try:
+                        _, raw_data = raw_data.split(",", 1)
+                    except ValueError:
+                        # if split fails, just leave raw_data as-is
+                        pass
+
+                img_bytes = base64.b64decode(raw_data)
+
+                ext = "bin"
+                if "png" in clean_type:
+                    ext = "png"
+                elif "jpeg" in clean_type or "jpg" in clean_type:
                     ext = "jpg"
                 elif "gif" in clean_type:
                     ext = "gif"
@@ -217,8 +232,15 @@ def handle_post(self, recipient, data, request):
                     content_type=clean_type,
                     data=img_bytes,
                 )
+
+                # If this was an image post, don't keep the base64 blob in content
+                if clean_type.startswith("image/"):
+                    content = ""           # or a caption if you want
+                    content_type = "text/plain"
+
             except Exception as e:
                 print("Failed to decode inline base64 image:", e)
+
 
         # ---------------------------------------------------------
         # CHECK IF POST ALREADY EXISTS
@@ -227,10 +249,8 @@ def handle_post(self, recipient, data, request):
 
         if existing_post:
             existing_post.title = data.get("title", existing_post.title)
-            existing_post.content = data.get("content", existing_post.content)
-            existing_post.contentType = data.get(
-                "contentType", existing_post.contentType
-            )
+            existing_post.content = content or existing_post.content
+            existing_post.contentType = content_type or existing_post.contentType
             existing_post.visibility = visibility
             existing_post.source = data.get("source", existing_post.source)
             existing_post.updated = timezone.now()
