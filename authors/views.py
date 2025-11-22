@@ -34,6 +34,7 @@ import logging
 from django.conf import settings
 from .api_views import SingleFollowingAPIView
 from authors.utils.remote_read import sync_remote_comments_for_post, sync_remote_likes_for_post, sync_remote_comment_likes_for_post, fetch_and_sync_remote_posts
+from authors.utils.remote_read import sync_remote_comments_for_post, sync_remote_likes_for_post, sync_remote_comment_likes_for_post, fetch_and_sync_remote_posts
 from authors.utils.federation import send_comment_to_post_owner, send_like_to_post_owner, send_comment_like_to_post_owner
 
 
@@ -600,12 +601,12 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
         - Friends-only posts from mutual friends (with inbox receipt tracking for remote posts)
         - Unlisted posts from followed authors (with inbox receipt tracking for remote posts)
         - All posts from the author themselves
-        
+
         Inbox receipt logic:
         - For LOCAL posts (friends-only & unlisted): Use Follow relationships (always current)
         - For REMOTE posts (friends-only & unlisted): Only show if received in user's inbox
           (solves the stale Follow relationship problem in distributed systems)
-        
+
         This prevents scenarios where:
         - Remote author unfollows a local author but our node doesn't know
         - Local author would still see unlisted/friends-only posts through stale Follow data
@@ -625,31 +626,31 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
 
         # Friends-only posts logic with inbox receipt tracking:
         # SPLIT INTO LOCAL and REMOTE queries
-        
+
         # 1. Local friends-only posts from mutual friends (trust Follow relationships)
         local_mutual_friends = Author.objects.filter(
             id__in=mutual_friends,
             host=local_host
         ).values_list('id', flat=True)
-        
+
         friends_posts_local = Post.objects.filter(
             visibility='FRIENDS',
             author__in=local_mutual_friends,
             deleted=False
         )
-        
+
         # 2. Remote friends-only posts (only if received in inbox)
         # Get posts that were delivered to this user's inbox
         inbox_post_ids = InboxReceipt.objects.filter(
             recipient=user
         ).values_list('post_id', flat=True)
-        
+
         friends_posts_remote = Post.objects.filter(
             id__in=inbox_post_ids,
             visibility='FRIENDS',
             deleted=False
         ).exclude(author__host=local_host)
-        
+
         # User's own friends-only posts
         friends_posts_author = Post.objects.filter(
             visibility='FRIENDS',
@@ -659,21 +660,21 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
 
         # Unlisted posts logic with inbox receipt tracking:
         # SPLIT INTO LOCAL and REMOTE queries
-        
+
         # 1. Local unlisted posts from followed authors (trust Follow relationships)
         local_followed_authors = Author.objects.filter(
             id__in=followed_authors,
             host=local_host
         ).values_list('id', flat=True)
-        
+
         unlisted_posts_local = Post.objects.filter(
             visibility='PUBLIC_UNLISTED',
             author__in=local_followed_authors,
             deleted=False
         ).exclude(author=user)
-        
+
         # 2. Remote unlisted posts (only if received in inbox)
-        # Since we now push PUBLIC_UNLISTED posts to remote followers' inboxes, 
+        # Since we now push PUBLIC_UNLISTED posts to remote followers' inboxes,
         # they should appear here if the user is a follower
         unlisted_posts_remote = Post.objects.filter(
             id__in=inbox_post_ids,
@@ -686,21 +687,51 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
 
         # Combine all posts
         queryset = (
-            public_posts | 
-            friends_posts_local | 
-            friends_posts_remote | 
-            friends_posts_author | 
+            public_posts |
+            friends_posts_local |
+            friends_posts_remote |
+            friends_posts_author |
             unlisted_posts_local |
             unlisted_posts_remote |
             my_posts
         ).distinct().order_by('-updated')
-        
+
         return queryset
 
     def get_context_data(self, **kwargs):
         # Get the existing context
         context = super().get_context_data(**kwargs)
         user = self.request.user
+
+        # Organize posts into different sections for the template
+        posts = context["posts"]
+        local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+
+        # Separate posts by category for sectioned display
+        friends_posts = []
+        unlisted_posts = []
+        remote_posts = []
+        public_posts = []
+        my_posts = []
+
+        for post in posts:
+            if post.author == user:
+                my_posts.append(post)
+            elif post.visibility == 'FRIENDS':
+                friends_posts.append(post)
+            elif post.visibility == 'PUBLIC_UNLISTED':
+                unlisted_posts.append(post)
+            elif post.visibility == 'PUBLIC' and post.author.host != local_host:
+                remote_posts.append(post)
+            elif post.visibility == 'PUBLIC':
+                public_posts.append(post)
+
+        # Add organized posts to context
+        context["friends_posts"] = friends_posts
+        context["unlisted_posts"] = unlisted_posts
+        context["remote_posts"] = remote_posts
+        context["public_posts"] = public_posts
+        context["my_posts"] = my_posts
 
         # Fetch followed authors and their recent posts
         followed_authors = Follow.objects.filter(follower=user).select_related("following")
@@ -754,6 +785,7 @@ class ExploreView(ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["title"] = "Explore Public Posts"
+        context["subtitle"] = "Discover content from other nodes"
 
         # Include current author's id for the follow-remote form
         if self.request.user.is_authenticated:
