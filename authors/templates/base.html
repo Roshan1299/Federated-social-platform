@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Social Distribution{% endblock %}</title>
   {% load static %}
   <link rel="stylesheet" type="text/css" href="{% static 'css/auth.css' %}">
@@ -33,10 +34,245 @@
     .nav-follow-requests:hover .follow-requests-badge {
       background-color: #ff6b81;
     }
+
+    /* Dropdown styles */
+    .dropdown {
+      position: relative;
+      display: inline-block;
+    }
+
+    .dropdown-toggle {
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: color 0.3s ease;
+    }
+
+    .dropdown-toggle:hover {
+      color: #3a7bd5;
+    }
+
+    .dropdown-arrow {
+      transition: transform 0.3s ease;
+      font-size: 10px;
+    }
+
+    .dropdown.active .dropdown-arrow {
+      transform: rotate(180deg);
+    }
+
+    .dropdown-menu {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      box-shadow: var(--card-shadow);
+      min-width: 200px;
+      padding: 8px 0;
+      margin-top: 8px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-10px);
+      transition: all 0.3s ease;
+      z-index: 1000;
+    }
+
+    .dropdown.active .dropdown-menu {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .dropdown-item {
+      display: block;
+      padding: 10px 16px;
+      color: var(--text-primary);
+      text-decoration: none;
+      transition: background-color 0.2s ease;
+      font-size: 14px;
+    }
+
+    .dropdown-item:hover {
+      background-color: rgba(58, 123, 213, 0.1);
+      color: #3a7bd5;
+    }
+
+    /* Edit Profile Section Styling */
+    .edit-profile-container {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      box-shadow: var(--card-shadow);
+      color: var(--text-primary);
+    }
+
+    .edit-profile-header h1,
+    .profile-image-section h3,
+    .profile-info-section h3 {
+      color: var(--text-primary);
+    }
+
+    .edit-profile-header p,
+    .form-hint {
+      color: var(--text-secondary);
+    }
+
+    .profile-avatar-img {
+      border-color: var(--border-color);
+      background: var(--bg-primary);
+    }
+
+    .form-group label {
+      color: var(--text-primary);
+    }
+
+    .form-group input[type="text"],
+    .form-group input[type="url"],
+    .form-group input[type="file"],
+    .form-group textarea,
+    .form-group select {
+      background-color: var(--bg-primary);
+      border-color: var(--border-color);
+      color: var(--text-primary);
+    }
+
+    .form-group input::placeholder,
+    .form-group textarea::placeholder {
+      color: var(--text-secondary);
+      opacity: 0.7;
+    }
+
+    .profile-image-section h3,
+    .profile-info-section h3 {
+      border-bottom-color: var(--border-color);
+    }
+
+    .form-actions {
+      border-top-color: var(--border-color);
+    }
+
+    .btn-secondary {
+      background-color: var(--border-color);
+      color: var(--text-primary);
+    }
+
+    .dark-theme .btn-secondary:hover {
+      background-color: #475569;
+    }
+
+    .alert-error {
+      background-color: #fee;
+      border: 1px solid #fcc;
+      color: #c33;
+    }
+
+    .dark-theme .alert-error {
+      background-color: #4a1f1f;
+      border-color: #7a3030;
+      color: #ff6b6b;
+    }
+
+    /* Dark Theme Styles */
+    :root {
+      --bg-primary: #f8fafc;
+      --bg-secondary: white;
+      --text-primary: #333;
+      --text-secondary: #666;
+      --border-color: #e1e5e9;
+      --card-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+      --nav-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .dark-theme {
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --text-primary: #f1f5f9;
+      --text-secondary: #cbd5e1;
+      --border-color: #334155;
+      --card-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+      --nav-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    .dark-theme body {
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+    }
+
+    .card, .post-card, .stream-post-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+    }
+
+    .dark-theme .card,
+    .dark-theme .post-card,
+    .dark-theme .stream-post-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+    }
+
+    .post-description, .post-content, .post-title a, .post-author a {
+      color: var(--text-primary) !important;
+    }
+
+    .dark-theme .post-description,
+    .dark-theme .post-content,
+    .dark-theme .post-title a,
+    .dark-theme .post-author a {
+      color: var(--text-primary) !important;
+    }
+
+    .form-control {
+      background-color: var(--bg-primary);
+      border: 2px solid var(--border-color);
+      color: var(--text-primary);
+    }
+
+    .dark-theme .form-control {
+      background-color: #334155;
+      border: 2px solid #475569;
+      color: var(--text-primary);
+    }
+
+    .section-title::after {
+      background: linear-gradient(90deg, #3a7bd5, #00d2ff);
+    }
+
+    .theme-toggle-btn {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.3s ease;
+    }
+
+    .theme-toggle-btn:hover {
+      background: #3a7bd5;
+      color: white;
+      border-color: #3a7bd5;
+    }
   </style>
 </head>
 
-<body>
+<body class="light-theme">
   <nav>
     {% if user.is_authenticated %}
       <div class="nav-left">
@@ -71,11 +307,15 @@
           {% endif %}
         </a>
 
-                <!-- Node Admin links for superusers -->
+        <!-- Nodes link for superusers -->
         {% if user.is_superuser %}
           <a href="{% url 'authors:node_management' %}" class="nav-node-management">Nodes</a>
-          <a href="{% url 'authors:federation_guide' %}" class="nav-federation-guide">Federation Guide</a>
         {% endif %}
+
+        <!-- Theme Toggle Button -->
+        <button class="theme-toggle-btn" id="theme-toggle">
+          <span id="theme-icon">🌙</span>
+        </button>
 
         <form action="{% url 'logout' %}" method="post" class="nav-logout-form">
           {% csrf_token %}
@@ -109,5 +349,44 @@
     {% block content %}
     {% endblock %}
   </main>
+
+  <script>
+    // Theme toggle functionality
+    document.addEventListener('DOMContentLoaded', function() {
+      const themeToggle = document.getElementById('theme-toggle');
+      const themeIcon = document.getElementById('theme-icon');
+      const body = document.body;
+
+      // Check for saved theme preference or respect system preference
+      const savedTheme = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+      // Apply the theme
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        body.classList.remove('light-theme');
+        body.classList.add('dark-theme');
+        themeIcon.textContent = '☀️'; // Sun icon for light mode
+      } else {
+        body.classList.remove('dark-theme');
+        body.classList.add('light-theme');
+        themeIcon.textContent = '🌙'; // Moon icon for dark mode
+      }
+
+      // Add event listener to toggle button
+      themeToggle.addEventListener('click', function() {
+        if (body.classList.contains('dark-theme')) {
+          body.classList.remove('dark-theme');
+          body.classList.add('light-theme');
+          themeIcon.textContent = '🌙'; // Switch to dark mode
+          localStorage.setItem('theme', 'light');
+        } else {
+          body.classList.remove('light-theme');
+          body.classList.add('dark-theme');
+          themeIcon.textContent = '☀️'; // Switch to light mode
+          localStorage.setItem('theme', 'dark');
+        }
+      });
+    });
+  </script>
 </body>
 </html>

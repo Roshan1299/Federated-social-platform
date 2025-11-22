@@ -15,9 +15,9 @@
                 <div class="card-body d-flex flex-column">
                     <h4 class="card-title">Node Configuration</h4>
                     <p class="card-text flex-grow-1">
-                        Configure this node’s base URL and service credentials used for federation.
+                        Configure this node's base URL and service credentials used for federation.
                     </p>
-                    <a href="{% url 'authors:node_config' %}" class="btn btn-primary mt-auto">
+                    <a href="{% url 'authors:node_config' %}" class="btn btn-outline-primary mt-auto">
                         Open Node Configuration
                     </a>
                 </div>
@@ -33,6 +33,20 @@
                     </p>
                     <a href="{% url 'authors:configure_remote_node' %}" class="btn btn-outline-primary mt-auto">
                         Add Remote Node
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-body d-flex flex-column">
+                    <h4 class="card-title">Federation Guide</h4>
+                    <p class="card-text flex-grow-1">
+                        Learn how to set up and manage federation between nodes, including authentication and troubleshooting.
+                    </p>
+                    <a href="{% url 'authors:federation_guide' %}" class="btn btn-outline-secondary mt-auto">
+                        View Federation Guide
                     </a>
                 </div>
             </div>

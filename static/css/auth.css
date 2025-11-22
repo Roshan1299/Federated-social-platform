@@ -17,7 +17,7 @@
 }
 
 .auth-box {
-    background: white;
+    background: var(--bg-secondary);
     border-radius: 12px;
     box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
     padding: 40px;
@@ -25,10 +25,11 @@
     max-width: 400px;
     text-align: center;
     z-index: 2;
+    color: var(--text-primary);
 }
 
 .auth-box h2 {
-    color: #333;
+    color: var(--text-primary);
     margin-bottom: 30px;
     font-size: 28px;
     font-weight: 600;
@@ -46,23 +47,26 @@
     display: block;
     margin-bottom: 8px;
     font-weight: 500;
-    color: #555;
+    color: var(--text-primary);
 }
 
 .auth-form input {
     width: 100%;
     padding: 12px 15px;
-    border: 2px solid #e1e5e9;
+    border: 2px solid var(--border-color);
     border-radius: 8px;
     font-size: 16px;
     transition: border-color 0.3s ease;
     box-sizing: border-box;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
 }
 
 .auth-form input:focus {
     outline: none;
     border-color: #3a7bd5;
     box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.2);
+    background-color: var(--bg-secondary);
 }
 
 .auth-form button {
@@ -90,7 +94,7 @@
 .auth-link {
     text-align: center;
     margin-top: 20px;
-    color: #666;
+    color: var(--text-secondary);
 }
 
 .auth-link a {
@@ -106,9 +110,9 @@
 }
 
 .auth-form .errorlist {
-    background: #fee;
-    border: 1px solid #fcc;
-    color: #c33;
+    background: rgba(220, 53, 69, 0.2);
+    border: 1px solid rgba(220, 53, 69, 0.4);
+    color: #ffb3b3;
     padding: 10px;
     border-radius: 8px;
     margin-bottom: 15px;
@@ -117,7 +121,7 @@
 }
 
 .auth-form .form-error {
-    color: #c33;
+    color: #ffb3b3;
     font-size: 14px;
     margin-top: 5px;
 }
@@ -134,21 +138,21 @@
 }
 
 .messages .alert-success {
-    background: #d4edda;
-    color: #155724;
-    border: 1px solid #c3e6cb;
+    background: rgba(40, 167, 69, 0.2);
+    color: #a7f0c8;
+    border: 1px solid rgba(40, 167, 69, 0.4);
 }
 
 .messages .alert-error {
-    background: #f8d7da;
-    color: #721c24;
-    border: 1px solid #f5c6cb;
+    background: rgba(220, 53, 69, 0.2);
+    color: #ffb3b3;
+    border: 1px solid rgba(220, 53, 69, 0.4);
 }
 
 .messages .alert-info {
-    background: #d1ecf1;
-    color: #0c5460;
-    border: 1px solid #bee5eb;
+    background: rgba(23, 162, 184, 0.2);
+    color: #a3daff;
+    border: 1px solid rgba(23, 162, 184, 0.4);
 }
 
 /* Logout Page Specific */
@@ -170,7 +174,7 @@
 }
 
 .logout-box {
-    background: white;
+    background: var(--bg-secondary);
     border-radius: 12px;
     box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
     padding: 40px;
@@ -178,17 +182,18 @@
     max-width: 400px;
     text-align: center;
     z-index: 2;
+    color: var(--text-primary);
 }
 
 .logout-box h2 {
-    color: #333;
+    color: var(--text-primary);
     margin-bottom: 20px;
     font-size: 28px;
     font-weight: 600;
 }
 
 .logout-box p {
-    color: #666;
+    color: var(--text-secondary);
     margin-bottom: 20px;
     font-size: 16px;
     line-height: 1.5;

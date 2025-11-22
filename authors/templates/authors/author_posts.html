@@ -32,9 +32,6 @@
             </div>
             <div class="post-meta">
               <span class="publish-date">Published {{ post.published|naturaltime }}</span>
-              {% if post.updated and post.updated != post.published %}
-                • <span class="update-date">Updated {{ post.updated|naturaltime }}</span>
-              {% endif %}
               <br>
               <span class="visibility">Visibility: {{ post.get_visibility_display }}</span>
             </div>

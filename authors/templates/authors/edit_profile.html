@@ -49,7 +49,7 @@
         </div>
       </div>
 
-      <!-- ✅ PROFILE INFO SECTION -->e
+      <!-- PROFILE INFO SECTION -->
       <div class="profile-info-section">
         <h3>Profile Information</h3>
 
@@ -93,10 +93,39 @@
 .edit-profile-container {
   max-width: 800px;
   margin: 40px auto;
-  background: #fff;
+  background: var(--bg-secondary);
   padding: 30px;
   border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  box-shadow: var(--card-shadow);
+  border: 1px solid var(--border-color);
+}
+
+.edit-profile-header h1 {
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.edit-profile-header p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.edit-profile-header h1 {
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.edit-profile-header p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.profile-image-section h3,
+.profile-info-section h3 {
+  color: var(--text-primary);
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--border-color);
 }
 
 .profile-image-preview {
@@ -109,41 +138,192 @@
   height: 180px;
   border-radius: 50%;
   object-fit: contain;
-  border: 3px solid #ccc;
-  background: #f9f9f9;
+  border: 3px solid var(--border-color);
+  background: var(--bg-primary);
+}
+
+.profile-avatar-img {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  object-fit: contain;
+  border: 3px solid var(--border-color);
+  background: var(--bg-primary);
 }
 
 .form-group {
   margin-bottom: 18px;
 }
 
+.form-group label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.form-group input[type="text"],
+.form-group input[type="url"],
+.form-group input[type="file"],
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #3a7bd5;
+  box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.1);
+}
+
+.form-group textarea {
+  min-height: 120px;
+  resize: vertical;
+  font-family: inherit;
+}
+
 .form-hint {
   font-size: 0.85rem;
-  color: #666;
-  margin-top: 4px;
+  color: var(--text-secondary);
+  margin-top: 6px;
   display: block;
 }
 
+.form-hint a {
+  color: #3a7bd5;
+  text-decoration: none;
+}
+
+.form-hint a:hover {
+  text-decoration: underline;
+}
+
+.form-error {
+  color: #ff4757;
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+.form-errors {
+  margin-bottom: 20px;
+}
+
+.alert-error {
+  background-color: #fee;
+  border: 1px solid #fcc;
+  color: #c33;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.dark-theme .alert-error {
+  background-color: #4a1f1f;
+  border-color: #7a3030;
+  color: #ff6b6b;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+}
+
 .btn {
-  padding: 8px 16px;
+  padding: 10px 20px;
   border-radius: 8px;
   text-decoration: none;
   border: none;
   cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  display: inline-block;
 }
 
 .btn-primary {
-  background-color: #007bff;
+  background-color: #3a7bd5;
   color: white;
 }
 
-.btn-secondary {
-  background-color: #ccc;
-  color: black;
+.btn-primary:hover {
+  background-color: #2d66b8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(58, 123, 213, 0.3);
 }
 
-.alert-error {
-  color: red;
+.btn-primary {
+  background-color: #3a7bd5;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #2d66b8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(58, 123, 213, 0.3);
+}
+
+.btn-secondary {
+  background-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+  background-color: #cbd5e0;
+}
+
+.dark-theme .btn-secondary:hover {
+  background-color: #475569;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.btn-outline-primary {
+  background-color: transparent;
+  border: 2px solid #3a7bd5;
+  color: #3a7bd5;
+}
+
+.btn-outline-primary:hover {
+  background-color: #3a7bd5;
+  color: white;
+}
+
+/* Section spacing */
+.profile-image-section,
+.profile-info-section {
+  margin-bottom: 30px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .edit-profile-container {
+    margin: 20px;
+    padding: 20px;
+  }
+
+  .form-actions {
+    flex-direction: column;
+  }
+
+  .btn {
+    width: 100%;
+    text-align: center;
+  }
 }
 </style>
 {% endblock %}

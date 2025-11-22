@@ -17,10 +17,10 @@
       {% endif %}
     </div>
 
-    {# Posts from followed authors #}
+    {# 1. Posts from followed authors - Priority 1: Most relevant content #}
     {% if followed_data %}
       <section class="followed-posts-section">
-        <h2 class="section-title">Posts from authors you follow</h2>
+        <h2 class="section-title">Posts from Authors You Follow</h2>
         {% for entry in followed_data %}
           <div class="author-posts">
             <h3 class="author-name">
@@ -69,16 +69,15 @@
       </section>
     {% endif %}
 
-    {# All public posts section #}
-    {% if posts %}
-      <section class="all-posts-section">
+    {# 2. Friends-only posts - Priority 2: Private network content #}
+    {% if friends_posts %}
+      <section class="friends-posts-section">
         {% if followed_data %}
           <hr class="section-divider">
         {% endif %}
-        <h2 class="section-title">All Public Posts</h2>
-
+        <h2 class="section-title">Friends Only Posts</h2>
         <div class="posts-grid">
-          {% for post in posts %}
+          {% for post in friends_posts %}
             <article class="post-card">
               <div class="post-header">
                 <div class="post-author">
@@ -97,9 +96,6 @@
                 </div>
                 <div class="post-meta">
                   <span class="publish-date">Published {{ post.published|naturaltime }}</span>
-                  {% if post.updated and post.updated != post.published %}
-                    • <span class="update-date">Updated {{ post.updated|naturaltime }}</span>
-                  {% endif %}
                 </div>
               </div>
 
@@ -120,9 +116,11 @@
                 </div>
               {% endif %}
 
-              <div class="post-content">
-                {{ post.rendered_content|truncatechars_html:300|safe }}
-              </div>
+              {% if post.rendered_content %}
+                <div class="post-content">
+                  {{ post.rendered_content|truncatechars_html:300|safe }}
+                </div>
+              {% endif %}
 
               <div class="post-actions">
                 <a href="{% url 'authors:post_detail' post.id %}" class="btn btn-primary">Read More</a>
@@ -130,24 +128,200 @@
             </article>
           {% endfor %}
         </div>
-
-        {% if is_paginated %}
-          <div class="pagination">
-            {% if page_obj.has_previous %}
-              <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-secondary">Previous</a>
-            {% endif %}
-            <span class="page-info">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-            {% if page_obj.has_next %}
-              <a href="?page={{ page_obj.next_page_number }}" class="btn btn-secondary">Next</a>
-            {% endif %}
-          </div>
-        {% endif %}
       </section>
+    {% endif %}
 
-    {% else %}
-      <div class="empty-state">
+    {# 3. Public posts - Priority 3: General community content #}
+    {% if public_posts %}
+      <section class="public-posts-section">
+        {% if followed_data or friends_posts %}
+          <hr class="section-divider">
+        {% endif %}
+        <h2 class="section-title">Public Posts</h2>
+        <div class="posts-grid">
+          {% for post in public_posts %}
+            <article class="post-card">
+              <div class="post-header">
+                <div class="post-author">
+                  <a href="{% url 'authors:author_profile' post.author.id %}">
+                    {% if post.author.profileImage_id %}
+                      <img
+                        src="{% url 'authors:serve_image' post.author.profileImage_id %}"
+                        alt="{{ post.author.displayName }}"
+                        style="width:28px;height:28px;border-radius:50%;object-fit:cover;margin-right:8px;"
+                      />
+                    {% else %}
+                      <span style="margin-right:8px;">👤</span>
+                    {% endif %}
+                    {{ post.author.displayName }}
+                  </a>
+                </div>
+                <div class="post-meta">
+                  <span class="publish-date">Published {{ post.published|naturaltime }}</span>
+                </div>
+              </div>
+
+              <h3 class="post-title">
+                <a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a>
+              </h3>
+
+              {% if post.image_id %}
+                <div class="post-image-container">
+                  <a href="{% url 'authors:post_detail' post.id %}">
+                    <img
+                      src="{% url 'authors:serve_image' post.image_id %}"
+                      alt="image for {{ post.title }}"
+                      class="post-image"
+                      style="width:100%;height:200px;object-fit:cover;border-radius:10px;"
+                    />
+                  </a>
+                </div>
+              {% endif %}
+
+              {% if post.rendered_content %}
+                <div class="post-content">
+                  {{ post.rendered_content|truncatechars_html:300|safe }}
+                </div>
+              {% endif %}
+
+              <div class="post-actions">
+                <a href="{% url 'authors:post_detail' post.id %}" class="btn btn-primary">Read More</a>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
+    {# 5. Remote posts - Priority 5: Federated content #}
+    {% if remote_posts %}
+      <section class="remote-posts-section">
+        {% if my_posts or followed_data or friends_posts or public_posts %}
+          <hr class="section-divider">
+        {% endif %}
+        <h2 class="section-title">Remote Posts</h2>
+        <div class="posts-grid">
+          {% for post in remote_posts %}
+            <article class="post-card">
+              <div class="post-header">
+                <div class="post-author">
+                  <a href="{% url 'authors:author_profile' post.author.id %}">
+                    {% if post.author.profileImage_id %}
+                      <img
+                        src="{% url 'authors:serve_image' post.author.profileImage_id %}"
+                        alt="{{ post.author.displayName }}"
+                        style="width:28px;height:28px;border-radius:50%;object-fit:cover;margin-right:8px;"
+                      />
+                    {% else %}
+                      <span style="margin-right:8px;">👤</span>
+                    {% endif %}
+                    {{ post.author.displayName }}
+                  </a>
+                </div>
+                <div class="post-meta">
+                  <span class="publish-date">Published {{ post.published|naturaltime }}</span>
+                </div>
+              </div>
+
+              <h3 class="post-title">
+                <a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a>
+              </h3>
+
+              {% if post.image_id %}
+                <div class="post-image-container">
+                  <a href="{% url 'authors:post_detail' post.id %}">
+                    <img
+                      src="{% url 'authors:serve_image' post.image_id %}"
+                      alt="image for {{ post.title }}"
+                      class="post-image"
+                      style="width:100%;height:200px;object-fit:cover;border-radius:10px;"
+                    />
+                  </a>
+                </div>
+              {% endif %}
+
+              {% if post.rendered_content %}
+                <div class="post-content">
+                  {{ post.rendered_content|truncatechars_html:300|safe }}
+                </div>
+              {% endif %}
+
+              <div class="post-actions">
+                <a href="{% url 'authors:post_detail' post.id %}" class="btn btn-primary">Read More</a>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
+    {# 6. Unlisted posts - Priority 6: Special access content #}
+    {% if unlisted_posts %}
+      <section class="unlisted-posts-section">
+        {% if my_posts or followed_data or friends_posts or public_posts or remote_posts %}
+          <hr class="section-divider">
+        {% endif %}
+        <h2 class="section-title">Unlisted Posts</h2>
+        <div class="posts-grid">
+          {% for post in unlisted_posts %}
+            <article class="post-card">
+              <div class="post-header">
+                <div class="post-author">
+                  <a href="{% url 'authors:author_profile' post.author.id %}">
+                    {% if post.author.profileImage_id %}
+                      <img
+                        src="{% url 'authors:serve_image' post.author.profileImage_id %}"
+                        alt="{{ post.author.displayName }}"
+                        style="width:28px;height:28px;border-radius:50%;object-fit:cover;margin-right:8px;"
+                      />
+                    {% else %}
+                      <span style="margin-right:8px;">👤</span>
+                    {% endif %}
+                    {{ post.author.displayName }}
+                  </a>
+                </div>
+                <div class="post-meta">
+                  <span class="publish-date">Published {{ post.published|naturaltime }}</span>
+                </div>
+              </div>
+
+              <h3 class="post-title">
+                <a href="{% url 'authors:post_detail' post.id %}">{{ post.title }}</a>
+              </h3>
+
+              {% if post.image_id %}
+                <div class="post-image-container">
+                  <a href="{% url 'authors:post_detail' post.id %}">
+                    <img
+                      src="{% url 'authors:serve_image' post.image_id %}"
+                      alt="image for {{ post.title }}"
+                      class="post-image"
+                      style="width:100%;height:200px;object-fit:cover;border-radius:10px;"
+                    />
+                  </a>
+                </div>
+              {% endif %}
+
+              {% if post.rendered_content %}
+                <div class="post-content">
+                  {{ post.rendered_content|truncatechars_html:300|safe }}
+                </div>
+              {% endif %}
+
+              <div class="post-actions">
+                <a href="{% url 'authors:post_detail' post.id %}" class="btn btn-primary">Read More</a>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
+    {# Empty state - when no posts available #}
+    {% if not my_posts and not friends_posts and not unlisted_posts and not remote_posts and not public_posts and not followed_data %}
+      <div class="empty-state card">
         <h3>No posts available yet</h3>
-        <p>There are no public posts in the network yet.</p>
+        <p>There are no posts in your stream yet. Follow some authors to start seeing content!</p>
       </div>
     {% endif %}
   </div>
