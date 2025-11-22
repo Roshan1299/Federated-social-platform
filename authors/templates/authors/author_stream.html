@@ -317,12 +317,125 @@
       </section>
     {% endif %}
 
+
     {# Empty state - when no posts available #}
-    {% if not my_posts and not friends_posts and not unlisted_posts and not remote_posts and not public_posts and not followed_data %}
+    {% if not friends_posts and not unlisted_posts and not remote_posts and not public_posts and not followed_data %}
       <div class="empty-state card">
         <h3>No posts available yet</h3>
         <p>There are no posts in your stream yet. Follow some authors to start seeing content!</p>
       </div>
     {% endif %}
   </div>
+
+  <style>
+    .author-posts {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 1.2rem;
+      margin-bottom: 1.5rem;
+      box-shadow: var(--card-shadow);
+    }
+
+    .author-posts h3 {
+      color: var(--text-primary);
+      margin-top: 0;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.5rem;
+    }
+
+    .section-divider {
+      border: 0;
+      border-top: 1px solid var(--border-color);
+      margin: 2rem 0;
+    }
+
+    .post-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 1.2rem;
+      margin-bottom: 1.2rem;
+      box-shadow: var(--card-shadow);
+      color: var(--text-primary);
+    }
+
+    .post-title a {
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+
+    .post-title a:hover {
+      color: #3a7bd5;
+    }
+
+    .post-content {
+      color: var(--text-primary);
+      margin: 1rem 0;
+    }
+
+    .btn {
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-weight: 500;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.3s ease;
+    }
+
+    .btn-primary {
+      background: #3a7bd5;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #2a5a9f;
+      color: white;
+    }
+
+    .btn-secondary {
+      background: var(--border-color);
+      color: var(--text-primary);
+    }
+
+    .btn-secondary:hover {
+      background: #475569;
+      color: white;
+    }
+
+    .post-meta, .publish-date {
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+    }
+
+    .no-posts {
+      color: var(--text-secondary);
+      font-style: italic;
+      margin: 1rem 0;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 2rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+    }
+
+    .empty-state h3, .empty-state p {
+      color: var(--text-primary);
+    }
+
+    .author-name a {
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+
+    .author-name a:hover {
+      color: #3a7bd5;
+    }
+  </style>
 {% endblock %}
