@@ -256,3 +256,78 @@ def sync_remote_comment_likes_for_post(post):
                 origin=like_id,
                 defaults=defaults,
             )
+
+
+def fetch_and_sync_remote_posts():
+    """
+    Iterates through all enabled remote nodes and syncs their public posts.
+    1. Fetches all authors from the remote node.
+    2. For each author, fetches their public posts.
+    3. Creates or updates local stubs for the authors and posts.
+    """
+    from authors.models import RemoteNode, Post
+    import uuid
+
+    remote_nodes = RemoteNode.objects.filter(enabled=True)
+    for node in remote_nodes:
+        auth = (node.username, node.password)
+        authors_url = f"{node.base_url.rstrip('/')}/api/authors/"
+        
+        try:
+            # 1. Fetch all authors from the remote node
+            authors_response = requests.get(authors_url, auth=auth, timeout=5)
+            if authors_response.status_code != 200:
+                print(f"Could not fetch authors from {node.base_url}, status: {authors_response.status_code}")
+                continue
+            
+            authors_data = authors_response.json().get('items', [])
+            
+            # 2. For each author, fetch their public posts
+            for author_data in authors_data:
+                author_id_url = author_data.get('id') or author_data.get('url')
+                if not author_id_url:
+                    continue
+
+                # Ensure we have a local stub for this author
+                author_obj, _ = Author.objects.get_or_create(
+                    url=author_id_url,
+                    defaults={
+                        'host': author_data.get('host'),
+                        'displayName': author_data.get('displayName'),
+                        'github': author_data.get('github'),
+                        'username': f"remote_{uuid.uuid4().hex[:12]}"
+                    }
+                )
+
+                posts_url = f"{author_id_url.rstrip('/')}/entries/"
+                posts_response = requests.get(posts_url, auth=auth, timeout=5)
+                if posts_response.status_code != 200:
+                    continue
+
+                posts_data = posts_response.json().get('items', [])
+
+                # 3. Sync each public post into our local DB
+                for post_data in posts_data:
+                    if post_data.get('visibility') != 'PUBLIC':
+                        continue
+
+                    post_origin_url = post_data.get('origin') or post_data.get('id')
+                    if not post_origin_url:
+                        continue
+                    
+                    Post.objects.update_or_create(
+                        origin=post_origin_url,
+                        defaults={
+                            'author': author_obj,
+                            'title': post_data.get('title'),
+                            'content': post_data.get('content'),
+                            'contentType': post_data.get('contentType'),
+                            'visibility': 'PUBLIC',
+                            'published': post_data.get('published'),
+                            'source': post_data.get('source'),
+                            'deleted': False
+                        }
+                    )
+        except requests.RequestException as e:
+            print(f"Error connecting to remote node {node.base_url}: {e}")
+            continue

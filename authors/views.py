@@ -33,7 +33,7 @@ import requests
 import logging
 from django.conf import settings
 from .api_views import SingleFollowingAPIView
-from authors.utils.remote_read import sync_remote_comments_for_post, sync_remote_likes_for_post, sync_remote_comment_likes_for_post
+from authors.utils.remote_read import sync_remote_comments_for_post, sync_remote_likes_for_post, sync_remote_comment_likes_for_post, fetch_and_sync_remote_posts
 from authors.utils.federation import send_comment_to_post_owner, send_like_to_post_owner, send_comment_like_to_post_owner
 
 
@@ -744,7 +744,8 @@ class ExploreView(ListView):
     paginate_by = 15
 
     def get_queryset(self):
-        """Return all public, non-deleted posts from all authors."""
+        """Fetch remote posts and then return all public, non-deleted posts."""
+        fetch_and_sync_remote_posts()
         queryset = Post.objects.filter(visibility='PUBLIC', deleted=False).order_by('-published')
         for post in queryset:
             post.rendered_content = render_post_content(post)
