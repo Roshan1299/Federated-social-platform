@@ -120,7 +120,7 @@ def build_profile_image_url(author):
 # Convert Post to JSON for remote sending
 def build_post_payload(post: Post) -> dict:
     payload = {
-        "type": "entry",  # or "post" is also fine; your InboxAPIView handles both
+        "type": "entry",
         "id": post.origin,
         "source": post.source,
         "origin": post.origin,

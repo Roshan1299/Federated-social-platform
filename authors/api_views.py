@@ -239,6 +239,31 @@ def _get_like_by_id_or_fqid(like_id=None, like_fqid=None, author_id=None, entry_
         raise Http404("Like identifier required")
 
 
+def resolve_target_host(target, request):
+    """Resolve a target host (scheme://netloc) from an Author-like object.
+
+    Returns: normalized `scheme://netloc` string (no trailing slash).
+    """
+    raw_host = None
+    if getattr(target, 'host', None):
+        raw_host = target.host
+    elif getattr(target, 'url', None):
+        raw_host = target.url
+
+    if not raw_host:
+        return None
+
+    # Ensure the string has a scheme so parsing behaves predictably
+    if not raw_host.startswith('http://') and not raw_host.startswith('https://'):
+        raw_host = f"{request.scheme}://{raw_host.lstrip('/')}"
+
+    parsed = urllib.parse.urlparse(raw_host)
+    if not parsed.scheme or not parsed.netloc:
+        return None
+
+    return f"{parsed.scheme}://{parsed.netloc}".rstrip('/')
+
+
 # ==================== Access Control Helper ====================
 
 def can_access_post(post, request):
@@ -600,12 +625,8 @@ class SingleFollowingAPIView(View):
         # If the target's host differs from our host, send follow request to the remote inbox
         local_base = f"{request.scheme}://{request.get_host()}".rstrip('/')
 
-        target_host = None
-        if getattr(target, 'host', None):
-            target_host = target.host.rstrip('/')
-        elif getattr(target, 'url', None):
-            parsed_t = urllib.parse.urlparse(target.url)
-            target_host = f"{parsed_t.scheme}://{parsed_t.netloc}".rstrip('/')
+        # Resolve target host using helper
+        target_host = resolve_target_host(target, request)
         
         if target_host and target_host != local_base:
             # Look up RemoteNode configuration for this host
