@@ -502,11 +502,6 @@ class InboxAPIView(View):
             
             object_type = data.get('type', '').lower()
 
-            # Update author info from payload if present. Allows edit profile to make changes. 
-            if (data.get('author') is not None): # for comments, posts, likes 
-                author_data = data.get('author')
-                _update_author_from_payload(recipient, author_data)
-
             if object_type == 'follow':
                 return self.handle_follow_request(recipient, data, request)
             elif object_type == 'unfollow':
