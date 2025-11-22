@@ -42,40 +42,47 @@ def get_or_create_author(author_data):
         },
     )
 
-    changed_fields = []
+    # Do NOT update local author profiles with remote data to prevent circular profile updates
+    # Only update local fields for remote authors (not local ones)
+    from django.conf import settings
+    current_host = getattr(settings, 'BASE_URL', '').rstrip('/')
 
-    # --- keep displayName fresh ---
-    if display_name and author.displayName != display_name:
-        author.displayName = display_name
-        changed_fields.append("displayName")
+    # Only update author fields if the author is from a remote host (not local)
+    if author.host != current_host:
+        changed_fields = []
 
-    # --- sync github ---
-    incoming_github = author_data.get("github")
-    if incoming_github is not None and incoming_github != author.github:
-        author.github = incoming_github
-        changed_fields.append("github")
+        # --- keep displayName fresh ---
+        if display_name and author.displayName != display_name:
+            author.displayName = display_name
+            changed_fields.append("displayName")
 
-    # --- sync description ---
-    incoming_desc = author_data.get("description", "")
-    if incoming_desc is not None and incoming_desc != author.description:
-        author.description = incoming_desc
-        changed_fields.append("description")
+        # --- sync github ---
+        incoming_github = author_data.get("github")
+        if incoming_github is not None and incoming_github != author.github:
+            author.github = incoming_github
+            changed_fields.append("github")
 
-    # --- sync profileImage from remote, if provided ---
-    profile_image_url = author_data.get("profileImage")
-    if profile_image_url and isinstance(profile_image_url, str):
-        try:
-            img = fetch_and_store_remote_image(profile_image_url)
-        except Exception as e:
-            img = None
-            print("Failed to sync remote profile image:", e)
+        # --- sync description ---
+        incoming_desc = author_data.get("description", "")
+        if incoming_desc is not None and incoming_desc != author.description:
+            author.description = incoming_desc
+            changed_fields.append("description")
 
-        if img and (not author.profileImage_id or author.profileImage_id != img.id):
-            author.profileImage = img
-            changed_fields.append("profileImage")
+        # --- sync profileImage from remote, if provided ---
+        profile_image_url = author_data.get("profileImage")
+        if profile_image_url and isinstance(profile_image_url, str):
+            try:
+                img = fetch_and_store_remote_image(profile_image_url)
+            except Exception as e:
+                img = None
+                print("Failed to sync remote profile image:", e)
 
-    if changed_fields:
-        author.save(update_fields=changed_fields)
+            if img and (not author.profileImage_id or author.profileImage_id != img.id):
+                author.profileImage = img
+                changed_fields.append("profileImage")
+
+        if changed_fields:
+            author.save(update_fields=changed_fields)
 
     return author
 
