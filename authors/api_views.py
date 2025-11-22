@@ -1511,7 +1511,7 @@ class AuthorsListAPIView(View):
 
         response_data = {
             "type": "authors",
-            "items": items,
+            "authors": items,
             "page": page_obj.number,
             "size": page_size,
             "count": paginator.count,
