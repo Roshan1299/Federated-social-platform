@@ -775,16 +775,34 @@ class ExploreView(ListView):
     paginate_by = 15
 
     def get_queryset(self):
-        """Fetch remote posts and then return all public, non-deleted posts."""
+        """Fetch remote posts and return only remote public, non-deleted posts."""
         fetch_and_sync_remote_posts()
-        queryset = Post.objects.filter(visibility='PUBLIC', deleted=False).order_by('-published')
+
+        # Get the current node's base URL
+        from django.conf import settings
+        current_host = getattr(settings, 'BASE_URL', '').rstrip('/')
+
+        # Filter for posts where the author's host is different from the current node's host
+        # This ensures we only show remote posts
+        queryset = Post.objects.filter(
+            visibility='PUBLIC',
+            deleted=False,
+            # Include only posts from authors whose host is different from the current node
+            # and not null (i.e., remote posts)
+            author__host__isnull=False
+        ).exclude(
+            # Exclude posts where the author's host matches the current node's host
+            # (i.e., exclude local posts)
+            author__host=current_host
+        ).order_by('-published')
+
         for post in queryset:
             post.rendered_content = render_post_content(post)
         return queryset
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["title"] = "Explore Public Posts"
+        context["title"] = "Explore Remote Posts"
         context["subtitle"] = "Discover content from other nodes"
 
         # Include current author's id for the follow-remote form

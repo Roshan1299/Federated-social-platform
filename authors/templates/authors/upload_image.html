@@ -28,11 +28,13 @@
 .upload-container {
   max-width: 600px;
   margin: 60px auto;
-  background: #fff;
+  background: var(--bg-secondary);
   padding: 25px 30px;
   border-radius: 10px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  box-shadow: var(--card-shadow);
   text-align: center;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
 }
 
 .upload-form {
@@ -44,11 +46,13 @@
 }
 
 .file-input {
-  border: 1px solid #ccc;
+  border: 1px solid var(--border-color);
   padding: 8px;
   border-radius: 6px;
   width: 100%;
   max-width: 400px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 .btn {
@@ -57,16 +61,28 @@
   border: none;
   text-decoration: none;
   cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s ease;
 }
 
 .btn-primary {
-  background: #007bff;
+  background: #3a7bd5;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #2a5a9f;
   color: white;
 }
 
 .btn-secondary {
-  background: #ccc;
-  color: black;
+  background: var(--border-color);
+  color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+  background: #475569;
+  color: white;
 }
 </style>
 {% endblock %}
