@@ -11,20 +11,20 @@ def fetch_and_store_remote_image(remote_image_url: str):
     Returns the Image instance or None on failure.
     """
     if not remote_image_url:
-        print("🌐 fetch_and_store_remote_image called with empty URL")
+        print("fetch_and_store_remote_image called with empty URL")
         return None
 
     try:
         parsed = urlparse(remote_image_url)
     except Exception as e:
-        print("🌐 Invalid image URL:", remote_image_url, "error:", e)
+        print("Invalid image URL:", remote_image_url, "error:", e)
         return None
 
     remote_netloc = parsed.netloc.lower()
-    print("🌐 FETCH IMAGE:", remote_image_url)
+    print("FETCH IMAGE:", remote_image_url)
     print("  Parsed netloc:", remote_netloc)
 
-    # 🔹 Find the RemoteNode by host, ignoring scheme (http/https)
+    # Find the RemoteNode by host, ignoring scheme (http/https)
     node = None
     for candidate in RemoteNode.objects.filter(enabled=True):
         try:
@@ -43,7 +43,7 @@ def fetch_and_store_remote_image(remote_image_url: str):
         "username:", getattr(node, "username", None),
     )
 
-    # 🔹 If schemes differ and RemoteNode uses https, upgrade the URL
+    # If schemes differ and RemoteNode uses https, upgrade the URL
     if node:
         try:
             node_parsed = urlparse(node.base_url)
