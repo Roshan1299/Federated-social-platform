@@ -200,7 +200,7 @@ def handle_post(self, recipient, data, request):
             local_image = fetch_and_store_remote_image(remote_image_url)
             print("LOCAL IMAGE:", local_image)
 
-        # 2) If no URL image, but content is base64, decode and store
+                # 2) If no URL image, but content is base64, decode and store
         if (not local_image) and ("base64" in content_type.lower()) and content:
             try:
                 # e.g. contentType: "image/png;base64" or "image/png;base64; charset=utf-8"
@@ -233,9 +233,9 @@ def handle_post(self, recipient, data, request):
                     data=img_bytes,
                 )
 
-                # If this was an image post, don't keep the base64 blob in content
+                # remove base64 text from content if it was an image
                 if clean_type.startswith("image/"):
-                    content = ""           # or a caption if you want
+                    content = ""  # replace with no description
                     content_type = "text/plain"
 
             except Exception as e:
