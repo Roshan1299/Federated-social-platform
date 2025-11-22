@@ -238,33 +238,6 @@ def _get_like_by_id_or_fqid(like_id=None, like_fqid=None, author_id=None, entry_
     else:
         raise Http404("Like identifier required")
     
-def _update_author_from_payload(author, data):
-    """Update an Author instance from incoming payload data.
-    Only updates fields that are present in the payload.
-    """
-    updated = False
-
-    if 'displayName' in data:
-        author.displayName = data['displayName']
-        updated = True
-
-    if 'github' in data:
-        author.github = data['github']
-        updated = True
-
-    if 'description' in data:
-        author.description = data['description']
-        updated = True
-
-    if 'profileImage' in data and author.profileImage is not None:
-        author.profileImage.file_name = data['profileImage']
-        updated = True 
-
-    if updated:
-        author.save()
-    
-    return updated
-
 
 def resolve_target_host(target, request):
     """Resolve a target host (scheme://netloc) from an Author-like object.
