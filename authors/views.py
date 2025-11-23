@@ -192,8 +192,31 @@ class CreatePostView(CreateView):
     template_name = "authors/create_post.html"
     
     def form_valid(self, form):
+        import base64
+        
         # Set the author to the current user
         form.instance.author = self.request.user
+        
+        # Handle image content type
+        content_type = form.cleaned_data.get('contentType')
+        if content_type == 'image':
+            image_obj = form.cleaned_data.get('image')
+            if image_obj:
+                # Encode image data as base64
+                image_data_bytes = bytes(image_obj.data)
+                base64_encoded = base64.b64encode(image_data_bytes).decode('utf-8')
+                
+                # Set content to base64 string
+                form.instance.content = base64_encoded
+                
+                # Set contentType based on image's content_type
+                img_content_type = image_obj.content_type.lower()
+                if 'png' in img_content_type:
+                    form.instance.contentType = 'image/png;base64'
+                elif 'jpeg' in img_content_type or 'jpg' in img_content_type:
+                    form.instance.contentType = 'image/jpeg;base64'
+                else:
+                    form.instance.contentType = 'application/base64'
 
         # Let the generic view save the post first
         response = super().form_valid(form)
@@ -202,6 +225,21 @@ class CreatePostView(CreateView):
         notify_remote_new_post(self.object)
 
         return response
+    
+    def form_invalid(self, form):
+        # Log validation errors to help debug silent 200 responses on POST
+        logger = logging.getLogger(__name__)
+        try:
+            errors = form.errors.as_json()
+        except Exception:
+            errors = str(form.errors)
+
+        # Partial cleaned_data may exist even when invalid; log keys only to avoid large binary dumps
+        cleaned_keys = list(getattr(form, 'cleaned_data', {}).keys()) if getattr(form, 'cleaned_data', None) else None
+
+        logger.error("CreatePostView.form_invalid: errors=%s cleaned_keys=%s POST_keys=%s", errors, cleaned_keys, list(self.request.POST.keys()))
+
+        return super().form_invalid(form)
     
     def get_success_url(self):
         return reverse('authors:author_profile', kwargs={'author_id': self.request.user.id})
@@ -220,11 +258,44 @@ class EditPostView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
         # Ensure only the post author can edit it
         post = self.get_object()
         return self.request.user == post.author
+    
+    def get_initial(self):
+        initial = super().get_initial()
+        post = self.get_object()
+        
+        # Convert actual contentType to form's simplified version
+        if post.contentType and 'base64' in post.contentType:
+            initial['contentType'] = 'image'
+        
+        return initial
 
     def get_success_url(self):
         return reverse("authors:post_detail", kwargs={"post_id": self.object.id})
 
     def form_valid(self, form):
+        import base64
+        
+        # Handle image content type
+        content_type = form.cleaned_data.get('contentType')
+        if content_type == 'image':
+            image_obj = form.cleaned_data.get('image')
+            if image_obj:
+                # Encode image data as base64
+                image_data_bytes = bytes(image_obj.data)
+                base64_encoded = base64.b64encode(image_data_bytes).decode('utf-8')
+                
+                # Set content to base64 string
+                form.instance.content = base64_encoded
+                
+                # Set contentType based on image's content_type
+                img_content_type = image_obj.content_type.lower()
+                if 'png' in img_content_type:
+                    form.instance.contentType = 'image/png;base64'
+                elif 'jpeg' in img_content_type or 'jpg' in img_content_type:
+                    form.instance.contentType = 'image/jpeg;base64'
+                else:
+                    form.instance.contentType = 'application/base64'
+        
         # Call the parent form_valid to save the post
         response = super().form_valid(form)
 
