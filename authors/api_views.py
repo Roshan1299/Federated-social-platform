@@ -376,7 +376,7 @@ def build_post_dict(post, request):
         "title": post.title,
         "source": post.source or entry_url,
         "origin": post.origin or entry_url,
-        "description": post.content[:200] if post.content else "",  # First 200 chars
+        "description": post.description if post.description else "", 
         "contentType": post.contentType,
         "content": post.content,
         "visibility": post.visibility,

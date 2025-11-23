@@ -249,6 +249,7 @@ def handle_post(self, recipient, data, request):
 
         if existing_post:
             existing_post.title = data.get("title", existing_post.title)
+            existing_post.description = data.get("description", existing_post.description)
             existing_post.content = content or existing_post.content
             existing_post.contentType = content_type or existing_post.contentType
             existing_post.visibility = visibility
@@ -282,6 +283,7 @@ def handle_post(self, recipient, data, request):
         post = Post.objects.create(
             author=author,
             title=data.get("title", "Untitled"),
+            description=data.get("description", ""),
             content=content,
             contentType=content_type or "text/plain",
             visibility=visibility,
