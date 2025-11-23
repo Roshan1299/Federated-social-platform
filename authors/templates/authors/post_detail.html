@@ -37,7 +37,7 @@
       </div>
     {% endif %}
 
-    {% if post.content %}
+    {% if post.content and not "base64" in post.contentType|default:"" %}
       <div class="post-detail-content">{{ content_html|safe }}</div>
     {% endif %}
   </section>
