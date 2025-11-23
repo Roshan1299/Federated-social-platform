@@ -41,13 +41,13 @@
     <!-- 🖼 Image Upload -->
     <div class="form-group" id="image-group" style="display: none;">
       <label for="{{ form.image.id_for_label }}">Select Image <span class="required">*</span></label>
-      <p style="margin-top:4px;">
-        Need a new image? 
-        <a href="{% url 'authors:upload_image' %}?next={{ request.path }}" class="btn btn-sm btn-outline-primary">
+      <div class="image-upload-hint">
+        <div class="hint-text">Need a new image?</div>
+        <a href="{% url 'authors:upload_image' %}?next={{ request.path }}" class="btn btn-outline-primary image-upload-btn">
           Upload New Image
-      </a>,
-        then come back and select it.
-      </p>
+        </a>
+        <div class="hint-text">then come back and select it.</div>
+      </div>
       {{ form.image }}
       <small class="form-hint">Required when Image content type is selected</small>
     </div>
@@ -168,6 +168,22 @@
   .required {
     color: #e74c3c;
     font-weight: bold;
+  }
+
+  .image-upload-hint {
+    margin-top: 8px;
+  }
+
+  .hint-text {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+
+  .image-upload-btn {
+    display: block;
+    margin: 8px 0;
+    text-align: center;
   }
 </style>
 
