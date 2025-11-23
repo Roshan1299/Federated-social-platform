@@ -102,6 +102,15 @@ def handle_follow_request(self, recipient, data, request):
     """
     try:
         actor_data = data.get('actor', {})
+        url = actor_data.get('id')
+        if not url:
+            return JsonResponse({'error': 'Follow request must include actor with id/url'}, status=400)
+
+        # Ensure we have a trailiing slash on the URL
+        if not url.endswith('/'):
+            url += '/'
+        actor_data['id'] = url        
+
         actor = get_or_create_author(actor_data)
 
         follow_request, created = FollowRequest.objects.get_or_create(
