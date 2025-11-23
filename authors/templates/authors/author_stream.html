@@ -51,7 +51,7 @@
                   </div>
                 {% endif %}
 
-                {% if post.rendered_content %}
+                {% if post.rendered_content and not "base64" in post.contentType|default:"" %}
                   <div class="post-content">
                     {{ post.rendered_content|truncatechars_html:300|safe }}
                   </div>
@@ -116,7 +116,7 @@
                 </div>
               {% endif %}
 
-              {% if post.rendered_content %}
+              {% if post.rendered_content and not "base64" in post.contentType|default:"" %}
                 <div class="post-content">
                   {{ post.rendered_content|truncatechars_html:300|safe }}
                 </div>
@@ -178,7 +178,7 @@
                 </div>
               {% endif %}
 
-              {% if post.rendered_content %}
+              {% if post.rendered_content and not "base64" in post.contentType|default:"" %}
                 <div class="post-content">
                   {{ post.rendered_content|truncatechars_html:300|safe }}
                 </div>
@@ -240,7 +240,7 @@
                 </div>
               {% endif %}
 
-              {% if post.rendered_content %}
+              {% if post.rendered_content and not "base64" in post.contentType|default:"" %}
                 <div class="post-content">
                   {{ post.rendered_content|truncatechars_html:300|safe }}
                 </div>
@@ -302,7 +302,7 @@
                 </div>
               {% endif %}
 
-              {% if post.rendered_content %}
+              {% if post.rendered_content and not "base64" in post.contentType|default:"" %}
                 <div class="post-content">
                   {{ post.rendered_content|truncatechars_html:300|safe }}
                 </div>

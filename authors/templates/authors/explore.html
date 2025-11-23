@@ -87,7 +87,9 @@
             {% endif %}
 
             <div class="post-content">
-              {{ post.rendered_content|truncatechars_html:300|safe }}
+              {% if not "base64" in post.contentType|default:"" %}
+                {{ post.rendered_content|truncatechars_html:300|safe }}
+              {% endif %}
             </div>
 
             <div class="post-actions">
