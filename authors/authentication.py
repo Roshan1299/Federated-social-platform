@@ -270,6 +270,7 @@ class BasicAuthMiddleware:
         response = self.get_response(request)
         return response
 
+# Helper function to check JSON payloads. 
 def _is_request_from_valid_node(request):
     """
     Return True if the request should be allowed as coming from a valid node.
