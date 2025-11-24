@@ -90,7 +90,6 @@ def http_basic_auth_required(view_func):
                         remote_user_node = node
                         break
 
-                
                 if remote_user_node is None:
                     return HttpResponse(
                         'Remote node is not configured',
@@ -105,9 +104,9 @@ def http_basic_auth_required(view_func):
                         headers={'WWW-Authenticate': 'Basic realm="API"'}
                     )
                 
-            if _is_request_from_disabled_node(request): # Checks the body author field
+            if not _is_request_from_valid_node(request):
                 return HttpResponse(
-                    'Requests from disabled remote nodes are not allowed',
+                    'Request is from an invalid or unrecognized remote node',
                     status=403,
                     headers={'WWW-Authenticate': 'Basic realm="API"'}
                 )
@@ -185,6 +184,13 @@ def http_basic_auth_or_session(view_func):
                 )
             if not isinstance(user, Author):
                 user = Author.objects.get(id=user.pk)
+        
+            if not _is_request_from_valid_node(request):
+                return HttpResponse(
+                    'Request is from an invalid or unrecognized remote node',
+                    status=403,
+                    headers={'WWW-Authenticate': 'Basic realm="API"'}
+                )
 
             if user.is_remote():
                 incoming_host = normalize_host(user.host)
@@ -264,29 +270,44 @@ class BasicAuthMiddleware:
         response = self.get_response(request)
         return response
 
-def _is_request_from_disabled_node(request):
+def _is_request_from_valid_node(request):
     """
-    Check if the request is from a disabled remote node by checking the author in its body
-    Returns: True, if the request is a json request with an author from a remote node that is disabled.
-             False, otherwise.
+    Return True if the request should be allowed as coming from a valid node.
+    - Non-JSON or requests without an author/actor are treated as valid (not a remote node payload).
+    - Local node (BASE_URL) is valid.
+    - Remote nodes are valid only if they exist in RemoteNode and are enabled.
+    - Unknown remote hosts are treated as invalid.
     """
     content_type = request.META.get("CONTENT_TYPE", "")
     if not content_type.startswith("application/json"):
-        return False
+        return True  # not a remote payload; allow
+
     body = request.body.decode("utf-8") if request.body else ""
     if not body:
-        return False
-    data = json.loads(body)
-    author = data.get("author")
+        return True  # no body to inspect; allow
+
+    try:
+        data = json.loads(body)
+    except Exception:
+        return True  # malformed JSON -> don't block here
+
+    author = data.get("author") or data.get("actor")
     if not author:
-        return False
+        return False  # no author/actor -> Invalid
+
     author_host = author.get("host")
     if not author_host:
-        return False
+        return False  # no host -> Invalid
 
     local_node = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
-    if (author != "" and author_host != local_node):
-        for node in RemoteNode.objects.all():
-            if normalize_host(node.base_url) == normalize_host(author_host):
-                return not node.enabled 
-    return (author_host != "" and author_host != local_node)
+    # If the author is from our local node, it's valid
+    if author == "" or author_host == local_node:
+        return True
+
+    # Otherwise, match against configured RemoteNode entries
+    for node in RemoteNode.objects.all():
+        if normalize_host(node.base_url) == normalize_host(author_host):
+            return node.enabled  # valid if enabled, invalid if disabled
+
+    # Unknown remote host -> treat as invalid
+    return False
