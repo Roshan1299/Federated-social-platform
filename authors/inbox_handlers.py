@@ -48,87 +48,95 @@ def normalize_remote_author_id(raw_id: str) -> str:
 
 
 def get_or_create_author(author_data):
-    """Normalize incoming author payload and return an Author instance."""
+    """Create or update a remote author safely without overwriting real names."""
 
     author_data = author_data or {}
     raw_id = author_data.get("id") or author_data.get("url")
     if not raw_id:
         return None
 
-    print("👤 get_or_create_author raw_id:", raw_id)
-    print("   incoming profileImage:", author_data.get("profileImage"))
-
-    # 🔧 NEW: normalize the ID so authors aren't duplicated
     canonical_id = normalize_remote_author_id(raw_id)
 
-    # Extract username part safely (from canonical URL)
-    try:
-        username_part = canonical_id.rstrip("/").split("/")[-1]
-    except Exception:
-        username_part = "remote"
+    # Extract username part from canonical URL
+    username_part = canonical_id.rstrip("/").split("/")[-1]
 
-    display_name = (
+    incoming_display = (
         author_data.get("displayName")
         or author_data.get("username")
         or username_part
     )
 
-    # Build host from payload if present, otherwise from canonical URL
-    # e.g. "https://peachpuff-prod-...herokuapp.com"
+    # Extract host
     host = author_data.get("host")
     if not host:
-        # split off "/api/authors/..." safely
         host = canonical_id.split("/api/authors/")[0]
+    host = host.rstrip("/")
 
-    # Ensure no trailing slash chaos
-    if host:
-        host = host.rstrip("/")
-
+    # Create or fetch remote author
     author, created = Author.objects.get_or_create(
-        url=canonical_id,   # 👈 use canonical URL as the unique key
+        url=canonical_id,
         defaults={
             "username": f"remote_{username_part}_{uuid.uuid4().hex[:6]}",
-            "displayName": display_name,
+            "displayName": incoming_display,
             "host": host,
-            "github": author_data.get("github", ""),
-            "description": author_data.get("description", "") or "",
-        },
+            "github": author_data.get("github") or "",
+            "description": author_data.get("description") or "",
+        }
     )
 
-    changed_fields = []
+    changed = []
 
-    # --- keep displayName fresh ---
-    if display_name and author.displayName != display_name:
-        author.displayName = display_name
-        changed_fields.append("displayName")
+    # --------------------------------------------------
+    # FIX: Only update displayName if the incoming one is real
+    # --------------------------------------------------
+    def is_dummy(name):
+        return (
+            name.startswith("remote_")
+            or name.startswith("author")
+            or name.startswith("remote-author")
+            or name.strip() == ""
+            or name == username_part
+        )
 
-    # --- sync github ---
-    incoming_github = author_data.get("github")
-    if incoming_github is not None and incoming_github != author.github:
-        author.github = incoming_github
-        changed_fields.append("github")
+    # Only update if:
+    # 1. Incoming display name is NOT dummy
+    # 2. And different from stored name
+    if incoming_display and not is_dummy(incoming_display):
+        if author.displayName != incoming_display:
+            author.displayName = incoming_display
+            changed.append("displayName")
 
-    # --- sync description ---
-    incoming_desc = author_data.get("description", "")
-    if incoming_desc is not None and incoming_desc != author.description:
-        author.description = incoming_desc
-        changed_fields.append("description")
+    # --------------------------------------------------
+    # Update GitHub
+    # --------------------------------------------------
+    if "github" in author_data:
+        if author.github != author_data["github"]:
+            author.github = author_data["github"]
+            changed.append("github")
 
-    # --- sync profileImage from remote, if provided ---
-    profile_image_url = author_data.get("profileImage")
-    if profile_image_url and isinstance(profile_image_url, str):
+    # --------------------------------------------------
+    # Update description
+    # --------------------------------------------------
+    if "description" in author_data:
+        if author.description != author_data["description"]:
+            author.description = author_data["description"]
+            changed.append("description")
+
+    # --------------------------------------------------
+    # Sync profile image
+    # --------------------------------------------------
+    profile_img = author_data.get("profileImage")
+    if profile_img:
         try:
-            img = fetch_and_store_remote_image(profile_image_url)
-        except Exception as e:
-            img = None
-            print("Failed to sync remote profile image:", e)
+            img = fetch_and_store_remote_image(profile_img)
+            if img and author.profileImage_id != img.id:
+                author.profileImage = img
+                changed.append("profileImage")
+        except Exception:
+            pass
 
-        if img and (not author.profileImage_id or author.profileImage_id != img.id):
-            author.profileImage = img
-            changed_fields.append("profileImage")
-
-    if changed_fields:
-        author.save(update_fields=changed_fields)
+    if changed:
+        author.save(update_fields=changed)
 
     return author
 
