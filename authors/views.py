@@ -685,9 +685,6 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
         user = self.request.user
         local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
 
-        # Get the visibility filter from the request
-        visibility_filter = self.request.GET.get('filter', '').lower()
-
         # Get all mutual friends (both follow each other)
         followed_by_user = Follow.objects.filter(follower=user).values_list('following', flat=True)
         follows_user = Follow.objects.filter(following=user).values_list('follower', flat=True)
@@ -770,18 +767,6 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
             my_posts
         ).distinct().order_by('-updated')
 
-        # Apply visibility filter if specified
-        if visibility_filter == 'public':
-            queryset = queryset.filter(visibility='PUBLIC')
-        elif visibility_filter == 'friends':
-            queryset = queryset.filter(visibility='FRIENDS')
-        elif visibility_filter == 'unlisted':
-            queryset = queryset.filter(visibility='PUBLIC_UNLISTED')
-        elif visibility_filter == 'remote':
-            # Filter for posts from remote authors
-            local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
-            queryset = queryset.exclude(author__host=local_host)
-
         return queryset
 
     def get_context_data(self, **kwargs):
@@ -789,11 +774,63 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         user = self.request.user
 
-        # Get the visibility filter from the request
-        visibility_filter = self.request.GET.get('filter', '').lower()
-        context["current_filter"] = visibility_filter
+        # Organize posts into different sections for the template
+        posts = context["posts"]
+        local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
 
-        # No longer organizing into separate sections - all posts in main stream
+        # Separate posts by category for sectioned display
+        friends_posts = []
+        unlisted_posts = []
+        remote_posts = []
+        public_posts = []
+        my_posts = []
+
+        for post in posts:
+            if post.author == user:
+                my_posts.append(post)
+            elif post.visibility == 'FRIENDS':
+                friends_posts.append(post)
+            elif post.visibility == 'PUBLIC_UNLISTED':
+                unlisted_posts.append(post)
+            elif post.visibility == 'PUBLIC' and post.author.host != local_host:
+                remote_posts.append(post)
+            elif post.visibility == 'PUBLIC':
+                public_posts.append(post)
+
+        # Add organized posts to context
+        context["friends_posts"] = friends_posts
+        context["unlisted_posts"] = unlisted_posts
+        context["remote_posts"] = remote_posts
+        context["public_posts"] = public_posts
+        context["my_posts"] = my_posts
+
+        # Fetch followed authors and their recent posts
+        followed_authors = Follow.objects.filter(follower=user).select_related("following")
+        followed_data = []
+        for follow in followed_authors:
+            author = follow.following
+            is_friend = (
+                Follow.objects.filter(follower=user, following=author).exists() and Follow.objects.filter(follower=author, following=user).exists()
+            )
+            visible_visibilities = ['PUBLIC']
+            if is_friend:
+                visible_visibilities.append('FRIENDS')
+
+            posts = Post.objects.filter(
+                author=author,
+                visibility__in=visible_visibilities,
+                deleted=False
+            ).order_by('-updated')[:5]  # Get recent 5 posts
+
+            for p in posts:
+                p.rendered_content = render_post_content(p)
+            if posts.exists():
+                followed_data.append({
+                    "author": author,
+                    "posts": posts
+                })
+        context["followed_data"] = followed_data
+
         for p in context["posts"]:
             p.rendered_content = render_post_content(p)
 
