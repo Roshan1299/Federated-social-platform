@@ -1,16 +1,154 @@
 {% extends 'base.html' %}
 
-{% block title %}
-  Delete Post
-{% endblock %}
+{% block title %}Delete Post{% endblock %}
 
 {% block content %}
+<div class="delete-confirm">
   <h2>Delete Post</h2>
-  <p>Are you sure you want to delete the post "<strong>{{ post.title }}</strong>"?</p>
+  <h3>{{ post.title }}</h3>
+  <p>Are you sure you want to delete this post?</p>
 
-  <form method="post">
+  <!-- Display post preview if available -->
+  {% if post.description or post.content or post.image_id %}
+  <div class="card delete-post-preview">
+    <h4>Post Preview:</h4>
+    {% if post.image_id %}
+      <div class="post-preview-image-container">
+        <img
+          src="{% url 'authors:serve_image' post.image_id %}"
+          alt="{{ post.title }}"
+          class="post-preview-image"
+          loading="lazy">
+      </div>
+    {% endif %}
+    {% if post.description %}
+      <p><strong>Description:</strong> {{ post.description|truncatechars:100 }}</p>
+    {% endif %}
+    {% if post.content %}
+      <div class="post-content">{{ post.rendered_content|truncatewords:30|safe }}</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <form method="post" class="form-actions">
     {% csrf_token %}
-    <button type="submit">Yes, Delete</button>
-    <a href="{% url 'authors:post_detail' post.id %}">Cancel</a>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-danger">Yes, Delete</button>
+      <a href="{% url 'authors:post_detail' post.id %}" class="btn btn-secondary">Cancel</a>
+    </div>
   </form>
+</div>
+
+<style>
+  .delete-confirm {
+    max-width: 600px;
+    margin: 40px auto;
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    box-shadow: var(--card-shadow);
+    padding: 40px;
+    text-align: center;
+    border: 1px solid var(--border-color);
+  }
+
+  .delete-confirm h2 {
+    color: #e74c3c;
+    font-size: 28px;
+    margin-top: 0;
+    margin-bottom: 10px;
+  }
+
+  .delete-confirm h3 {
+    color: var(--text-primary);
+    margin-bottom: 20px;
+    font-size: 22px;
+  }
+
+  .delete-confirm p {
+    color: var(--text-secondary);
+    margin-bottom: 25px;
+    font-size: 16px;
+  }
+
+  .delete-post-preview {
+    margin: 20px auto;
+    max-width: 500px;
+    padding: 15px;
+    background: var(--bg-primary);
+  }
+
+  .delete-post-preview h4 {
+    margin-top: 0;
+    color: var(--text-primary);
+  }
+
+  .delete-post-preview p {
+    color: var(--text-secondary);
+    margin: 10px 0;
+  }
+
+  .post-preview-image-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 15px auto;
+    width: 100%;
+    max-width: 400px;
+    overflow: hidden;
+    border-radius: 8px;
+    background-color: var(--bg-primary);
+    box-shadow: var(--card-shadow);
+    border: 1px solid var(--border-color);
+  }
+
+  .post-preview-image {
+    width: 100%;
+    height: auto;
+    max-height: 250px;
+    object-fit: contain;
+    border-radius: 8px;
+  }
+
+  .form-actions {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 25px;
+  }
+
+  .btn {
+    padding: 12px 24px;
+    border-radius: 10px;
+    border: none;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .btn-danger {
+    background: linear-gradient(135deg, #dc3545 0%, #e74c3c 100%);
+    color: white;
+  }
+
+  .btn-danger:hover {
+    background: linear-gradient(135deg, #c82333 0%, #d62c1a 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 7px 14px rgba(220, 53, 69, 0.4);
+  }
+
+  .btn-secondary {
+    background: linear-gradient(135deg, #6c757d 0%, #868e96 100%);
+    color: white;
+  }
+
+  .btn-secondary:hover {
+    background: linear-gradient(135deg, #5a6268 0%, #727b84 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 7px 14px rgba(108, 117, 125, 0.4);
+  }
+</style>
 {% endblock %}

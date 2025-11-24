@@ -1,10 +1,51 @@
 import uuid
 from django.http import JsonResponse
+from urllib.parse import urlparse
 from django.utils import timezone
 from .models import Author, Post, Comment, Like, CommentLike, FollowRequest, Follow
 from authors.utils.image_sync import fetch_and_store_remote_image
 import typing
 import base64
+
+def normalize_remote_author_id(raw_id: str) -> str:
+    """
+    Normalize remote author IDs so that URLs like:
+
+      - https://node.com/authors/123/
+      - https://node.com/api/authors/123
+      - https://node.com/api/authors/123/
+
+    all become:
+
+      https://node.com/api/authors/123/
+    """
+    if not raw_id:
+        return raw_id
+
+    raw_id = raw_id.strip()
+    parsed = urlparse(raw_id)
+
+    # if smth is weird just force a trailing slash
+    if not parsed.scheme or not parsed.netloc:
+        return raw_id.rstrip("/") + "/"
+
+    path = parsed.path.rstrip("/")
+    segments = path.split("/")
+
+    if "authors" not in segments:
+        # Not an author path – just normalize trailing slash
+        return f"{parsed.scheme}://{parsed.netloc}{path}/"
+
+    idx = segments.index("authors")
+    if idx + 1 >= len(segments):
+        # '/authors/' with no id – normalize anyway
+        return f"{parsed.scheme}://{parsed.netloc}/api/authors/"
+
+    author_id = segments[idx + 1]
+
+    canonical_path = f"/api/authors/{author_id}/"
+    return f"{parsed.scheme}://{parsed.netloc}{canonical_path}"
+
 
 def get_or_create_author(author_data):
     """Normalize incoming author payload and return an Author instance."""
@@ -17,9 +58,12 @@ def get_or_create_author(author_data):
     print("👤 get_or_create_author raw_id:", raw_id)
     print("   incoming profileImage:", author_data.get("profileImage"))
 
-    # Extract username part safely
+    # 🔧 NEW: normalize the ID so authors aren't duplicated
+    canonical_id = normalize_remote_author_id(raw_id)
+
+    # Extract username part safely (from canonical URL)
     try:
-        username_part = raw_id.rstrip("/").split("/")[-1]
+        username_part = canonical_id.rstrip("/").split("/")[-1]
     except Exception:
         username_part = "remote"
 
@@ -29,10 +73,19 @@ def get_or_create_author(author_data):
         or username_part
     )
 
-    host = author_data.get("host") or raw_id.split("/api/authors/")[0]
+    # Build host from payload if present, otherwise from canonical URL
+    # e.g. "https://peachpuff-prod-...herokuapp.com"
+    host = author_data.get("host")
+    if not host:
+        # split off "/api/authors/..." safely
+        host = canonical_id.split("/api/authors/")[0]
+
+    # Ensure no trailing slash chaos
+    if host:
+        host = host.rstrip("/")
 
     author, created = Author.objects.get_or_create(
-        url=raw_id,
+        url=canonical_id,   # 👈 use canonical URL as the unique key
         defaults={
             "username": f"remote_{username_part}_{uuid.uuid4().hex[:6]}",
             "displayName": display_name,
@@ -106,11 +159,15 @@ def handle_follow_request(self, recipient, data, request):
         if not url:
             return JsonResponse({'error': 'Follow request must include actor with id/url'}, status=400)
 
-        # Ensure we have a trailiing slash on the URL
+        # Ensure we have a trailing slash on the URL
         if not url.endswith('/'):
             url += '/'
         actor_data['id'] = url        
-
+        # Prevent authors from following themselves
+        
+        if recipient.id == actor_data.get('id'):
+            return JsonResponse({'error': 'Author cannot follow themselves'}, status=400)
+        
         actor = get_or_create_author(actor_data)
 
         follow_request, created = FollowRequest.objects.get_or_create(

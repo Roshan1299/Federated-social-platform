@@ -616,11 +616,12 @@ class SingleFollowingAPIView(View):
         if not request.user.is_authenticated or str(request.user.id) != str(author_id):
             return HttpResponse('Forbidden: only the author may create follow requests', status=403)
 
-        # Resolve the target author strictly by FQID; if not found, return 404
-        try:
-            target = _get_author_by_id_or_fqid(author_fqid=following_fqid)
-        except Http404:
-            return HttpResponse('Not Found', status=404)
+        # Resolve or create the target author using shared normalizer
+        # This prevents duplicates by canonicalizing the FQID (e.g. /authors/ -> /api/authors/)
+        target = get_or_create_author({"id": following_fqid})
+        if target is None:
+            return HttpResponse("Bad Request: invalid following_fqid", status=400)
+
 
         # If the target's host differs from our host, send follow request to the remote inbox
         local_base = f"{request.scheme}://{request.get_host()}".rstrip('/')

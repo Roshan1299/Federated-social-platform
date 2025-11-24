@@ -25,7 +25,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate
 from .forms import ImageUploadForm
 from .models import Image
-from .inbox_handlers import reopen_follow_request
+from .inbox_handlers import reopen_follow_request, get_or_create_author
 from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post, send_unfollow_to_remote_author, notify_remote_comment, notify_remote_author_update
 import uuid
 import urllib.parse
@@ -1128,6 +1128,7 @@ class FollowRemoteAuthorView(LoginRequiredMixin, View):
             messages.error(request, "That doesn't look like a valid URL.")
             return redirect("authors:follow_remote_author", author_id=author_id)
 
+        '''
         # If this URL already matches a local Author, just reuse it,
         # otherwise create a stub remote Author.
         author_defaults = {
@@ -1135,10 +1136,15 @@ class FollowRemoteAuthorView(LoginRequiredMixin, View):
             "displayName": remote_author_url,  # you can customize later
             "host": f"{parsed.scheme}://{parsed.netloc}",
         }
-        remote_author, created = Author.objects.get_or_create(
-            url=remote_author_url,
-            defaults=author_defaults,
-        )
+
+        # Use shared normalization + deduping logic
+        author_data = {"id": remote_author_url}
+        remote_author = get_or_create_author(author_data)
+
+        if remote_author.id == request.user.id:
+            messages.error(request, "You cannot follow yourself.")
+            return redirect("authors:follow_remote_author", author_id=author_id)
+        '''
 
         # Reuse the existing API logic to send the Follow request to the remote inbox.
         # This runs SingleFollowingAPIView.put with the current request object.
