@@ -245,6 +245,8 @@ def handle_post(self, recipient, data, request):
         visibility = (data.get("visibility") or "PUBLIC").upper()
         if "UNLISTED" in visibility or data.get("unlisted", False):
             visibility = "PUBLIC_UNLISTED"
+        elif "FRIENDS" in visibility:
+            visibility = "FRIENDS"
 
         # ---------------------------------------------------------
         # IMAGE HANDLING
