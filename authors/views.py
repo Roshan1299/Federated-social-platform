@@ -1140,6 +1140,10 @@ class FollowRemoteAuthorView(LoginRequiredMixin, View):
             defaults=author_defaults,
         )
 
+        if remote_author.id == request.user.id:
+            messages.error(request, "You cannot follow yourself.")
+            return redirect("authors:follow_remote_author", author_id=author_id)
+
         # Reuse the existing API logic to send the Follow request to the remote inbox.
         # This runs SingleFollowingAPIView.put with the current request object.
         api_view = SingleFollowingAPIView()
