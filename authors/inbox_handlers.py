@@ -140,7 +140,6 @@ def get_or_create_author(author_data):
 
     return author
 
-
 def reopen_follow_request(follow_request):
     """Ensure a FollowRequest is in 'PENDING' state.
 
