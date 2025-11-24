@@ -60,10 +60,10 @@
   <!-- ✏️ Edit/Delete Buttons -->
   <div class="post-footer-actions">
     {% if user.is_authenticated and user.id == post.author.id %}
-      <a href="{% url 'authors:edit_post' post.id %}" class="btn-secondary">✏️ Edit</a>
-      <a href="{% url 'authors:delete_post' post.id %}" class="btn-danger">🗑️ Delete</a>
+      <a href="{% url 'authors:edit_post' post.id %}" class="btn btn-secondary">✏️ Edit</a>
+      <a href="{% url 'authors:delete_post' post.id %}" class="btn btn-danger">🗑️ Delete</a>
     {% endif %}
-    <a href="{% url 'authors:author_profile' post.author.id %}" class="btn-primary">⬅️ Back to Profile</a>
+    <a href="{% url 'authors:author_profile' post.author.id %}" class="btn btn-primary">⬅️ Back to Profile</a>
   </div>
 
   <hr class="divider">
