@@ -156,26 +156,35 @@ def reopen_follow_request(follow_request):
 
 
 def handle_follow_request(self, recipient, data, request):
-    """Handle incoming follow request (incoming ActivityPub-like Follow).
+    """
+    Handle incoming follow request (incoming ActivityPub-like Follow).
 
     Creates a stub Author for the actor if necessary and creates a
     FollowRequest record (or returns existing one).
     """
     try:
         actor_data = data.get('actor', {})
-        url = actor_data.get('id')
+        url = actor_data.get('id') or actor_data.get('url')
+
         if not url:
             return JsonResponse({'error': 'Follow request must include actor with id/url'}, status=400)
 
-        # Ensure we have a trailing slash on the URL
+        # Ensure trailing slash for safety
         if not url.endswith('/'):
             url += '/'
-        actor_data['id'] = url        
-        # Prevent authors from following themselves
-        
-        if recipient.id == actor_data.get('id'):
+        actor_data['id'] = url
+
+        from .utils import normalize_remote_author_id
+
+        actor_canonical = normalize_remote_author_id(actor_data['id'])
+        recipient_canonical = normalize_remote_author_id(recipient.url)
+
+        # If user pastes their own API URL → block it
+        if actor_canonical.rstrip('/') == recipient_canonical.rstrip('/'):
             return JsonResponse({'error': 'Author cannot follow themselves'}, status=400)
-        
+
+        # ---------------------------------------------------------
+
         actor = get_or_create_author(actor_data)
 
         follow_request, created = FollowRequest.objects.get_or_create(
@@ -186,11 +195,12 @@ def handle_follow_request(self, recipient, data, request):
 
         if created:
             return JsonResponse({'message': 'Follow request created'}, status=201)
-        else:
-            # If an existing request is present but not pending, reset it to PENDING
-            if reopen_follow_request(follow_request):
-                return JsonResponse({'message': 'Follow request re-opened'}, status=200)
-            return JsonResponse({'message': 'Follow request already exists'}, status=200)
+
+        # If an existing request is present but not pending, reset it to PENDING
+        if reopen_follow_request(follow_request):
+            return JsonResponse({'message': 'Follow request re-opened'}, status=200)
+
+        return JsonResponse({'message': 'Follow request already exists'}, status=200)
 
     except Exception as e:
         return JsonResponse({'error': f'Failed to process follow request: {str(e)}'}, status=400)
