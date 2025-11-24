@@ -158,14 +158,16 @@ def handle_follow_request(self, recipient, data, request):
         url = actor_data.get('id')
         if not url:
             return JsonResponse({'error': 'Follow request must include actor with id/url'}, status=400)
-        if recipient.id == actor_data.get('id'):
-            return JsonResponse({'error': 'Author cannot follow themselves'}, status=400)
 
         # Ensure we have a trailing slash on the URL
         if not url.endswith('/'):
             url += '/'
         actor_data['id'] = url        
-
+        # Prevent authors from following themselves
+        
+        if recipient.id == actor_data.get('id'):
+            return JsonResponse({'error': 'Author cannot follow themselves'}, status=400)
+        
         actor = get_or_create_author(actor_data)
 
         follow_request, created = FollowRequest.objects.get_or_create(
