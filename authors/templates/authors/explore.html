@@ -23,47 +23,22 @@
             <code>https://other-node.herokuapp.com/api/authors/&lt;uuid&gt;/</code>
           </p>
 
-          <div class="mb-3">
-            <label for="remote_author_url" class="form-label">Remote author URL</label>
-            <input type="url"
-                   class="form-control"
-                   id="remote_author_url"
-                   placeholder="https://other-node.herokuapp.com/api/authors/123e4567/"
-                   required>
-          </div>
-          
-          <button type="button" class="btn btn-primary" id="send-follow-btn">
-            Send Follow Request
-          </button>
-          
-          <script>
-          document.getElementById("send-follow-btn").addEventListener("click", async () => {
-              const url = document.getElementById("remote_author_url").value.trim();
-              if (!url) return alert("Please enter a URL.");
-          
-              const endpoint = "{% url 'authors:follow_remote_author' author_id=current_author_id %}";
-              const csrfToken = "{{ csrf_token }}";
-          
-              const res = await fetch(endpoint, {
-                  method: "POST",
-                  headers: {
-                      "Content-Type": "application/json",
-                      "X-CSRFToken": csrfToken
-                  },
-                  body: JSON.stringify({ remote_author_url: url })
-              });
-          
-              const data = await res.json();
-          
-              if (!res.ok) {
-                  alert("Error: " + (data.error || "Unknown error"));
-                  return;
-              }
-          
-              alert("Follow request sent.");
-          });
-          </script>
-          
+          <form method="post"
+                action="{% url 'authors:follow_remote_author' author_id=current_author_id %}">
+            {% csrf_token %}
+            <div class="mb-3">
+              <label for="remote_author_url" class="form-label">Remote author URL</label>
+              <input type="url"
+                     class="form-control"
+                     id="remote_author_url"
+                     name="remote_author_url"
+                     placeholder="https://other-node.herokuapp.com/api/authors/123e4567-e89b-12d3-a456-426614174000/"
+                     required>
+            </div>
+            <button type="submit" class="btn btn-primary">
+              Send Follow Request
+            </button>
+          </form>
         </div>
       </div>
     </section>
