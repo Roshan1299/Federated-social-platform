@@ -29,28 +29,50 @@ def get_auth_for_base(base_url: str):
 
 
 def remote_post(url, payload, base_url):
-    # Get username and password for this remote node
+    """
+    POST a JSON payload to a remote node's inbox using Basic Auth.
+    Accepts any 2xx response as success.
+    Logs FULL diagnostics for debugging cross-node federation.
+    """
     auth = get_auth_for_base(base_url)
 
-    # If we do not have a RemoteNode saved for this BASE URL
-    # then we cannot connect to that remote node
     if auth is None:
+        print(f"❌ No RemoteNode credentials found for base_url={base_url}")
         return False
 
-    # Try connecting to remote node using url, username, and password
-    # url = the inbox URL
-    # auth = username and password
+    print(f"\n🌐 Sending federation request → {url}")
+    print(f"   Base URL: {base_url}")
+    print(f"   Payload type: {payload.get('type')}")
+    print(f"   Auth user: {auth[0]}")
 
     try:
-        response = requests.post(
+        resp = requests.post(
             url,
             json=payload,
             auth=auth,
             timeout=10
         )
-        # Connection was successful if we got a 300 > status code
-        return response.status_code < 300
-
-    except Exception:
-        # Any network or server error means we could not connect
+    except Exception as e:
+        print(f"❌ Network error when sending to {url}: {e}")
         return False
+
+    print(f"   ↳ Response status: {resp.status_code}")
+
+    # Log errors with body preview
+    if not (200 <= resp.status_code < 300):
+        print("   ❌ Non-2xx response from remote node:")
+        try:
+            print("   ↳ Body preview:", resp.text[:400])
+        except Exception:
+            print("   ↳ Could not decode body")
+        return False
+
+    # Try JSON, but don't require it
+    try:
+        _ = resp.json()
+        print("   ↳ Remote responded with JSON.")
+    except ValueError:
+        print("   ↳ Remote did NOT return JSON (this is fine).")
+
+    print("   ✅ Federation POST succeeded.\n")
+    return True
