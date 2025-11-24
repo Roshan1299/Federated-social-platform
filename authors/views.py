@@ -1140,11 +1140,11 @@ class FollowRemoteAuthorView(LoginRequiredMixin, View):
         # Use shared normalization + deduping logic
         author_data = {"id": remote_author_url}
         remote_author = get_or_create_author(author_data)
-        '''
 
         if remote_author.id == request.user.id:
             messages.error(request, "You cannot follow yourself.")
             return redirect("authors:follow_remote_author", author_id=author_id)
+        '''
 
         # Reuse the existing API logic to send the Follow request to the remote inbox.
         # This runs SingleFollowingAPIView.put with the current request object.
