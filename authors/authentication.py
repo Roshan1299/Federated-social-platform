@@ -296,18 +296,39 @@ def _is_request_from_valid_node(request):
     if not author:
         return False  # no author/actor -> Invalid
 
-    author_host = author.get("host")
-    if not author_host:
-        return False  # no host -> Invalid
+    # Author may be provided as a dict or as a string URL. Try to extract
+    # a host (scheme://netloc) from any
+    author_host_raw = None
+    try:
+        if isinstance(author, str):
+            parsed = urlparse(author)
+            if parsed.scheme and parsed.netloc:
+                author_host_raw = f"{parsed.scheme}://{parsed.netloc}"
+        elif isinstance(author, dict):
+            # Prefer explicit host, then url/id fields
+            author_host_raw = author.get("host") or author.get("url") or author.get("id")
+            if isinstance(author_host_raw, str):
+                parsed = urlparse(author_host_raw)
+                if parsed.scheme and parsed.netloc:
+                    author_host_raw = f"{parsed.scheme}://{parsed.netloc}"
+    except Exception:
+        # If parsing fails, treat as invalid
+        author_host_raw = None
 
-    local_node = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+    if not author_host_raw:
+        return False  # no usable host -> Invalid
+
+    # Normalize both the author host and our BASE_URL before comparing
+    author_host_norm = normalize_host(author_host_raw)
+    local_node = normalize_host(getattr(settings, "BASE_URL", "") or "")
+
     # If the author is from our local node, it's valid
-    if author == "" or author_host == local_node:
+    if author_host_norm and local_node and author_host_norm == local_node:
         return True
 
     # Otherwise, match against configured RemoteNode entries
     for node in RemoteNode.objects.all():
-        if normalize_host(node.base_url) == normalize_host(author_host):
+        if normalize_host(node.base_url) == author_host_norm:
             return node.enabled  # valid if enabled, invalid if disabled
 
     # Unknown remote host -> treat as invalid
