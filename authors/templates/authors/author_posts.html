@@ -32,9 +32,6 @@
             </div>
             <div class="post-meta">
               <span class="publish-date">Published {{ post.published|naturaltime }}</span>
-              {% if post.updated and post.updated != post.published %}
-                • <span class="update-date">Updated {{ post.updated|naturaltime }}</span>
-              {% endif %}
               <br>
               <span class="visibility">Visibility: {{ post.get_visibility_display }}</span>
             </div>
@@ -53,7 +50,9 @@
           {% endif %}
 
           <div class="post-content">
-            {{ post.rendered_content|truncatechars_html:300|safe }}
+            {% if not "base64" in post.contentType|default:"" %}
+              {{ post.rendered_content|truncatechars_html:300|safe }}
+            {% endif %}
           </div>
 
           <div class="post-actions">

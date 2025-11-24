@@ -48,3 +48,6 @@ Commit your changes with a descriptive message.
 
 ```git push heroku dev:main```
 Push your code to the Heroku remote repository from your local dev branch to the main branch on Heroku.
+
+```heroku config:set BASE_URL=<your_heroku_app_url> --app dark-blue```
+Set the BASE_URL environment variable for your Heroku app to your app's URL. Need this for node interactions. 

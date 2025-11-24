@@ -1,29 +1,142 @@
 import uuid
 from django.http import JsonResponse
+from urllib.parse import urlparse
 from django.utils import timezone
 from .models import Author, Post, Comment, Like, CommentLike, FollowRequest, Follow
-
+from authors.utils.image_sync import fetch_and_store_remote_image
 import typing
+import base64
+
+def normalize_remote_author_id(raw_id: str) -> str:
+    """
+    Normalize remote author IDs so that URLs like:
+
+      - https://node.com/authors/123/
+      - https://node.com/api/authors/123
+      - https://node.com/api/authors/123/
+
+    all become:
+
+      https://node.com/api/authors/123/
+    """
+    if not raw_id:
+        return raw_id
+
+    raw_id = raw_id.strip()
+    parsed = urlparse(raw_id)
+
+    # if smth is weird just force a trailing slash
+    if not parsed.scheme or not parsed.netloc:
+        return raw_id.rstrip("/") + "/"
+
+    path = parsed.path.rstrip("/")
+    segments = path.split("/")
+
+    if "authors" not in segments:
+        # Not an author path – just normalize trailing slash
+        return f"{parsed.scheme}://{parsed.netloc}{path}/"
+
+    idx = segments.index("authors")
+    if idx + 1 >= len(segments):
+        # '/authors/' with no id – normalize anyway
+        return f"{parsed.scheme}://{parsed.netloc}/api/authors/"
+
+    author_id = segments[idx + 1]
+
+    canonical_path = f"/api/authors/{author_id}/"
+    return f"{parsed.scheme}://{parsed.netloc}{canonical_path}"
+
 
 def get_or_create_author(author_data):
-    """Normalize incoming author payload and return an Author instance.
+    """Create or update a remote author safely without overwriting real names."""
 
-    This centralizes stub-author creation for remote authors. Prefers
-    the 'id' or 'url' field from the incoming author object and sets
-    reasonable defaults for username/displayName/host/github.
-    """
-    author_id = (author_data or {}).get('id') or (author_data or {}).get('url')
-    author_username = author_id.split('/')[-2] if author_id and '/' in author_id else 'remote_author'
+    author_data = author_data or {}
+    raw_id = author_data.get("id") or author_data.get("url")
+    if not raw_id:
+        return None
 
+    canonical_id = normalize_remote_author_id(raw_id)
+
+    # Extract username part from canonical URL
+    username_part = canonical_id.rstrip("/").split("/")[-1]
+
+    incoming_display = (
+        author_data.get("displayName")
+        or author_data.get("username")
+        or username_part
+    )
+
+    # Extract host
+    host = author_data.get("host")
+    if not host:
+        host = canonical_id.split("/api/authors/")[0]
+    host = host.rstrip("/")
+
+    # Create or fetch remote author
     author, created = Author.objects.get_or_create(
-        url=author_id,
+        url=canonical_id,
         defaults={
-            'username': f"remote_{author_username}_{uuid.uuid4().hex[:8]}",
-            'displayName': (author_data or {}).get('displayName', 'Unknown'),
-            'host': (author_data or {}).get('host', ''),
-            'github': (author_data or {}).get('github'),
+            "username": f"remote_{username_part}_{uuid.uuid4().hex[:6]}",
+            "displayName": incoming_display,
+            "host": host,
+            "github": author_data.get("github") or "",
+            "description": author_data.get("description") or "",
         }
     )
+
+    changed = []
+
+    # --------------------------------------------------
+    # FIX: Only update displayName if the incoming one is real
+    # --------------------------------------------------
+    def is_dummy(name):
+        return (
+            name.startswith("remote_")
+            or name.startswith("author")
+            or name.startswith("remote-author")
+            or name.strip() == ""
+            or name == username_part
+        )
+
+    # Only update if:
+    # 1. Incoming display name is NOT dummy
+    # 2. And different from stored name
+    if incoming_display and not is_dummy(incoming_display):
+        if author.displayName != incoming_display:
+            author.displayName = incoming_display
+            changed.append("displayName")
+
+    # --------------------------------------------------
+    # Update GitHub
+    # --------------------------------------------------
+    if "github" in author_data:
+        if author.github != author_data["github"]:
+            author.github = author_data["github"]
+            changed.append("github")
+
+    # --------------------------------------------------
+    # Update description
+    # --------------------------------------------------
+    if "description" in author_data:
+        if author.description != author_data["description"]:
+            author.description = author_data["description"]
+            changed.append("description")
+
+    # --------------------------------------------------
+    # Sync profile image
+    # --------------------------------------------------
+    profile_img = author_data.get("profileImage")
+    if profile_img:
+        try:
+            img = fetch_and_store_remote_image(profile_img)
+            if img and author.profileImage_id != img.id:
+                author.profileImage = img
+                changed.append("profileImage")
+        except Exception:
+            pass
+
+    if changed:
+        author.save(update_fields=changed)
 
     return author
 
@@ -43,13 +156,40 @@ def reopen_follow_request(follow_request):
 
 
 def handle_follow_request(self, recipient, data, request):
-    """Handle incoming follow request (incoming ActivityPub-like Follow).
-
-    Creates a stub Author for the actor if necessary and creates a
-    FollowRequest record (or returns existing one).
+    """
+    Handle incoming follow request (incoming ActivityPub-like Follow).
+    Prevents authors from following themselves even if the URL host changes.
     """
     try:
         actor_data = data.get('actor', {})
+        raw_url = actor_data.get('id') or actor_data.get('url')
+
+        if not raw_url:
+            return JsonResponse({'error': 'Follow request must include actor id/url'}, status=400)
+
+        # Ensure trailing slash
+        if not raw_url.endswith('/'):
+            raw_url += '/'
+        actor_data['id'] = raw_url
+
+        # ---------------------------------------------------------
+        # 🔥 REAL FIX — BLOCK SELF-FOLLOW USING UUID
+        # ---------------------------------------------------------
+        def extract_uuid(url):
+            try:
+                return url.rstrip("/").split("/")[-1]
+            except:
+                return None
+
+        actor_uuid = extract_uuid(raw_url)
+        recipient_uuid = str(recipient.id)
+
+        # UUID match → same person, block follow
+        if actor_uuid == recipient_uuid:
+            return JsonResponse({'error': 'Author cannot follow themselves'}, status=400)
+        # ---------------------------------------------------------
+
+        # Continue to process remote or local follow
         actor = get_or_create_author(actor_data)
 
         follow_request, created = FollowRequest.objects.get_or_create(
@@ -60,14 +200,18 @@ def handle_follow_request(self, recipient, data, request):
 
         if created:
             return JsonResponse({'message': 'Follow request created'}, status=201)
-        else:
-            # If an existing request is present but not pending, reset it to PENDING
-            if reopen_follow_request(follow_request):
-                return JsonResponse({'message': 'Follow request re-opened'}, status=200)
-            return JsonResponse({'message': 'Follow request already exists'}, status=200)
+
+        # Reopen if previously rejected/accepted
+        if reopen_follow_request(follow_request):
+            return JsonResponse({'message': 'Follow request re-opened'}, status=200)
+
+        return JsonResponse({'message': 'Follow request already exists'}, status=200)
 
     except Exception as e:
-        return JsonResponse({'error': f'Failed to process follow request: {str(e)}'}, status=400)
+        return JsonResponse(
+            {'error': f'Failed to process follow request: {str(e)}'},
+            status=400
+        )
 
 
 def handle_unfollow(self, recipient, data, request):
@@ -105,78 +249,155 @@ def handle_unfollow(self, recipient, data, request):
 
 def handle_post(self, recipient, data, request):
     """
-    Handle incoming post/entry from another node.
-    
-    Creates an InboxReceipt to track that this post was delivered to the recipient's inbox.
+    Handle incoming post from a remote node.
+    Includes:
+    - creating/updating post
+    - fetching & attaching remote images (URL or base64)
+    - inbox receipts
     """
     try:
-        # avoid circular dependency
-        from .models import InboxReceipt
-        
-        # Extract origin - the globally unique identifier
-        origin = data.get('origin') or data.get('id')
-        
+        from .models import InboxReceipt, Image
+
+        # ---------------------------------------------------------
+        # EXTRACT ORIGIN
+        # ---------------------------------------------------------
+        origin = data.get("origin") or data.get("id")
         if not origin:
-            return JsonResponse({'error': 'Post must have origin or id field'}, status=400)
-        
-        # STEP 1: Check if we already have this post (by origin, NOT by UUID!)
+            return JsonResponse({"error": "Post must have origin/id"}, status=400)
+
+        # ---------------------------------------------------------
+        # NORMALIZE VISIBILITY
+        # ---------------------------------------------------------
+        visibility = (data.get("visibility") or "PUBLIC").upper()
+        if data.get("unlisted", False):
+            visibility = "PUBLIC_UNLISTED"
+
+        # ---------------------------------------------------------
+        # IMAGE HANDLING
+        # ---------------------------------------------------------
+        remote_image_url = (
+            data.get("image")
+            or data.get("image_url")
+            or data.get("imageUrl")
+        )
+
+        content_type = (data.get("contentType") or "").strip()
+        content = data.get("content", "") or ""
+
+        local_image = None
+
+        # 1) If we got an explicit image URL, try to download that
+        if remote_image_url:
+            print("REMOTE IMAGE URL:", remote_image_url)
+            local_image = fetch_and_store_remote_image(remote_image_url)
+            print("LOCAL IMAGE:", local_image)
+
+                # 2) If no URL image, but content is base64, decode and store
+        if (not local_image) and ("base64" in content_type.lower()) and content:
+            try:
+                # e.g. contentType: "image/png;base64" or "image/png;base64; charset=utf-8"
+                clean_type = content_type.split(";")[0].strip()  # "image/png"
+
+                raw_data = content
+
+                # If content is a full data URL like:
+                # "data:image/png;base64,AAAA..."
+                if raw_data.startswith("data:"):
+                    try:
+                        _, raw_data = raw_data.split(",", 1)
+                    except ValueError:
+                        # if split fails, just leave raw_data as-is
+                        pass
+
+                img_bytes = base64.b64decode(raw_data)
+
+                ext = "bin"
+                if "png" in clean_type:
+                    ext = "png"
+                elif "jpeg" in clean_type or "jpg" in clean_type:
+                    ext = "jpg"
+                elif "gif" in clean_type:
+                    ext = "gif"
+
+                local_image = Image.objects.create(
+                    file_name=f"remote_post_{uuid.uuid4()}.{ext}",
+                    content_type=clean_type,
+                    data=img_bytes,
+                )
+
+                # remove base64 text from content if it was an image
+                if clean_type.startswith("image/"):
+                    content = ""  # replace with no description
+                    content_type = "text/plain"
+
+            except Exception as e:
+                print("Failed to decode inline base64 image:", e)
+
+
+        # ---------------------------------------------------------
+        # CHECK IF POST ALREADY EXISTS
+        # ---------------------------------------------------------
         existing_post = Post.objects.filter(origin=origin).first()
-        
-        # Determine visibility, mapping unlisted to PUBLIC_UNLISTED
-        visibility = data.get('visibility', 'PUBLIC').upper()
-        if data.get('unlisted', False):
-            visibility = 'PUBLIC_UNLISTED'
 
         if existing_post:
-            # Post already exists - update it
-            existing_post.title = data.get('title', existing_post.title)
-            existing_post.content = data.get('content', existing_post.content)
-            existing_post.contentType = data.get('contentType', existing_post.contentType)
+            existing_post.title = data.get("title", existing_post.title)
+            existing_post.description = data.get("description", existing_post.description)
+            existing_post.content = content or existing_post.content
+            existing_post.contentType = content_type or existing_post.contentType
             existing_post.visibility = visibility
-            existing_post.source = data.get('source', existing_post.source)
+            existing_post.source = data.get("source", existing_post.source)
             existing_post.updated = timezone.now()
 
-            # Check if the post is marked as deleted
-            if data.get('deleted', False):
+            if data.get("deleted", False):
                 existing_post.deleted = True
 
+            if local_image:
+                existing_post.image = local_image
+
             existing_post.save()
-            
-            # Create inbox receipt for updated post (idempotent due to unique_together)
+
             InboxReceipt.objects.get_or_create(
                 recipient=recipient,
-                post=existing_post
+                post=existing_post,
             )
-            
-            return JsonResponse({'message': 'Post updated'}, status=200)
-        
-        # STEP 2: Get or create the author
-        author_data = data.get('author', {})
+
+            return JsonResponse({"message": "Post updated"}, status=200)
+
+        # ---------------------------------------------------------
+        # NEW POST
+        # ---------------------------------------------------------
+        author_data = data.get("author", {})
         if not author_data:
-            return JsonResponse({'error': 'Post must have author with id/url'}, status=400)
+            return JsonResponse({"error": "Post must include author"}, status=400)
+
         author = get_or_create_author(author_data)
-        
-        # STEP 3: Create the new post
+
         post = Post.objects.create(
             author=author,
-            title=data.get('title', 'Untitled'),
-            content=data.get('content', ''),
-            contentType=data.get('contentType', 'text/plain'),
+            title=data.get("title", "Untitled"),
+            description=data.get("description", ""),
+            content=content,
+            contentType=content_type or "text/plain",
             visibility=visibility,
-            source=data.get('source', origin),
+            source=data.get("source", origin),
             origin=origin,
+            image=local_image,  # may be None
         )
-        
-        # STEP 4: Create inbox receipt to track delivery
+
         InboxReceipt.objects.create(
             recipient=recipient,
-            post=post
+            post=post,
         )
-        
-        return JsonResponse({'message': 'Post received'}, status=201)
-        
+
+        return JsonResponse({"message": "Post received"}, status=201)
+
     except Exception as e:
-        return JsonResponse({'error': f'Failed to process post: {str(e)}'}, status=400)
+        return JsonResponse(
+            {"error": f"Failed to process post: {str(e)}"},
+            status=400,
+        )
+
+
 
 
 def handle_comment(self, recipient, data, request):

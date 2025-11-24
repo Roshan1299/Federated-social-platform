@@ -37,7 +37,7 @@
       </div>
     {% endif %}
 
-    {% if post.content %}
+    {% if post.content and not "base64" in post.contentType|default:"" %}
       <div class="post-detail-content">{{ content_html|safe }}</div>
     {% endif %}
   </section>
@@ -60,10 +60,10 @@
   <!-- ✏️ Edit/Delete Buttons -->
   <div class="post-footer-actions">
     {% if user.is_authenticated and user.id == post.author.id %}
-      <a href="{% url 'authors:edit_post' post.id %}" class="btn-secondary">✏️ Edit</a>
-      <a href="{% url 'authors:delete_post' post.id %}" class="btn-danger">🗑️ Delete</a>
+      <a href="{% url 'authors:edit_post' post.id %}" class="btn btn-secondary">✏️ Edit</a>
+      <a href="{% url 'authors:delete_post' post.id %}" class="btn btn-danger">🗑️ Delete</a>
     {% endif %}
-    <a href="{% url 'authors:author_profile' post.author.id %}" class="btn-primary">⬅️ Back to Profile</a>
+    <a href="{% url 'authors:author_profile' post.author.id %}" class="btn btn-primary">⬅️ Back to Profile</a>
   </div>
 
   <hr class="divider">
@@ -149,9 +149,11 @@ document.addEventListener('DOMContentLoaded', function() {
   max-width: 800px;
   margin: 2rem auto;
   padding: 2rem;
-  background: #fff;
+  background: var(--bg-secondary);
   border-radius: 12px;
-  box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+  box-shadow: var(--card-shadow);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
 }
 
 .post-detail-header {
@@ -161,7 +163,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .post-detail-meta {
   font-size: 0.9rem;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .post-detail-body {
@@ -177,8 +179,9 @@ document.addEventListener('DOMContentLoaded', function() {
   max-width: 700px;
   overflow: hidden;
   border-radius: 12px;
-  background-color: #fafafa;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  background-color: var(--bg-primary);
+  box-shadow: var(--card-shadow);
+  border: 1px solid var(--border-color);
 }
 
 .post-detail-image {
@@ -209,22 +212,24 @@ document.addEventListener('DOMContentLoaded', function() {
   border: none;
   cursor: pointer;
   font-weight: 500;
+  transition: all 0.3s ease;
 }
 
-.btn-like { background: #0b5ed7; color: white; }
-.btn-primary { background: #0b5ed7; color: white; }
-.btn-secondary { background: #aaa; color: white; }
+.btn-like { background: #3a7bd5; color: white; }
+.btn-primary { background: #3a7bd5; color: white; }
+.btn-secondary { background: var(--border-color); color: var(--text-primary); }
 .btn-danger { background: #e74c3c; color: white; }
 
-.btn-like:hover, .btn-primary:hover { background: #094cba; }
-.btn-secondary:hover { background: #888; }
+.btn-like:hover, .btn-primary:hover { background: #2a5a9f; }
+.btn-secondary:hover { background: #475569; color: white; }
 .btn-danger:hover { background: #c0392b; }
 
 .comment-card {
-  background: #f8f9fa;
+  background: var(--bg-primary);
   border-radius: 10px;
   padding: 0.8rem;
   margin-bottom: 0.8rem;
+  border: 1px solid var(--border-color);
 }
 
 .comment-header {
@@ -236,7 +241,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .comment-date {
   font-size: 0.8rem;
-  color: #777;
+  color: var(--text-secondary);
 }
 
 .comment-content {
@@ -248,7 +253,12 @@ document.addEventListener('DOMContentLoaded', function() {
   display: flex;
   gap: 0.5rem;
   font-size: 0.85rem;
-  color: #555;
+  color: var(--text-secondary);
+}
+
+.like-count {
+  color: var(--text-primary);
+  font-weight: 500;
 }
 </style>
 {% endblock %}

@@ -26,27 +26,64 @@ class AuthorProfileForm(ModelForm):
 
 
 class PostForm(ModelForm):
+    # Custom content type field with Image option
+    contentType = forms.ChoiceField(
+        choices=[
+            ('text/plain', 'Plain Text'),
+            ('text/markdown', 'Markdown'),
+            ('image', 'Image'),
+        ],
+        widget=forms.Select(attrs={"class": "form-select", "id": "id_contentType"})
+    )
+    
     visibility = forms.ChoiceField(
         choices=Post.VISIBILITY_CHOICES,
         widget=forms.Select(attrs={"class": "form-select"})
     )
+    
     image = forms.ModelChoiceField(
         queryset=Image.objects.all().order_by('-id'),
         required=False,
         empty_label="(No image)",
-        widget=forms.Select(attrs={"class": "form-select"})
+        widget=forms.Select(attrs={"class": "form-select", "id": "id_image"})
+    )
+    
+    description = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 2, "placeholder": "Brief description..."}),
+        label="Description"
+    )
+    
+    content = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 10, "placeholder": "Write your content here...", "id": "id_content"}),
+        label="Content"
     )
 
     class Meta:
         model = Post
-        fields = ('title', 'content', 'contentType', 'visibility', 'image')
+        fields = ('title', 'description', 'content', 'contentType', 'visibility', 'image')
         labels = {
             'title': 'Post Title',
+            'description': 'Description',
             'content': 'Content',
             'contentType': 'Content Type',
             'visibility': 'Visibility',
-            'image': 'Image (Optional)',
+            'image': 'Image',
         }
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        content_type = cleaned_data.get('contentType')
+        image = cleaned_data.get('image')
+        content = cleaned_data.get('content')
+        
+        # If image content type is selected, image is required
+        if content_type == 'image':
+            if not image:
+                raise forms.ValidationError("You must select an image when 'Image' content type is chosen.")
+        
+        return cleaned_data
 
 
 class CommentForm(ModelForm):

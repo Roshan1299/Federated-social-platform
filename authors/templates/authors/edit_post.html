@@ -28,19 +28,27 @@
     </div>
 
     <div class="form-group">
-      <label for="{{ form.content.id_for_label }}">Description</label>
+      <label for="{{ form.description.id_for_label }}">Description</label>
+      {{ form.description }}
+      <small class="form-hint">Brief summary of your post</small>
+    </div>
+
+    <div class="form-group" id="content-group">
+      <label for="{{ form.content.id_for_label }}">Content</label>
       {{ form.content }}
     </div>
 
-    <div class="form-group">
-      <label for="{{ form.image.id_for_label }}">Image (Optional)</label>
-      {{ form.image }}
-      <small class="form-hint">
-        Need a new image? <a href="{% url 'authors:upload_image' %}?next={{ request.path }}" class="btn btn-sm btn-outline-primary">
+    <div class="form-group" id="image-group" style="display: none;">
+      <label for="{{ form.image.id_for_label }}">Select Image <span class="required">*</span></label>
+      <div class="image-upload-hint">
+        <div class="hint-text">Need a new image?</div>
+        <a href="{% url 'authors:upload_image' %}?next={{ request.path }}" class="btn btn-outline-primary image-upload-btn">
           Upload New Image
-      </a>, 
-        then come back and select it.
-      </small>
+        </a>
+        <div class="hint-text">then come back and select it.</div>
+      </div>
+      {{ form.image }}
+      <small class="form-hint">Required when Image content type is selected</small>
     </div>
     
     {% if form.instance.image %}
@@ -52,8 +60,170 @@
 
     <div class="form-actions">
       <a href="{% url 'authors:author_profile' user.id %}" class="btn btn-secondary">Cancel</a>
-      <button type=\"submit\" class=\"btn btn-primary\">Save Changes</button>
+      <button type="submit" class="btn btn-primary">Save Changes</button>
     </div>
   </form>
 </div>
+
+<style>
+  .post-form-container {
+    max-width: 700px;
+    margin: 40px auto;
+    background: var(--bg-secondary);
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: var(--card-shadow);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+  }
+
+  .post-form-header h1 {
+    color: var(--text-primary);
+  }
+
+  .post-form-header p {
+    color: var(--text-secondary);
+  }
+
+  .post-form-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .form-group {
+    flex: 1;
+    margin-bottom: 18px;
+  }
+
+  .form-hint {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-top: 5px;
+  }
+
+  .form-group label {
+    color: var(--text-primary);
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+
+  input[type="file"],
+  select,
+  textarea,
+  input[type="text"] {
+    width: 100%;
+    font-size: 0.95rem;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+  }
+
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+  }
+
+  .btn {
+    padding: 8px 14px;
+    border-radius: 6px;
+    text-decoration: none;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s ease;
+  }
+
+  .btn-primary {
+    background: #3a7bd5;
+    color: white;
+    border: none;
+  }
+
+  .btn-primary:hover {
+    background: #2a5a9f;
+    color: white;
+  }
+
+  .btn-secondary {
+    background: var(--border-color);
+    color: var(--text-primary);
+    border: none;
+  }
+
+  .btn-secondary:hover {
+    background: #475569;
+    color: white;
+  }
+
+  .btn-outline-primary {
+    background: transparent;
+    border: 1px solid #3a7bd5;
+    color: #3a7bd5;
+  }
+
+  .btn-outline-primary:hover {
+    background: #3a7bd5;
+    color: white;
+  }
+
+  .required {
+    color: #e74c3c;
+    font-weight: bold;
+  }
+
+  .image-upload-hint {
+    margin-top: 8px;
+  }
+
+  .hint-text {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+
+  .image-upload-btn {
+    display: block;
+    margin: 8px 0;
+    text-align: center;
+  }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const contentTypeSelect = document.getElementById('id_contentType');
+    const contentGroup = document.getElementById('content-group');
+    const imageGroup = document.getElementById('image-group');
+    const contentField = document.getElementById('id_content');
+    
+    function updateFieldVisibility() {
+      const selectedType = contentTypeSelect.value;
+      
+      if (selectedType === 'image') {
+        // Hide content field, show image field
+        contentGroup.style.display = 'none';
+        imageGroup.style.display = 'block';
+        contentField.disabled = true;
+        contentField.required = false;
+      } else {
+        // Show content field, hide image field
+        contentGroup.style.display = 'block';
+        imageGroup.style.display = 'none';
+        contentField.disabled = false;
+        contentField.required = true;
+      }
+    }
+    
+    // Initialize on page load
+    updateFieldVisibility();
+    
+    // Update when content type changes
+    contentTypeSelect.addEventListener('change', updateFieldVisibility);
+  });
+</script>
 {% endblock %}

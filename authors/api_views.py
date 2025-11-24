@@ -22,12 +22,14 @@ from .inbox_handlers import (
     handle_follow_request as ih_handle_follow_request,
     handle_unfollow as ih_handle_unfollow,
     reopen_follow_request as reopen_follow_request,
+    get_or_create_author
 )
 from .utils.federation import (
     notify_remote_new_post,
     notify_remote_edit_post,
     notify_remote_delete_post,
     send_unfollow_to_remote_author,
+    notify_remote_author_update,
 )
 import requests
 import urllib.parse
@@ -235,6 +237,31 @@ def _get_like_by_id_or_fqid(like_id=None, like_fqid=None, author_id=None, entry_
                 raise Http404("Like not found")
     else:
         raise Http404("Like identifier required")
+    
+
+def resolve_target_host(target, request):
+    """Resolve a target host (scheme://netloc) from an Author-like object.
+
+    Returns: normalized `scheme://netloc` string (no trailing slash).
+    """
+    raw_host = None
+    if getattr(target, 'host', None):
+        raw_host = target.host
+    elif getattr(target, 'url', None):
+        raw_host = target.url
+
+    if not raw_host:
+        return None
+
+    # Ensure the string has a scheme so parsing behaves predictably
+    if not raw_host.startswith('http://') and not raw_host.startswith('https://'):
+        raw_host = f"{request.scheme}://{raw_host.lstrip('/')}"
+
+    parsed = urllib.parse.urlparse(raw_host)
+    if not parsed.scheme or not parsed.netloc:
+        return None
+
+    return f"{parsed.scheme}://{parsed.netloc}".rstrip('/')
 
 
 # ==================== Access Control Helper ====================
@@ -289,10 +316,11 @@ def build_author_dict(author, request):
     """Helper function to build author JSON object"""
     web_url = reverse('authors:author_profile', kwargs={'author_id': author.id})
     
-    # Build profileImage URL using serve_image endpoint
+    # Build profileImage URL using API endpoint /api/authors/{author_id}/image
     profile_image_url = None
     if author.profileImage:
-        image_path = reverse('authors:serve_image', args=[author.profileImage.id])
+        # Use the proper API endpoint for profile images
+        image_path = reverse('authors:author_image_api', args=[author.id])
         profile_image_url = request.build_absolute_uri(image_path)
     
     return {
@@ -302,7 +330,8 @@ def build_author_dict(author, request):
         "displayName": author.displayName,
         "url": author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/",
         "github": author.github,
-        "profileImage": request.build_absolute_uri(author.profileImage.file_name) if author.profileImage else None,
+        "description": author.description,
+        "profileImage": profile_image_url,
         "web": f"{request.scheme}://{request.get_host()}{web_url}",
     }
 
@@ -313,14 +342,14 @@ def build_post_dict(post, request):
     entry_url = f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/entries/{post.id}"
     
     data = {
-        "type": "post",
+        "type": "entry",
         # Use canonical origin as the id when available
         "id": post.origin or entry_url,
         "author": build_author_dict(author, request),
         "title": post.title,
         "source": post.source or entry_url,
         "origin": post.origin or entry_url,
-        "description": post.content[:200] if post.content else "",  # First 200 chars
+        "description": post.description if post.description else "", 
         "contentType": post.contentType,
         "content": post.content,
         "visibility": post.visibility,
@@ -331,15 +360,16 @@ def build_post_dict(post, request):
             "type": "comments",
             "page": 1,
             "size": 5,
-            "post": entry_url,
+            "entry": entry_url,
             "id": f"{entry_url}/comments",
             "comments": []  # Can be populated if needed
         }
     }
     
-    # Add image if present - use serve_image endpoint
+    # Add image if present - use proper API endpoint /api/authors/{author_id}/entries/{entry_id}/image
     if post.image:
-        data["image"] = request.build_absolute_uri(post.image.file_name)
+        image_path = reverse('authors:image_entry_api', args=[author.id, post.id])
+        data["image"] = request.build_absolute_uri(image_path)
 
     # Add likes metadata for this entry
     likes_url = f"{entry_url}/likes"
@@ -350,7 +380,7 @@ def build_post_dict(post, request):
         "type": "likes",
         "page": 1,
         "size": 5,
-        "post": entry_url,
+        "entry": entry_url,
         "id": likes_url,
         "web": web_url,
         "src": []  # can be populated with like objects
@@ -379,7 +409,7 @@ def build_comment_dict(comment, request):
             "type": "likes",
             "page": 1,
             "size": 5,
-            "post": f"{request.scheme}://{request.get_host()}/api/authors/{comment.post.author.id}/entries/{comment.post.id}",
+            "entry": f"{request.scheme}://{request.get_host()}/api/authors/{comment.post.author.id}/entries/{comment.post.id}",
             "id": f"{request.scheme}://{request.get_host()}/api/authors/{comment.post.author.id}/entries/{comment.post.id}/comments/{comment.id}/likes",
             "web": f"{request.scheme}://{request.get_host()}/authors/{comment.post.author.id}/entries/{comment.post.id}/",
             "src": []
@@ -439,18 +469,39 @@ class InboxAPIView(View):
             
             # Parse the incoming JSON
             data = json.loads(request.body)
-            object_type = data.get('type', '').lower()
+
+            # DEBUG:
+            print("INBOX PAYLOAD:", data.get("id"), "image:", data.get("image"))
             
+            object_type = data.get('type', '').lower()
+
             if object_type == 'follow':
                 return self.handle_follow_request(recipient, data, request)
             elif object_type == 'unfollow':
                 return self.handle_unfollow(recipient, data, request)
-            elif object_type == 'post':
+            elif object_type == 'post' or object_type == 'entry':
                 return self.handle_post(recipient, data, request)
             elif object_type == 'like':
                 return self.handle_like(recipient, data, request)
             elif object_type == 'comment':
                 return self.handle_comment(recipient, data, request)
+            
+            # Might cause issues when connecting to other groups nodes
+            elif object_type == 'author':
+                # Author profile update (e.g., new displayName/profileImage)
+                # We don't really care which inbox it came through; we just
+                # refresh/create our stub for that remote author.
+                remote_author = get_or_create_author(data)
+                if remote_author is None:
+                    return json_response(
+                        {'error': 'Author payload missing id/url'},
+                        status=400
+                    )
+                return json_response(
+                    {'message': 'Author updated', 'id': remote_author.url},
+                    status=200
+                )
+            
             else:
                 return json_response({'error': f'Unknown object type: {object_type}'}, status=400)
                 
@@ -565,21 +616,18 @@ class SingleFollowingAPIView(View):
         if not request.user.is_authenticated or str(request.user.id) != str(author_id):
             return HttpResponse('Forbidden: only the author may create follow requests', status=403)
 
-        # Resolve the target author strictly by FQID; if not found, return 404
-        try:
-            target = _get_author_by_id_or_fqid(author_fqid=following_fqid)
-        except Http404:
-            return HttpResponse('Not Found', status=404)
+        # Resolve or create the target author using shared normalizer
+        # This prevents duplicates by canonicalizing the FQID (e.g. /authors/ -> /api/authors/)
+        target = get_or_create_author({"id": following_fqid})
+        if target is None:
+            return HttpResponse("Bad Request: invalid following_fqid", status=400)
+
 
         # If the target's host differs from our host, send follow request to the remote inbox
         local_base = f"{request.scheme}://{request.get_host()}".rstrip('/')
 
-        target_host = None
-        if getattr(target, 'host', None):
-            target_host = target.host.rstrip('/')
-        elif getattr(target, 'url', None):
-            parsed_t = urllib.parse.urlparse(target.url)
-            target_host = f"{parsed_t.scheme}://{parsed_t.netloc}".rstrip('/')
+        # Resolve target host using helper
+        target_host = resolve_target_host(target, request)
         
         if target_host and target_host != local_base:
             # Look up RemoteNode configuration for this host
@@ -1110,7 +1158,7 @@ class CommentsAPIView(View):
                 "type": "comments",
                 "page": page_num,
                 "size": page_size,
-                "post": post_url,
+                "entry": post_url,
                 "id": f"{post_url}/comments",
                 "comments": items
             }
@@ -1321,6 +1369,30 @@ class ImageEntryAPIView(View):
         
         return HttpResponse(image_data, content_type=content_type)
 
+
+class AuthorImageAPIView(View):
+    """
+    GET /api/authors/{AUTHOR_SERIAL}/image
+    Get the profile image from an author as binary data
+    """
+    
+    def get(self, request, author_id=None, author_fqid=None):
+        """Get profile image from author - handles both UUID and FQID"""
+        author = _get_author_by_id_or_fqid(author_id=author_id, author_fqid=author_fqid)
+        
+        if not author.profileImage:
+            return HttpResponse("No profile image found", status=404)
+        
+        # Get the image data from the database
+        image = author.profileImage
+        image_data = bytes(image.data)
+        
+        # Use the content_type from the Image model
+        content_type = image.content_type or 'image/jpeg'
+        
+        return HttpResponse(image_data, content_type=content_type)
+
+
 @method_decorator(http_basic_auth_or_session, name='dispatch')
 class AuthorAPIView(View):
     def get(self, request, author_id=None, author_fqid=None):
@@ -1345,22 +1417,41 @@ class AuthorAPIView(View):
                     except Author.DoesNotExist:
                         return JsonResponse({"error": "Author not found"}, status=404)
         
-        web_url = reverse('authors:author_profile', kwargs={'author_id': author.id})
-        author_id_url = author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/"
-        data = {
-            "type": "author",
-            "id": author_id_url,
-            "host": author.host or f"{request.scheme}://{request.get_host()}",
-            "displayName": author.displayName,
-            "github": author.github,
-            "profileImage": (
-                request.build_absolute_uri(
-                    reverse('authors:serve_image', args=[author.profileImage.id])
-                ) if author.profileImage else None
-            ),
-            "web": f"{request.scheme}://{request.get_host()}{web_url}",
-        }
+        # Use build_author_dict for consistency
+        data = build_author_dict(author, request)
         return JsonResponse(data)
+    
+    def put(self, request, author_id=None, author_fqid=None):
+        """Update author info - only the author themselves may update"""
+        identifier = author_fqid or author_id
+
+        author = _get_author_by_id_or_fqid(author_id=author_id, author_fqid=author_fqid)  # to raise 404 if not found
+
+        # Check that authenticated user is the author
+        if not request.user.is_authenticated or str(request.user.id) != str(author.id):
+            return HttpResponse("Forbidden", status=403)
+        
+        try:
+            data = json.loads(request.body)
+            
+            # Update fields
+            author.displayName = data.get('displayName', author.displayName)
+            author.github = data.get('github', author.github)
+            author.description = data.get('description', author.description)
+            author.host = data.get('host', author.host)
+            
+            author.save()
+            notify_remote_author_update(author)
+            
+            # Use build_author_dict for consistency
+            response_data = build_author_dict(author, request)
+            return JsonResponse(response_data)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        except Exception as e:
+            print("Error updating author:", str(e))
+            return JsonResponse({'error': str(e)}, status=500) 
+        
 
 '''
 AuthorsListAPIView: returns a JSON list of all authors.
@@ -1389,28 +1480,12 @@ class AuthorsListAPIView(View):
 
         items = []
         for author in page_obj:
-            web_url = reverse('authors:author_profile', kwargs={'author_id': author.id})
-            author_id_url = author.url or f"{request.scheme}://{request.get_host()}/api/authors/{author.id}/"
-            
-            # Build profileImage URL using serve_image endpoint
-            profile_image_url = None
-            if author.profileImage:
-                image_path = reverse('authors:serve_image', args=[author.profileImage.id])
-                profile_image_url = request.build_absolute_uri(image_path)
-            
-            items.append({
-                "type": "author",
-                "id": author_id_url,
-                "host": author.host or f"{request.scheme}://{request.get_host()}",
-                "displayName": author.displayName,
-                "github": author.github,
-                "profileImage": profile_image_url,
-                "web": f"{request.scheme}://{request.get_host()}{web_url}",
-            })
+            # Use build_author_dict for consistency
+            items.append(build_author_dict(author, request))
 
         response_data = {
             "type": "authors",
-            "items": items,
+            "authors": items,
             "page": page_obj.number,
             "size": page_size,
             "count": paginator.count,

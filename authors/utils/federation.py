@@ -2,16 +2,43 @@ from django.conf import settings
 
 from authors.models import Follow, RemoteNode, Post, Comment, Like, Author
 from authors.utils.nodes import remote_post
+from django.urls import reverse
+from urllib.parse import urlparse
+
+def _base_from_url(url: str) -> str:
+    """
+    Given something like:
+      - 'https://crimson-node-utsha-...herokuapp.com/api/'
+    return:
+      - 'https://crimson-node-utsha-...herokuapp.com'
+    """
+    if not url:
+        return ""
+    parsed = urlparse(url)
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+    return url.rstrip("/")
+
+
+def notify_remote_author_update(author: Author):
+    payload = {
+        "type": "author",
+        "id": author.url,
+        "host": author.host,
+        "displayName": author.displayName,
+        "url": author.url,
+        "github": author.github,
+        "description": author.description,
+        "profileImage": build_profile_image_url(author),
+    }
+    send_to_remote_inboxes(author, payload)
+
 
 def get_remote_node_for_author(author: Author):
-    # Take the author's host (e.g. "https://team-green.herokuapp.com")
-    host = (author.host or "").rstrip("/")
+    host = _base_from_url(author.host or "")
     if not host:
         return None
-
-    # Try to find matching RemoteNode row in our DB
     try:
-        # base_url is stored like "https://team-green.herokuapp.com"
         return RemoteNode.objects.get(base_url__icontains=host, enabled=True)
     except RemoteNode.DoesNotExist:
         return None
@@ -40,10 +67,15 @@ def get_remote_followers_and_friends(author):
     followers = Follow.objects.filter(following=author).select_related("follower")
     for f in followers:
         follower = f.follower
-        follower_host = (follower.host or "").rstrip("/")
+        follower_host_raw = (follower.host or "").rstrip("/")
+        follower_host = _base_from_url(follower_host_raw)
+
         if follower_host and follower_host != local_host:
             try:
-                node = RemoteNode.objects.get(base_url__icontains=follower_host, enabled=True)
+                node = RemoteNode.objects.get(
+                    base_url__icontains=follower_host,
+                    enabled=True,
+                )
                 results[follower.id] = (node, follower)
             except RemoteNode.DoesNotExist:
                 continue
@@ -52,16 +84,20 @@ def get_remote_followers_and_friends(author):
     following = Follow.objects.filter(follower=author).select_related("following")
     for f in following:
         followed_author = f.following
-        # Check for mutual follow
         if Follow.objects.filter(follower=followed_author, following=author).exists():
-            followed_host = (followed_author.host or "").rstrip("/")
+            followed_host_raw = (followed_author.host or "").rstrip("/")
+            followed_host = _base_from_url(followed_host_raw)
+
             if followed_host and followed_host != local_host:
                 try:
-                    node = RemoteNode.objects.get(base_url__icontains=followed_host, enabled=True)
+                    node = RemoteNode.objects.get(
+                        base_url__icontains=followed_host,
+                        enabled=True,
+                    )
                     results[followed_author.id] = (node, followed_author)
                 except RemoteNode.DoesNotExist:
                     continue
-    
+
     return list(results.values())
 
 # Build the remote inbox URL for a remote author
@@ -84,16 +120,32 @@ def build_minimal_author_dict(author: Author) -> dict:
         "displayName": author.displayName,
         "url": author.url,
         "github": author.github,
+        "description": author.description,
     }
+
+def build_profile_image_url(author):
+    """
+    Build full profile image URL for federation payloads.
+    Returns None if author has no profile image.
+    """
+    if not author.profileImage_id:
+        return None
+
+    # Build absolute URL for /api/authors/<id>/image/
+    path = reverse("authors:author_image_api", args=[author.id])
+
+    # Use author's host (remote nodes expect consistency)
+    return f"{author.host.rstrip('/')}{path}"
 
 # Convert Post to JSON for remote sending
 def build_post_payload(post: Post) -> dict:
-    return {
-        "type": "post",
+    payload = {
+        "type": "entry",
         "id": post.origin,
         "source": post.source,
         "origin": post.origin,
         "title": post.title,
+        "description": post.description if post.description else "", 
         "content": post.content,
         "contentType": post.contentType,
         "visibility": post.visibility,
@@ -106,8 +158,28 @@ def build_post_payload(post: Post) -> dict:
             "displayName": post.author.displayName,
             "url": post.author.url,
             "github": post.author.github,
+            "profileImage": build_profile_image_url(post.author),
         },
     }
+
+    # Safely build image URL using the origin's host
+    if post.image_id:
+        # Try to get scheme+host from the origin first
+        host_base = ""
+        if post.origin:
+            parsed = urlparse(post.origin)
+            if parsed.scheme and parsed.netloc:
+                host_base = f"{parsed.scheme}://{parsed.netloc}"
+
+        # Fallback to BASE_URL if origin is missing or weird
+        if not host_base:
+            host_base = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+
+        image_path = reverse("authors:image_entry_api", args=[post.author.id, post.id])
+        payload["image"] = f"{host_base}{image_path}"
+
+    return payload
+
 
 # Convert a Comment into JSON for remote nodes
 def build_comment_payload(comment: Comment) -> dict:
@@ -115,7 +187,7 @@ def build_comment_payload(comment: Comment) -> dict:
         "type": "comment",
         "id": comment.origin,
         "comment": comment.content,
-        "post": comment.post.origin,
+        "entry": comment.post.origin,
         "published": comment.created_at.isoformat(),
         "author": {
             "type": "author",
@@ -194,6 +266,8 @@ def send_to_remote_inboxes(author, payload: dict, post_visibility: str = 'PUBLIC
 
         # Build inbox URL using the remote author's canonical author URL
         inbox_url = inbox_url_for_remote(node, remote_author.url)
+        print(f"Sending to remote inbox: {inbox_url}")
+        print(f"Payload: {payload}")
 
         # Fire-and-forget; if a remote node fails, local behaviour is unaffected
         try:
@@ -238,7 +312,7 @@ def notify_remote_delete_post(post: Post):
     # Send the post with its current visibility but mark as deleted
     # This will trigger the remote node to update their local copy with deleted=True
     payload = {
-        "type": "post",
+        "type": "entry",
         "id": post.origin,
         "source": post.source,
         "origin": post.origin,

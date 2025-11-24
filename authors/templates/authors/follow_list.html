@@ -4,45 +4,110 @@
 
 {% block content %}
 <div class="container">
-  <h1>{{ author.displayName }}'s Followers ({{ follower_count }})</h1>
+  <div class="card">
+    <h1>{{ author.displayName }}'s Followers ({{ follower_count }})</h1>
 
-  {% if followers %}
-    <ul class="followers-list">
-      {% for follow in followers %}
-        <li class="follower-item">
-          <a href="{% url 'authors:author_profile' follow.follower.id %}">
-            {% if follow.follower.profileImage %}
-              <img src="{{ follow.follower.profileImage.url }}" class="follower-avatar" alt="{{ follow.follower.displayName }}">
-            {% else %}
-              <span class="follower-placeholder">👤</span>
-            {% endif %}
-            {{ follow.follower.displayName }}
-          </a>
-        </li>
-      {% endfor %}
-    </ul>
-  {% else %}
-    <p>No followers yet.</p>
-  {% endif %}
+    {% if followers %}
+      <div class="followers-container">
+        {% for follow in followers %}
+          <div class="follower-card">
+            <a href="{% url 'authors:author_profile' follow.follower.id %}" class="follower-link">
+              {% if follow.follower.profileImage %}
+                <img
+                  src="{% url 'authors:serve_image' follow.follower.profileImage.id %}"
+                  class="follower-avatar"
+                  alt="{{ follow.follower.displayName }}"
+                >
+              {% else %}
+                <div class="follower-placeholder">👤</div>
+              {% endif %}
+              <span class="follower-name">{{ follow.follower.displayName }}</span>
+            </a>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="no-followers">
+        <p>No followers yet.</p>
+      </div>
+    {% endif %}
+  </div>
 </div>
 
 <style>
-  .followers-list {
-    list-style: none;
-    padding: 0;
+  .container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
   }
-  .follower-item {
-    margin: 10px 0;
+
+  .followers-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 15px;
+    margin-top: 20px;
   }
+
+  .follower-card {
+    background: var(--bg-primary);
+    border-radius: 12px;
+    padding: 15px;
+    border: 1px solid var(--border-color);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .follower-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--card-shadow);
+    border-color: #3a7bd5;
+  }
+
+  .follower-link {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    color: var(--text-primary);
+  }
+
+  .follower-link:hover {
+    color: #00d2ff;
+  }
+
   .follower-avatar {
-    width: 32px;
-    height: 32px;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
-    vertical-align: middle;
-    margin-right: 10px;
+    margin-right: 12px;
+    object-fit: cover;
   }
+
   .follower-placeholder {
-    margin-right: 10px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 12px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 18px;
+  }
+
+  .follower-name {
+    font-weight: 500;
+    font-size: 16px;
+  }
+
+  .no-followers {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-secondary);
+  }
+
+  .no-followers p {
+    margin: 0;
+    font-size: 18px;
   }
 </style>
 {% endblock %}

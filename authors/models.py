@@ -66,6 +66,10 @@ class Post(models.Model):
     CONTENT_TYPE_CHOICES = [
         ('text/plain', 'Plain Text'),
         ('text/markdown', 'Markdown/ CommonMark'),
+        ('image', 'Image'),
+        ('image/png;base64', 'Image (PNG)'),
+        ('image/jpeg;base64', 'Image (JPEG)'),
+        ('application/base64', 'Image (Other)'),
     ]
     
     VISIBILITY_CHOICES = [
@@ -77,8 +81,9 @@ class Post(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     author = models.ForeignKey(Author, on_delete=models.CASCADE, related_name='posts')
     title = models.CharField(max_length=255)
-    content = models.TextField()
-    contentType = models.CharField(max_length=20, choices=CONTENT_TYPE_CHOICES, default='text/plain')
+    description = models.TextField(blank=True, null=True)
+    content = models.TextField()  # text or base64 image
+    contentType = models.CharField(max_length=30, choices=CONTENT_TYPE_CHOICES, default='text/plain')
     visibility = models.CharField(max_length=20, choices=VISIBILITY_CHOICES, default='PUBLIC')
     published = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)

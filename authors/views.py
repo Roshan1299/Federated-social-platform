@@ -25,15 +25,16 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate
 from .forms import ImageUploadForm
 from .models import Image
-from .inbox_handlers import reopen_follow_request
-from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post, send_unfollow_to_remote_author, notify_remote_comment
+from .inbox_handlers import reopen_follow_request, get_or_create_author
+from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post, send_unfollow_to_remote_author, notify_remote_comment, notify_remote_author_update
 import uuid
 import urllib.parse
 import requests
 import logging
 from django.conf import settings
 from .api_views import SingleFollowingAPIView
-from authors.utils.remote_read import sync_remote_comments_for_post
+from authors.utils.remote_read import sync_remote_comments_for_post, sync_remote_likes_for_post, sync_remote_comment_likes_for_post, fetch_and_sync_remote_posts
+from authors.utils.remote_read import sync_remote_comments_for_post, sync_remote_likes_for_post, sync_remote_comment_likes_for_post, fetch_and_sync_remote_posts
 from authors.utils.federation import send_comment_to_post_owner, send_like_to_post_owner, send_comment_like_to_post_owner
 
 
@@ -176,6 +177,11 @@ class AuthorEditView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
         # Don't deactivate the user when saving profile changes
         user.save()
 
+        try:
+            notify_remote_author_update(user)
+        except Exception as e:
+            print("Failed to notify remote on profile edit:", e)
+            
         success_url = reverse('authors:author_profile', kwargs={'author_id': user.id})
         return redirect(success_url)
     
@@ -186,8 +192,31 @@ class CreatePostView(CreateView):
     template_name = "authors/create_post.html"
     
     def form_valid(self, form):
+        import base64
+        
         # Set the author to the current user
         form.instance.author = self.request.user
+        
+        # Handle image content type
+        content_type = form.cleaned_data.get('contentType')
+        if content_type == 'image':
+            image_obj = form.cleaned_data.get('image')
+            if image_obj:
+                # Encode image data as base64
+                image_data_bytes = bytes(image_obj.data)
+                base64_encoded = base64.b64encode(image_data_bytes).decode('utf-8')
+                
+                # Set content to base64 string
+                form.instance.content = base64_encoded
+                
+                # Set contentType based on image's content_type
+                img_content_type = image_obj.content_type.lower()
+                if 'png' in img_content_type:
+                    form.instance.contentType = 'image/png;base64'
+                elif 'jpeg' in img_content_type or 'jpg' in img_content_type:
+                    form.instance.contentType = 'image/jpeg;base64'
+                else:
+                    form.instance.contentType = 'application/base64'
 
         # Let the generic view save the post first
         response = super().form_valid(form)
@@ -196,6 +225,21 @@ class CreatePostView(CreateView):
         notify_remote_new_post(self.object)
 
         return response
+    
+    def form_invalid(self, form):
+        # Log validation errors to help debug silent 200 responses on POST
+        logger = logging.getLogger(__name__)
+        try:
+            errors = form.errors.as_json()
+        except Exception:
+            errors = str(form.errors)
+
+        # Partial cleaned_data may exist even when invalid; log keys only to avoid large binary dumps
+        cleaned_keys = list(getattr(form, 'cleaned_data', {}).keys()) if getattr(form, 'cleaned_data', None) else None
+
+        logger.error("CreatePostView.form_invalid: errors=%s cleaned_keys=%s POST_keys=%s", errors, cleaned_keys, list(self.request.POST.keys()))
+
+        return super().form_invalid(form)
     
     def get_success_url(self):
         return reverse('authors:author_profile', kwargs={'author_id': self.request.user.id})
@@ -214,11 +258,44 @@ class EditPostView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
         # Ensure only the post author can edit it
         post = self.get_object()
         return self.request.user == post.author
+    
+    def get_initial(self):
+        initial = super().get_initial()
+        post = self.get_object()
+        
+        # Convert actual contentType to form's simplified version
+        if post.contentType and 'base64' in post.contentType:
+            initial['contentType'] = 'image'
+        
+        return initial
 
     def get_success_url(self):
         return reverse("authors:post_detail", kwargs={"post_id": self.object.id})
 
     def form_valid(self, form):
+        import base64
+        
+        # Handle image content type
+        content_type = form.cleaned_data.get('contentType')
+        if content_type == 'image':
+            image_obj = form.cleaned_data.get('image')
+            if image_obj:
+                # Encode image data as base64
+                image_data_bytes = bytes(image_obj.data)
+                base64_encoded = base64.b64encode(image_data_bytes).decode('utf-8')
+                
+                # Set content to base64 string
+                form.instance.content = base64_encoded
+                
+                # Set contentType based on image's content_type
+                img_content_type = image_obj.content_type.lower()
+                if 'png' in img_content_type:
+                    form.instance.contentType = 'image/png;base64'
+                elif 'jpeg' in img_content_type or 'jpg' in img_content_type:
+                    form.instance.contentType = 'image/jpeg;base64'
+                else:
+                    form.instance.contentType = 'application/base64'
+        
         # Call the parent form_valid to save the post
         response = super().form_valid(form)
 
@@ -315,7 +392,8 @@ class PostDetailView(DetailView):
         # If the post's author lives on a remote node, pull their comments into our DB
         if post_host and post_host != local_host:
             sync_remote_comments_for_post(post) 
-            
+            sync_remote_likes_for_post(post)
+            sync_remote_comment_likes_for_post(post)
         # relationship checks
         is_follower = user.is_authenticated and Follow.objects.filter(
             follower=user, following=author
@@ -528,17 +606,32 @@ class PostAPIView(View):
             if not is_friend:
                 return HttpResponse("Forbidden", status=403)
 
+        # --- profile image handling ---
+        profile_image_url = None
+        profile_image = getattr(post.author, "profileImage", None)
+        if profile_image:
+            # If it's your custom Image model, use serve_image
+            try:
+                profile_image_url = request.build_absolute_uri(
+                    reverse('authors:serve_image', args=[profile_image.id])
+                )
+            except AttributeError:
+                # Fallback in case profileImage is some other type (e.g. a bare URL string)
+                profile_image_url = profile_image
+
         data = {
             "type": "post",
-            "id": request.build_absolute_uri(reverse('authors:post_detail', kwargs={'post_id': post.id})),
+            "id": request.build_absolute_uri(
+                reverse('authors:post_detail', kwargs={'post_id': post.id})
+            ),
             "author": {
                 "type": "author",
-                "id": post.author.url, 
+                "id": post.author.url,
                 "host": post.author.host,
                 "displayName": post.author.displayName,
                 "url": post.author.url,
                 "github": post.author.github,
-                "profileImage": post.author.profileImage.name if post.author.profileImage else None,
+                "profileImage": profile_image_url,
             },
             "title": post.title,
             "contentType": post.contentType,
@@ -547,10 +640,19 @@ class PostAPIView(View):
             "published": post.published.isoformat(),
             "updated": post.updated.isoformat(),
         }
-        if post.image:
-            data["image"] = request.build_absolute_uri(
-                reverse('authors:serve_image', args=[post.image.id])
-            )
+
+        # --- post image handling ---
+        image_url = None
+        if getattr(post, "image", None):
+            try:
+                image_url = request.build_absolute_uri(
+                    reverse('authors:serve_image', args=[post.image.id])
+                )
+            except AttributeError:
+                # If for some reason image is stored differently, fail soft
+                image_url = None
+
+        data["image"] = image_url
         
         return JsonResponse(data)
     
@@ -570,18 +672,21 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
         - Friends-only posts from mutual friends (with inbox receipt tracking for remote posts)
         - Unlisted posts from followed authors (with inbox receipt tracking for remote posts)
         - All posts from the author themselves
-        
+
         Inbox receipt logic:
         - For LOCAL posts (friends-only & unlisted): Use Follow relationships (always current)
         - For REMOTE posts (friends-only & unlisted): Only show if received in user's inbox
           (solves the stale Follow relationship problem in distributed systems)
-        
+
         This prevents scenarios where:
         - Remote author unfollows a local author but our node doesn't know
         - Local author would still see unlisted/friends-only posts through stale Follow data
         '''
         user = self.request.user
         local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+
+        # Get the visibility filter from the request
+        visibility_filter = self.request.GET.get('filter', '').lower()
 
         # Get all mutual friends (both follow each other)
         followed_by_user = Follow.objects.filter(follower=user).values_list('following', flat=True)
@@ -595,31 +700,31 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
 
         # Friends-only posts logic with inbox receipt tracking:
         # SPLIT INTO LOCAL and REMOTE queries
-        
+
         # 1. Local friends-only posts from mutual friends (trust Follow relationships)
         local_mutual_friends = Author.objects.filter(
             id__in=mutual_friends,
             host=local_host
         ).values_list('id', flat=True)
-        
+
         friends_posts_local = Post.objects.filter(
             visibility='FRIENDS',
             author__in=local_mutual_friends,
             deleted=False
         )
-        
+
         # 2. Remote friends-only posts (only if received in inbox)
         # Get posts that were delivered to this user's inbox
         inbox_post_ids = InboxReceipt.objects.filter(
             recipient=user
         ).values_list('post_id', flat=True)
-        
+
         friends_posts_remote = Post.objects.filter(
             id__in=inbox_post_ids,
             visibility='FRIENDS',
             deleted=False
         ).exclude(author__host=local_host)
-        
+
         # User's own friends-only posts
         friends_posts_author = Post.objects.filter(
             visibility='FRIENDS',
@@ -629,21 +734,21 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
 
         # Unlisted posts logic with inbox receipt tracking:
         # SPLIT INTO LOCAL and REMOTE queries
-        
+
         # 1. Local unlisted posts from followed authors (trust Follow relationships)
         local_followed_authors = Author.objects.filter(
             id__in=followed_authors,
             host=local_host
         ).values_list('id', flat=True)
-        
+
         unlisted_posts_local = Post.objects.filter(
             visibility='PUBLIC_UNLISTED',
             author__in=local_followed_authors,
             deleted=False
         ).exclude(author=user)
-        
+
         # 2. Remote unlisted posts (only if received in inbox)
-        # Since we now push PUBLIC_UNLISTED posts to remote followers' inboxes, 
+        # Since we now push PUBLIC_UNLISTED posts to remote followers' inboxes,
         # they should appear here if the user is a follower
         unlisted_posts_remote = Post.objects.filter(
             id__in=inbox_post_ids,
@@ -656,15 +761,27 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
 
         # Combine all posts
         queryset = (
-            public_posts | 
-            friends_posts_local | 
-            friends_posts_remote | 
-            friends_posts_author | 
+            public_posts |
+            friends_posts_local |
+            friends_posts_remote |
+            friends_posts_author |
             unlisted_posts_local |
             unlisted_posts_remote |
             my_posts
         ).distinct().order_by('-updated')
-        
+
+        # Apply visibility filter if specified
+        if visibility_filter == 'public':
+            queryset = queryset.filter(visibility='PUBLIC')
+        elif visibility_filter == 'friends':
+            queryset = queryset.filter(visibility='FRIENDS')
+        elif visibility_filter == 'unlisted':
+            queryset = queryset.filter(visibility='PUBLIC_UNLISTED')
+        elif visibility_filter == 'remote':
+            # Filter for posts from remote authors
+            local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+            queryset = queryset.exclude(author__host=local_host)
+
         return queryset
 
     def get_context_data(self, **kwargs):
@@ -672,33 +789,11 @@ class AuthorStreamView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         user = self.request.user
 
-        # Fetch followed authors and their recent posts
-        followed_authors = Follow.objects.filter(follower=user).select_related("following")
-        followed_data = []
-        for follow in followed_authors:
-            author = follow.following
-            is_friend = (
-                Follow.objects.filter(follower=user, following=author).exists() and Follow.objects.filter(follower=author, following=user).exists()
-            )
-            visible_visibilities = ['PUBLIC']
-            if is_friend:
-                visible_visibilities.append('FRIENDS')
+        # Get the visibility filter from the request
+        visibility_filter = self.request.GET.get('filter', '').lower()
+        context["current_filter"] = visibility_filter
 
-            posts = Post.objects.filter(
-                author=author,
-                visibility__in=visible_visibilities,
-                deleted=False
-            ).order_by('-updated')[:5]  # Get recent 5 posts
-
-            for p in posts:
-                p.rendered_content = render_post_content(p)
-            if posts.exists():
-                followed_data.append({
-                    "author": author,
-                    "posts": posts
-                })
-        context["followed_data"] = followed_data
-
+        # No longer organizing into separate sections - all posts in main stream
         for p in context["posts"]:
             p.rendered_content = render_post_content(p)
 
@@ -714,15 +809,35 @@ class ExploreView(ListView):
     paginate_by = 15
 
     def get_queryset(self):
-        """Return all public, non-deleted posts from all authors."""
-        queryset = Post.objects.filter(visibility='PUBLIC', deleted=False).order_by('-published')
+        """Fetch remote posts and return only remote public, non-deleted posts."""
+        fetch_and_sync_remote_posts()
+
+        # Get the current node's base URL
+        from django.conf import settings
+        current_host = getattr(settings, 'BASE_URL', '').rstrip('/')
+
+        # Filter for posts where the author's host is different from the current node's host
+        # This ensures we only show remote posts
+        queryset = Post.objects.filter(
+            visibility='PUBLIC',
+            deleted=False,
+            # Include only posts from authors whose host is different from the current node
+            # and not null (i.e., remote posts)
+            author__host__isnull=False
+        ).exclude(
+            # Exclude posts where the author's host matches the current node's host
+            # (i.e., exclude local posts)
+            author__host=current_host
+        ).order_by('-published')
+
         for post in queryset:
             post.rendered_content = render_post_content(post)
         return queryset
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["title"] = "Explore Public Posts"
+        context["title"] = "Explore Remote Posts"
+        context["subtitle"] = "Discover content from other nodes"
 
         # Include current author's id for the follow-remote form
         if self.request.user.is_authenticated:
@@ -976,6 +1091,7 @@ class FollowRemoteAuthorView(LoginRequiredMixin, View):
             messages.error(request, "That doesn't look like a valid URL.")
             return redirect("authors:follow_remote_author", author_id=author_id)
 
+        '''
         # If this URL already matches a local Author, just reuse it,
         # otherwise create a stub remote Author.
         author_defaults = {
@@ -983,10 +1099,15 @@ class FollowRemoteAuthorView(LoginRequiredMixin, View):
             "displayName": remote_author_url,  # you can customize later
             "host": f"{parsed.scheme}://{parsed.netloc}",
         }
-        remote_author, created = Author.objects.get_or_create(
-            url=remote_author_url,
-            defaults=author_defaults,
-        )
+
+        # Use shared normalization + deduping logic
+        author_data = {"id": remote_author_url}
+        remote_author = get_or_create_author(author_data)
+
+        if remote_author.id == request.user.id:
+            messages.error(request, "You cannot follow yourself.")
+            return redirect("authors:follow_remote_author", author_id=author_id)
+        '''
 
         # Reuse the existing API logic to send the Follow request to the remote inbox.
         # This runs SingleFollowingAPIView.put with the current request object.
@@ -1044,7 +1165,8 @@ def toggle_like(request, post_id):
     viewer = request.user
     author = post.author
 
-    if not (post.content or "").strip():
+    # Some remote nodes store images via the `image` FK and leave `content` empty,
+    if not (post.content or "").strip() and not getattr(post, 'image_id', None):
         return HttpResponse("Forbidden", status=403)
 
     # Check if viewer follows the post author
@@ -1317,6 +1439,14 @@ def upload_image(request):
                 data=img_file.read(),
             )
 
+            if request.user.is_authenticated:
+                request.user.profileImage = image
+                request.user.save(update_fields=["profileImage"])
+                try:
+                    notify_remote_author_update(request.user)
+                except Exception as e:
+                    print("Failed to notify remote on profile image change:", e)
+
             # Go back where the user came from
             if next_url:
                 return redirect(next_url)
@@ -1345,7 +1475,7 @@ def serve_image(request, image_id):
     )
 
 @csrf_exempt
-def receive_remote_image(request):
+def receive_image_api(request):
     """
     Receives an image pushed from a remote node.
     """
@@ -1455,6 +1585,11 @@ class NodeConfigurationView(LoginRequiredMixin, UserPassesTestMixin, View):
             for author in Author.objects.filter(host=base_url, url__isnull=True):
                 author.url = f"{base_url}/api/authors/{author.id}/"
                 author.save(update_fields=["url"])
+
+                try:
+                    notify_remote_author_update(author)
+                except Exception as e:
+                    print("Failed to notify remote on profile edit:", e)
 
             # Re-authenticate current user to keep them logged in
             from django.contrib.auth import login
