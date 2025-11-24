@@ -1165,7 +1165,8 @@ def toggle_like(request, post_id):
     viewer = request.user
     author = post.author
 
-    if not (post.content or "").strip():
+   # Some remote nodes store images via the `image` FK and leave `content` empty,
+    if not (post.content or "").strip() and not getattr(post, 'image_id', None):
         return HttpResponse("Forbidden", status=403)
 
     # Check if viewer follows the post author
