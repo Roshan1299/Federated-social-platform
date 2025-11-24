@@ -158,33 +158,38 @@ def reopen_follow_request(follow_request):
 def handle_follow_request(self, recipient, data, request):
     """
     Handle incoming follow request (incoming ActivityPub-like Follow).
-
-    Creates a stub Author for the actor if necessary and creates a
-    FollowRequest record (or returns existing one).
+    Prevents authors from following themselves even if the URL host changes.
     """
     try:
         actor_data = data.get('actor', {})
-        url = actor_data.get('id') or actor_data.get('url')
+        raw_url = actor_data.get('id') or actor_data.get('url')
 
-        if not url:
-            return JsonResponse({'error': 'Follow request must include actor with id/url'}, status=400)
+        if not raw_url:
+            return JsonResponse({'error': 'Follow request must include actor id/url'}, status=400)
 
-        # Ensure trailing slash for safety
-        if not url.endswith('/'):
-            url += '/'
-        actor_data['id'] = url
-
-        from .utils import normalize_remote_author_id
-
-        actor_canonical = normalize_remote_author_id(actor_data['id'])
-        recipient_canonical = normalize_remote_author_id(recipient.url)
-
-        # If user pastes their own API URL → block it
-        if actor_canonical.rstrip('/') == recipient_canonical.rstrip('/'):
-            return JsonResponse({'error': 'Author cannot follow themselves'}, status=400)
+        # Ensure trailing slash
+        if not raw_url.endswith('/'):
+            raw_url += '/'
+        actor_data['id'] = raw_url
 
         # ---------------------------------------------------------
+        # 🔥 REAL FIX — BLOCK SELF-FOLLOW USING UUID
+        # ---------------------------------------------------------
+        def extract_uuid(url):
+            try:
+                return url.rstrip("/").split("/")[-1]
+            except:
+                return None
 
+        actor_uuid = extract_uuid(raw_url)
+        recipient_uuid = str(recipient.id)
+
+        # UUID match → same person, block follow
+        if actor_uuid == recipient_uuid:
+            return JsonResponse({'error': 'Author cannot follow themselves'}, status=400)
+        # ---------------------------------------------------------
+
+        # Continue to process remote or local follow
         actor = get_or_create_author(actor_data)
 
         follow_request, created = FollowRequest.objects.get_or_create(
@@ -196,14 +201,17 @@ def handle_follow_request(self, recipient, data, request):
         if created:
             return JsonResponse({'message': 'Follow request created'}, status=201)
 
-        # If an existing request is present but not pending, reset it to PENDING
+        # Reopen if previously rejected/accepted
         if reopen_follow_request(follow_request):
             return JsonResponse({'message': 'Follow request re-opened'}, status=200)
 
         return JsonResponse({'message': 'Follow request already exists'}, status=200)
 
     except Exception as e:
-        return JsonResponse({'error': f'Failed to process follow request: {str(e)}'}, status=400)
+        return JsonResponse(
+            {'error': f'Failed to process follow request: {str(e)}'},
+            status=400
+        )
 
 
 def handle_unfollow(self, recipient, data, request):
