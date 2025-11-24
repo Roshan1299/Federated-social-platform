@@ -246,6 +246,8 @@ def send_to_remote_inboxes(author, payload: dict, post_visibility: str = 'PUBLIC
 
         # Build inbox URL using the remote author's canonical author URL
         inbox_url = inbox_url_for_remote(node, remote_author.url)
+        print(f"Sending to remote inbox: {inbox_url}")
+        print(f"Payload: {payload}")
 
         # Fire-and-forget; if a remote node fails, local behaviour is unaffected
         try:
