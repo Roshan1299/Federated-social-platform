@@ -5,6 +5,21 @@ from authors.utils.nodes import remote_post
 from django.urls import reverse
 from urllib.parse import urlparse
 
+def _base_from_url(url: str) -> str:
+    """
+    Given something like:
+      - 'https://crimson-node-utsha-...herokuapp.com/api/'
+    return:
+      - 'https://crimson-node-utsha-...herokuapp.com'
+    """
+    if not url:
+        return ""
+    parsed = urlparse(url)
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+    return url.rstrip("/")
+
+
 def notify_remote_author_update(author: Author):
     payload = {
         "type": "author",
@@ -20,14 +35,10 @@ def notify_remote_author_update(author: Author):
 
 
 def get_remote_node_for_author(author: Author):
-    # Take the author's host (e.g. "https://team-green.herokuapp.com")
-    host = (author.host or "").rstrip("/")
+    host = _base_from_url(author.host or "")
     if not host:
         return None
-
-    # Try to find matching RemoteNode row in our DB
     try:
-        # base_url is stored like "https://team-green.herokuapp.com"
         return RemoteNode.objects.get(base_url__icontains=host, enabled=True)
     except RemoteNode.DoesNotExist:
         return None
@@ -56,10 +67,15 @@ def get_remote_followers_and_friends(author):
     followers = Follow.objects.filter(following=author).select_related("follower")
     for f in followers:
         follower = f.follower
-        follower_host = (follower.host or "").rstrip("/")
+        follower_host_raw = (follower.host or "").rstrip("/")
+        follower_host = _base_from_url(follower_host_raw)
+
         if follower_host and follower_host != local_host:
             try:
-                node = RemoteNode.objects.get(base_url__icontains=follower_host, enabled=True)
+                node = RemoteNode.objects.get(
+                    base_url__icontains=follower_host,
+                    enabled=True,
+                )
                 results[follower.id] = (node, follower)
             except RemoteNode.DoesNotExist:
                 continue
@@ -68,16 +84,20 @@ def get_remote_followers_and_friends(author):
     following = Follow.objects.filter(follower=author).select_related("following")
     for f in following:
         followed_author = f.following
-        # Check for mutual follow
         if Follow.objects.filter(follower=followed_author, following=author).exists():
-            followed_host = (followed_author.host or "").rstrip("/")
+            followed_host_raw = (followed_author.host or "").rstrip("/")
+            followed_host = _base_from_url(followed_host_raw)
+
             if followed_host and followed_host != local_host:
                 try:
-                    node = RemoteNode.objects.get(base_url__icontains=followed_host, enabled=True)
+                    node = RemoteNode.objects.get(
+                        base_url__icontains=followed_host,
+                        enabled=True,
+                    )
                     results[followed_author.id] = (node, followed_author)
                 except RemoteNode.DoesNotExist:
                     continue
-    
+
     return list(results.values())
 
 # Build the remote inbox URL for a remote author
