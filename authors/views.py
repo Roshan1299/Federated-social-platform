@@ -1165,7 +1165,7 @@ def toggle_like(request, post_id):
     viewer = request.user
     author = post.author
 
-   # Some remote nodes store images via the `image` FK and leave `content` empty,
+    # Some remote nodes store images via the `image` FK and leave `content` empty,
     if not (post.content or "").strip() and not getattr(post, 'image_id', None):
         return HttpResponse("Forbidden", status=403)
 
