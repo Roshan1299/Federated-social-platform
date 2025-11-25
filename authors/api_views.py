@@ -672,7 +672,7 @@ class SingleFollowingAPIView(View):
 
             # create Follow if remote node accepted the request (prevents invalid fqids)
             if resp.status_code in (200, 201, 202, 204):
-                # Create the Follow relationship (idempotent)
+                # Create the Follow relationship immediately (idempotent).
                 follow, created = Follow.objects.get_or_create(follower=author, following=target)
                 return json_response(
                     {'message': 'Following created' if created else 'Already following'},
