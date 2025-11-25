@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.utils.translation import gettext_lazy as _
-from .models import Author, Post, Follow, Comment, Like, FollowRequest, CommentLike, RemoteNode
+from .models import Author, Post, Follow, Comment, Like, FollowRequest, CommentLike, RemoteNode, InboxReceipt
 from .models import Image
 
 class AuthorAdmin(UserAdmin):
@@ -66,6 +66,12 @@ class RemoteNodeAdmin(admin.ModelAdmin):
     search_fields = ('name', 'base_url')
     readonly_fields = ('created_at', 'updated_at')
 
+class InboxReceiptAdmin(admin.ModelAdmin):
+    list_display = ('id', 'recipient', 'post', 'received_at')
+    list_filter = ('received_at',)
+    search_fields = ('recipient__displayName', 'post__title')
+    readonly_fields = ('id', 'received_at')
+
 admin.site.register(Author, AuthorAdmin)
 admin.site.register(Post, PostAdmin)
 admin.site.register(Follow, FollowAdmin)
@@ -75,3 +81,4 @@ admin.site.register(FollowRequest, FollowRequestAdmin)
 admin.site.register(CommentLike, CommentLikeAdmin)
 admin.site.register(RemoteNode, RemoteNodeAdmin)
 admin.site.register(Image)
+admin.site.register(InboxReceipt, InboxReceiptAdmin)
