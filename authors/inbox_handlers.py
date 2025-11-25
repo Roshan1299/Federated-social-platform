@@ -172,9 +172,6 @@ def handle_follow_request(self, recipient, data, request):
             raw_url += '/'
         actor_data['id'] = raw_url
 
-        # ---------------------------------------------------------
-        # 🔥 REAL FIX — BLOCK SELF-FOLLOW USING UUID
-        # ---------------------------------------------------------
         def extract_uuid(url):
             try:
                 return url.rstrip("/").split("/")[-1]
