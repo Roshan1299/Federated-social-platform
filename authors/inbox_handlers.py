@@ -156,16 +156,16 @@ def reopen_follow_request(follow_request):
 
 
 def handle_follow_request(self, recipient, data, request):
-    """
-    Handle incoming follow request (incoming ActivityPub-like Follow).
-    Prevents authors from following themselves even if the URL host changes.
+    """Handle incoming follow request (incoming ActivityPub-like Follow).
+
+    Creates a stub Author for the actor if necessary and creates a
+    FollowRequest record (or returns existing one).
     """
     try:
         actor_data = data.get('actor', {})
-        raw_url = actor_data.get('id') or actor_data.get('url')
-
-        if not raw_url:
-            return JsonResponse({'error': 'Follow request must include actor id/url'}, status=400)
+        url = actor_data.get('id')
+        if not url:
+            return JsonResponse({'error': 'Follow request must include actor with id/url'}, status=400)
 
         # Ensure trailing slash
         if not raw_url.endswith('/'):
@@ -184,9 +184,7 @@ def handle_follow_request(self, recipient, data, request):
         # UUID match → same person, block follow
         if actor_uuid == recipient_uuid:
             return JsonResponse({'error': 'Author cannot follow themselves'}, status=400)
-        # ---------------------------------------------------------
-
-        # Continue to process remote or local follow
+        
         actor = get_or_create_author(actor_data)
 
         follow_request, created = FollowRequest.objects.get_or_create(
@@ -197,18 +195,14 @@ def handle_follow_request(self, recipient, data, request):
 
         if created:
             return JsonResponse({'message': 'Follow request created'}, status=201)
-
-        # Reopen if previously rejected/accepted
-        if reopen_follow_request(follow_request):
-            return JsonResponse({'message': 'Follow request re-opened'}, status=200)
-
-        return JsonResponse({'message': 'Follow request already exists'}, status=200)
+        else:
+            # If an existing request is present but not pending, reset it to PENDING
+            if reopen_follow_request(follow_request):
+                return JsonResponse({'message': 'Follow request re-opened'}, status=200)
+            return JsonResponse({'message': 'Follow request already exists'}, status=200)
 
     except Exception as e:
-        return JsonResponse(
-            {'error': f'Failed to process follow request: {str(e)}'},
-            status=400
-        )
+        return JsonResponse({'error': f'Failed to process follow request: {str(e)}'}, status=400)
 
 
 def handle_unfollow(self, recipient, data, request):
@@ -266,8 +260,10 @@ def handle_post(self, recipient, data, request):
         # NORMALIZE VISIBILITY
         # ---------------------------------------------------------
         visibility = (data.get("visibility") or "PUBLIC").upper()
-        if data.get("unlisted", False):
+        if "UNLISTED" in visibility or data.get("unlisted", False):
             visibility = "PUBLIC_UNLISTED"
+        elif "FRIENDS" in visibility:
+            visibility = "FRIENDS"
 
         # ---------------------------------------------------------
         # IMAGE HANDLING

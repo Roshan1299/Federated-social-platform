@@ -139,6 +139,11 @@ def build_profile_image_url(author):
 
 # Convert Post to JSON for remote sending
 def build_post_payload(post: Post) -> dict:
+    # Convert PUBLIC_UNLISTED to UNLISTED for remote nodes
+    visibility = post.visibility
+    if visibility == "PUBLIC_UNLISTED":
+        visibility = "UNLISTED"
+    
     payload = {
         "type": "entry",
         "id": post.origin,
@@ -148,7 +153,7 @@ def build_post_payload(post: Post) -> dict:
         "description": post.description if post.description else "", 
         "content": post.content,
         "contentType": post.contentType,
-        "visibility": post.visibility,
+        "visibility": visibility,
         "published": post.published.isoformat(),
         "updated": post.updated.isoformat(),
         "author": {
