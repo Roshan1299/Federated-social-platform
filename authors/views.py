@@ -26,14 +26,13 @@ from django.contrib.auth import authenticate
 from .forms import ImageUploadForm
 from .models import Image
 from .inbox_handlers import reopen_follow_request, get_or_create_author
-from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post, send_unfollow_to_remote_author, notify_remote_comment, notify_remote_author_update
+from .utils.federation import notify_remote_new_post, notify_remote_edit_post, notify_remote_delete_post, send_unfollow_to_remote_author, notify_remote_comment, notify_remote_author_update, notify_remote_comment_like
 import uuid
 import urllib.parse
 import requests
 import logging
 from django.conf import settings
 from .api_views import SingleFollowingAPIView
-from authors.utils.remote_read import sync_remote_comments_for_post, sync_remote_likes_for_post, sync_remote_comment_likes_for_post, fetch_and_sync_remote_posts
 from authors.utils.remote_read import sync_remote_comments_for_post, sync_remote_likes_for_post, sync_remote_comment_likes_for_post, fetch_and_sync_remote_posts
 from authors.utils.federation import send_comment_to_post_owner, send_like_to_post_owner, send_comment_like_to_post_owner
 

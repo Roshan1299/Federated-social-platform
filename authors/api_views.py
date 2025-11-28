@@ -30,6 +30,7 @@ from .utils.federation import (
     notify_remote_delete_post,
     send_unfollow_to_remote_author,
     notify_remote_author_update,
+    send_comment_like_to_post_owner,
 )
 import requests
 import urllib.parse
@@ -1255,6 +1256,44 @@ class CommentLikesAPIView(View):
         }
 
         return JsonResponse(response_data)
+    
+    @method_decorator(csrf_exempt)
+    def post(self, request, author_id=None, entry_id=None, comment_id=None, comment_fqid=None):
+        """
+        Create a like on a specific comment (local action).
+        Also sends the ActivityPub 'Like' to the remote owner(s)
+        of the comment / post.
+        """
+        # 1) Auth check – only logged-in users can like
+        if not request.user.is_authenticated:
+            return HttpResponse("Forbidden", status=403)
+
+        liker = request.user
+
+        # 2) Resolve the comment the same way as in GET
+        comment = _get_comment_by_id_or_fqid(
+            comment_id=comment_id,
+            comment_fqid=comment_fqid,
+            author_id=author_id,
+            entry_id=entry_id,
+        )
+
+        # 3) Avoid duplicate likes from the same user on the same comment
+        comment_like, created = CommentLike.objects.get_or_create(
+            author=liker,
+            comment=comment,
+        )
+
+        # 4) On first creation, send to remote node(s)
+        # CommentLike.save() will auto-fill .origin for local likes
+        if created:
+            send_comment_like_to_post_owner(comment_like)
+
+        # 5) Return JSON for the like (same shape as your GET)
+        return JsonResponse(
+            build_comment_like_dict(comment_like, request),
+            status=201 if created else 200,
+        )
 
 
 @method_decorator(http_basic_auth_or_session, name='dispatch')

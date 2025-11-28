@@ -1,6 +1,6 @@
 from django.conf import settings
 
-from authors.models import Follow, RemoteNode, Post, Comment, Like, Author
+from authors.models import Follow, RemoteNode, Post, Comment, Like, Author, CommentLike
 from authors.utils.nodes import remote_post
 from django.urls import reverse
 from urllib.parse import urlparse
@@ -348,6 +348,11 @@ def notify_remote_comment(comment: Comment):
 def notify_remote_like(like: Like):
     payload = build_like_payload(like)
     send_to_remote_inboxes(like.author, payload)
+
+# Called when a comment like is created
+def notify_remote_comment_like(comment_like: CommentLike):
+    payload = build_comment_like_payload(comment_like)
+    send_to_remote_inboxes(comment_like.author, payload)
 
 # Send a comment to the original author's remote inbox
 def send_comment_to_post_owner(comment: Comment) -> bool:
