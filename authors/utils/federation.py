@@ -425,24 +425,41 @@ def send_like_to_post_owner(like: Like) -> bool:
     )
 
 def send_comment_like_to_post_owner(comment_like) -> bool:
-    # The comment being liked
     comment = comment_like.comment
-    remote_author = comment.author
+    post = comment.post
 
-    # Find remote node for this comment author
-    node = get_remote_node_for_author(remote_author)
-    if not node:
-        return False  # remote node not registered
+    local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+    sent_any = False
 
-    # Build inbox URL of comment author
-    inbox_url = inbox_url_for_remote(node, remote_author.url)
+    # 1) Notify remote comment author
+    comment_author = comment.author
+    comment_host = (comment_author.host or "").rstrip("/")
+    if comment_host and comment_host != local_host:
+        node = get_remote_node_for_author(comment_author)
+        if node:
+            inbox_url = inbox_url_for_remote(node, comment_author.url)
+            payload = build_comment_like_payload(comment_like)
+            ok = remote_post(
+                url=inbox_url,
+                payload=payload,
+                base_url=node.base_url,
+            )
+            sent_any = sent_any or ok
 
-    # Build payload
-    payload = build_comment_like_payload(comment_like)
+    # 2) Notify remote post author (only if different from comment author)
+    post_author = post.author
+    post_host = (post_author.host or "").rstrip("/")
+    if post_author != comment_author and post_host and post_host != local_host:
+        node = get_remote_node_for_author(post_author)
+        if node:
+            inbox_url = inbox_url_for_remote(node, post_author.url)
+            payload = build_comment_like_payload(comment_like)
+            ok = remote_post(
+                url=inbox_url,
+                payload=payload,
+                base_url=node.base_url,
+            )
+            sent_any = sent_any or ok
 
-    # Send to remote node
-    return remote_post(
-        url=inbox_url,
-        payload=payload,
-        base_url=node.base_url,
-    )
+    return sent_any
+

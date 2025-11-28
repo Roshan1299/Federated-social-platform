@@ -1350,15 +1350,19 @@ def toggle_comment_like(request, comment_id):
         # If new like --> add it
         messages.success(request, "Liked comment.")
 
-    # If this post belongs to a REMOTE node, notify that node
+    # Notify remote nodes if the comment author or post author is remote
     local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
     comment_host = (comment.author.host or "").rstrip("/")
+    post_host = (author.host or "").rstrip("/")
 
-    if comment_host and comment_host != local_host:
+    if (
+        (comment_host and comment_host != local_host) or
+        (post_host and post_host != local_host)
+    ):
         send_comment_like_to_post_owner(comment_like)
-        
 
     return redirect('authors:post_detail', post_id=post.id)
+
 
 def push_image_to_remote_nodes(image_obj):
     REMOTE_NODES = getattr(settings, "REMOTE_NODES", [])
