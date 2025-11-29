@@ -362,7 +362,7 @@ def notify_remote_delete_post(post: Post):
             "github": post.author.github,
         },
     }
-    send_to_remote_inboxes(post.author, payload, post.visibility)
+    send_to_remote_inboxes(post.author, payload, "PUBLIC")
 
 # Called when a comment is created
 def notify_remote_comment(comment: Comment):
