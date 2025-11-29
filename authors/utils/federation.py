@@ -254,6 +254,7 @@ def build_comment_like_payload(comment_like):
         "object": comment_url,
         "summary": f"{liker.displayName} likes your comment",
         "author": {
+            "type": "author",  
             "id": liker.url,
             "host": liker.host,
             "displayName": liker.displayName,
