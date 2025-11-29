@@ -76,6 +76,7 @@ class Post(models.Model):
         ('PUBLIC', 'Public'),
         ('PUBLIC_UNLISTED', 'Public Unlisted'),
         ('FRIENDS', 'Friends Only'),
+        ('DELETED', 'Deleted'),
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

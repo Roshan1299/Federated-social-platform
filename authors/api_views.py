@@ -1059,6 +1059,7 @@ class SingleEntryAPIView(View):
             return HttpResponse("Forbidden", status=403)
         
         post.deleted = True
+        post.visibility = 'DELETED'
         post.save()
 
         # Notify remote followers about the deleted post (User Story 2)

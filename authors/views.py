@@ -317,6 +317,7 @@ class DeletePostView(LoginRequiredMixin, UserPassesTestMixin, View):
         post = get_object_or_404(Post, id=post_id)
         if self.request.user == post.author:
             post.deleted = True
+            post.visibility = 'DELETED'
             post.save()
 
             # Notify remote followers about the deleted post
