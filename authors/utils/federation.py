@@ -222,17 +222,42 @@ def build_like_payload(like: Like) -> dict:
 def build_comment_like_payload(comment_like):
     """
     Convert a CommentLike into JSON for remote nodes.
+    Ensures both `id` and `object` are non-empty, stable URLs.
     """
+    comment = comment_like.comment
+    author  = comment_like.author
+    liker   = comment_like.author
+
+    # ---- Build a stable comment URL (used as `object`) ----
+    base = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+
+    # If this comment already has an origin, use it.
+    # Otherwise, give it a canonical commented URL and persist it.
+    if comment.origin:
+        comment_url = comment.origin
+    else:
+        comment_url = f"{base}/api/authors/{comment.author.id}/commented/{comment.id}"
+        comment.origin = comment_url
+        comment.save(update_fields=["origin"])
+
+    # ---- Build a stable like URL (used as `id`) ----
+    if comment_like.origin:
+        like_id_url = comment_like.origin
+    else:
+        like_id_url = f"{base}/api/authors/{liker.id}/liked/{comment_like.id}"
+        comment_like.origin = like_id_url
+        comment_like.save(update_fields=["origin"])
+
     return {
         "type": "like",
-        "id": comment_like.origin,
-        "object": comment_like.comment.origin,   # <--- 댓글의 origin
-        "summary": f"{comment_like.author.displayName} likes your comment",
+        "id": like_id_url,
+        "object": comment_url,
+        "summary": f"{liker.displayName} likes your comment",
         "author": {
-            "id": comment_like.author.url,
-            "host": comment_like.author.host,
-            "displayName": comment_like.author.displayName,
-            "url": comment_like.author.url,
+            "id": liker.url,
+            "host": liker.host,
+            "displayName": liker.displayName,
+            "url": liker.url,
         },
     }
 
