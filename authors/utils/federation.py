@@ -188,35 +188,11 @@ def build_post_payload(post: Post) -> dict:
 
 # Convert a Comment into JSON for remote nodes
 def build_comment_payload(comment: Comment) -> dict:
-    """
-    Build a federation-safe ActivityPub-ish comment payload.
-
-    - Uses 'object' (NOT 'entry') to point to the post being commented on.
-    - Ensures 'id' is a stable URL (comment.origin); if missing, we generate one
-      from BASE_URL and store it back into comment.origin.
-    """
-    base = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
-
-    # 1) Ensure the comment itself has a canonical id (origin)
-    comment_id = comment.origin
-    if not comment_id:
-        # This URL does not have to be an actual endpoint; it just needs to be stable.
-        comment_id = f"{base}/api/authors/{comment.author.id}/commented/{comment.id}"
-        comment.origin = comment_id
-        comment.save(update_fields=["origin"])
-
-    # 2) Target object is the *post* FQID
-    post = comment.post
-    object_id = post.origin
-    if not object_id:
-        # Fall back to our standard entry URL if origin is missing
-        object_id = f"{base}/api/authors/{post.author.id}/entries/{post.id}"
-
     return {
         "type": "comment",
-        "id": comment_id,
+        "id": comment.origin,
         "comment": comment.content,
-        "object": object_id,        # <-- IMPORTANT: use 'object' here
+        "entry": comment.post.origin,
         "published": comment.created_at.isoformat(),
         "author": {
             "type": "author",
