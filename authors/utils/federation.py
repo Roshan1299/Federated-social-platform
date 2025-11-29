@@ -262,6 +262,16 @@ def build_comment_like_payload(comment_like):
         },
     }
 
+def build_comment_unlike_payload(comment_like):
+    """
+    Payload to tell a remote node that this comment-like should be removed.
+    Reuses the same id/object as the original like, but marks it as deleted.
+    Remote nodes must implement logic to delete the corresponding Like.
+    """
+    payload = build_comment_like_payload(comment_like)
+    payload["deleted"] = True
+    return payload
+
 
 
 def send_to_remote_inboxes(author, payload: dict, post_visibility: str = 'PUBLIC'):
@@ -493,4 +503,48 @@ def send_comment_like_to_post_owner(comment_like) -> bool:
             sent_any = sent_any or ok
 
     return sent_any
+
+def send_comment_unlike_to_post_owner(comment_like) -> bool:
+    """
+    Notify remote comment/post owner that this like has been removed.
+    Does nothing if the author is local.
+    """
+    comment = comment_like.comment
+    post = comment.post
+
+    local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+    sent_any = False
+
+    # 1) Notify remote comment author
+    comment_author = comment.author
+    comment_host = (comment_author.host or "").rstrip("/")
+    if comment_host and comment_host != local_host:
+        node = get_remote_node_for_author(comment_author)
+        if node:
+            inbox_url = inbox_url_for_remote(node, comment_author.url)
+            payload = build_comment_unlike_payload(comment_like)
+            ok = remote_post(
+                url=inbox_url,
+                payload=payload,
+                base_url=node.base_url,
+            )
+            sent_any = sent_any or ok
+
+    # 2) Notify remote post author if different
+    post_author = post.author
+    post_host = (post_author.host or "").rstrip("/")
+    if post_author != comment_author and post_host and post_host != local_host:
+        node = get_remote_node_for_author(post_author)
+        if node:
+            inbox_url = inbox_url_for_remote(node, post_author.url)
+            payload = build_comment_unlike_payload(comment_like)
+            ok = remote_post(
+                url=inbox_url,
+                payload=payload,
+                base_url=node.base_url,
+            )
+            sent_any = sent_any or ok
+
+    return sent_any
+
 

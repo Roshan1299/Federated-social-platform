@@ -31,6 +31,7 @@ from .utils.federation import (
     send_unfollow_to_remote_author,
     notify_remote_author_update,
     send_comment_like_to_post_owner,
+    send_comment_unlike_to_post_owner
 )
 import requests
 import urllib.parse
@@ -1282,23 +1283,33 @@ class CommentLikesAPIView(View):
             author_id=author_id,
             entry_id=entry_id,
         )
+        try:
+            comment_like = CommentLike.objects.get(author=liker, comment=comment)
+            # Already liked → this request means UNLIKE (toggle off)
+            # Send "unlike" to remote owners before deleting locally
+            send_comment_unlike_to_post_owner(comment_like)
+            comment_like.delete()
 
-        # 3) Avoid duplicate likes from the same user on the same comment
-        comment_like, created = CommentLike.objects.get_or_create(
-            author=liker,
-            comment=comment,
-        )
+            return JsonResponse(
+                {"status": "unliked"},
+                status=200,
+            )
 
-        # 4) On first creation, send to remote node(s)
-        # CommentLike.save() will auto-fill .origin for local likes
-        if created:
+        except CommentLike.DoesNotExist:
+            # No existing like → create one (LIKE)
+            comment_like = CommentLike.objects.create(
+                author=liker,
+                comment=comment,
+            )
+            # first creation: send to remote owner(s)
             send_comment_like_to_post_owner(comment_like)
 
-        # 5) Return JSON for the like (same shape as your GET)
-        return JsonResponse(
-            build_comment_like_dict(comment_like, request),
-            status=201 if created else 200,
-        )
+            return JsonResponse(
+                build_comment_like_dict(comment_like, request),
+                status=201,
+            )
+
+            
 
 
 @method_decorator(http_basic_auth_or_session, name='dispatch')
