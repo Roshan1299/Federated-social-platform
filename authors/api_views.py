@@ -280,6 +280,10 @@ def can_access_post(post, request):
     For remote requests (detected by lack of local authentication):
     - Only PUBLIC and PUBLIC_UNLISTED posts are accessible
     """
+    # Always deny access if the post is marked as deleted
+    if post.deleted or post.visibility == "DELETED":
+        return False
+        
     # PUBLIC and PUBLIC_UNLISTED are always accessible
     if post.visibility in ['PUBLIC', 'PUBLIC_UNLISTED']:
         return True
