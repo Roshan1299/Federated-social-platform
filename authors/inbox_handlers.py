@@ -343,6 +343,7 @@ def handle_post(self, recipient, data, request):
 
             if data.get("deleted", False):
                 existing_post.deleted = True
+                existing_post.visibility = "DELETED"
 
             if local_image:
                 existing_post.image = local_image
@@ -359,6 +360,10 @@ def handle_post(self, recipient, data, request):
         # ---------------------------------------------------------
         # NEW POST
         # ---------------------------------------------------------
+        # If a post is marked as deleted but we've never seen it, ignore it.
+        if data.get("deleted", False):
+            return JsonResponse({"message": "Ignoring deleted post we have never seen"}, status=200)
+
         author_data = data.get("author", {})
         if not author_data:
             return JsonResponse({"error": "Post must include author"}, status=400)

@@ -1,6 +1,6 @@
 from django.conf import settings
 
-from authors.models import Follow, RemoteNode, Post, Comment, Like, Author
+from authors.models import Follow, RemoteNode, Post, Comment, Like, Author, CommentLike
 from authors.utils.nodes import remote_post
 from django.urls import reverse
 from urllib.parse import urlparse
@@ -222,19 +222,55 @@ def build_like_payload(like: Like) -> dict:
 def build_comment_like_payload(comment_like):
     """
     Convert a CommentLike into JSON for remote nodes.
+    Ensures both `id` and `object` are non-empty, stable URLs.
     """
+    comment = comment_like.comment
+    author  = comment_like.author
+    liker   = comment_like.author
+
+    # ---- Build a stable comment URL (used as `object`) ----
+    base = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+
+    # If this comment already has an origin, use it.
+    # Otherwise, give it a canonical commented URL and persist it.
+    if comment.origin:
+        comment_url = comment.origin
+    else:
+        comment_url = f"{base}/api/authors/{comment.author.id}/commented/{comment.id}"
+        comment.origin = comment_url
+        comment.save(update_fields=["origin"])
+
+    # ---- Build a stable like URL (used as `id`) ----
+    if comment_like.origin:
+        like_id_url = comment_like.origin
+    else:
+        like_id_url = f"{base}/api/authors/{liker.id}/liked/{comment_like.id}"
+        comment_like.origin = like_id_url
+        comment_like.save(update_fields=["origin"])
+
     return {
         "type": "like",
-        "id": comment_like.origin,
-        "object": comment_like.comment.origin,   # <--- 댓글의 origin
-        "summary": f"{comment_like.author.displayName} likes your comment",
+        "id": like_id_url,
+        "object": comment_url,
+        "summary": f"{liker.displayName} likes your comment",
         "author": {
-            "id": comment_like.author.url,
-            "host": comment_like.author.host,
-            "displayName": comment_like.author.displayName,
-            "url": comment_like.author.url,
+            "type": "author",  
+            "id": liker.url,
+            "host": liker.host,
+            "displayName": liker.displayName,
+            "url": liker.url,
         },
     }
+
+def build_comment_unlike_payload(comment_like):
+    """
+    Payload to tell a remote node that this comment-like should be removed.
+    Reuses the same id/object as the original like, but marks it as deleted.
+    Remote nodes must implement logic to delete the corresponding Like.
+    """
+    payload = build_comment_like_payload(comment_like)
+    payload["deleted"] = True
+    return payload
 
 
 
@@ -337,7 +373,7 @@ def notify_remote_delete_post(post: Post):
             "github": post.author.github,
         },
     }
-    send_to_remote_inboxes(post.author, payload, post.visibility)
+    send_to_remote_inboxes(post.author, payload, "PUBLIC")
 
 # Called when a comment is created
 def notify_remote_comment(comment: Comment):
@@ -348,6 +384,11 @@ def notify_remote_comment(comment: Comment):
 def notify_remote_like(like: Like):
     payload = build_like_payload(like)
     send_to_remote_inboxes(like.author, payload)
+
+# Called when a comment like is created
+def notify_remote_comment_like(comment_like: CommentLike):
+    payload = build_comment_like_payload(comment_like)
+    send_to_remote_inboxes(comment_like.author, payload)
 
 # Send a comment to the original author's remote inbox
 def send_comment_to_post_owner(comment: Comment) -> bool:
@@ -425,24 +466,85 @@ def send_like_to_post_owner(like: Like) -> bool:
     )
 
 def send_comment_like_to_post_owner(comment_like) -> bool:
-    # The comment being liked
     comment = comment_like.comment
-    remote_author = comment.author
+    post = comment.post
 
-    # Find remote node for this comment author
-    node = get_remote_node_for_author(remote_author)
-    if not node:
-        return False  # remote node not registered
+    local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+    sent_any = False
 
-    # Build inbox URL of comment author
-    inbox_url = inbox_url_for_remote(node, remote_author.url)
+    # 1) Notify remote comment author
+    comment_author = comment.author
+    comment_host = (comment_author.host or "").rstrip("/")
+    if comment_host and comment_host != local_host:
+        node = get_remote_node_for_author(comment_author)
+        if node:
+            inbox_url = inbox_url_for_remote(node, comment_author.url)
+            payload = build_comment_like_payload(comment_like)
+            ok = remote_post(
+                url=inbox_url,
+                payload=payload,
+                base_url=node.base_url,
+            )
+            sent_any = sent_any or ok
 
-    # Build payload
-    payload = build_comment_like_payload(comment_like)
+    # 2) Notify remote post author (only if different from comment author)
+    post_author = post.author
+    post_host = (post_author.host or "").rstrip("/")
+    if post_author != comment_author and post_host and post_host != local_host:
+        node = get_remote_node_for_author(post_author)
+        if node:
+            inbox_url = inbox_url_for_remote(node, post_author.url)
+            payload = build_comment_like_payload(comment_like)
+            ok = remote_post(
+                url=inbox_url,
+                payload=payload,
+                base_url=node.base_url,
+            )
+            sent_any = sent_any or ok
 
-    # Send to remote node
-    return remote_post(
-        url=inbox_url,
-        payload=payload,
-        base_url=node.base_url,
-    )
+    return sent_any
+
+def send_comment_unlike_to_post_owner(comment_like) -> bool:
+    """
+    Notify remote comment/post owner that this like has been removed.
+    Does nothing if the author is local.
+    """
+    comment = comment_like.comment
+    post = comment.post
+
+    local_host = (getattr(settings, "BASE_URL", "") or "").rstrip("/")
+    sent_any = False
+
+    # 1) Notify remote comment author
+    comment_author = comment.author
+    comment_host = (comment_author.host or "").rstrip("/")
+    if comment_host and comment_host != local_host:
+        node = get_remote_node_for_author(comment_author)
+        if node:
+            inbox_url = inbox_url_for_remote(node, comment_author.url)
+            payload = build_comment_unlike_payload(comment_like)
+            ok = remote_post(
+                url=inbox_url,
+                payload=payload,
+                base_url=node.base_url,
+            )
+            sent_any = sent_any or ok
+
+    # 2) Notify remote post author if different
+    post_author = post.author
+    post_host = (post_author.host or "").rstrip("/")
+    if post_author != comment_author and post_host and post_host != local_host:
+        node = get_remote_node_for_author(post_author)
+        if node:
+            inbox_url = inbox_url_for_remote(node, post_author.url)
+            payload = build_comment_unlike_payload(comment_like)
+            ok = remote_post(
+                url=inbox_url,
+                payload=payload,
+                base_url=node.base_url,
+            )
+            sent_any = sent_any or ok
+
+    return sent_any
+
+

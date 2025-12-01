@@ -30,6 +30,8 @@ from .utils.federation import (
     notify_remote_delete_post,
     send_unfollow_to_remote_author,
     notify_remote_author_update,
+    send_comment_like_to_post_owner,
+    send_comment_unlike_to_post_owner
 )
 import requests
 import urllib.parse
@@ -279,6 +281,10 @@ def can_access_post(post, request):
     For remote requests (detected by lack of local authentication):
     - Only PUBLIC and PUBLIC_UNLISTED posts are accessible
     """
+    # Always deny access if the post is marked as deleted
+    if post.deleted or post.visibility == "DELETED":
+        return False
+        
     # PUBLIC and PUBLIC_UNLISTED are always accessible
     if post.visibility in ['PUBLIC', 'PUBLIC_UNLISTED']:
         return True
@@ -670,7 +676,8 @@ class SingleFollowingAPIView(View):
                     status=502
                 )
 
-            if resp.status_code in (200, 201):
+            # create Follow if remote node accepted the request (prevents invalid fqids)
+            if resp.status_code in (200, 201, 202, 204):
                 # Create the Follow relationship immediately (idempotent).
                 follow, created = Follow.objects.get_or_create(follower=author, following=target)
                 return json_response(
@@ -1057,6 +1064,7 @@ class SingleEntryAPIView(View):
             return HttpResponse("Forbidden", status=403)
         
         post.deleted = True
+        post.visibility = 'DELETED'
         post.save()
 
         # Notify remote followers about the deleted post (User Story 2)
@@ -1254,6 +1262,54 @@ class CommentLikesAPIView(View):
         }
 
         return JsonResponse(response_data)
+    
+    @method_decorator(csrf_exempt)
+    def post(self, request, author_id=None, entry_id=None, comment_id=None, comment_fqid=None):
+        """
+        Create a like on a specific comment (local action).
+        Also sends the ActivityPub 'Like' to the remote owner(s)
+        of the comment / post.
+        """
+        # 1) Auth check – only logged-in users can like
+        if not request.user.is_authenticated:
+            return HttpResponse("Forbidden", status=403)
+
+        liker = request.user
+
+        # 2) Resolve the comment the same way as in GET
+        comment = _get_comment_by_id_or_fqid(
+            comment_id=comment_id,
+            comment_fqid=comment_fqid,
+            author_id=author_id,
+            entry_id=entry_id,
+        )
+        try:
+            comment_like = CommentLike.objects.get(author=liker, comment=comment)
+            # Already liked → this request means UNLIKE (toggle off)
+            # Send "unlike" to remote owners before deleting locally
+            send_comment_unlike_to_post_owner(comment_like)
+            comment_like.delete()
+
+            return JsonResponse(
+                {"status": "unliked"},
+                status=200,
+            )
+
+        except CommentLike.DoesNotExist:
+            # No existing like → create one (LIKE)
+            comment_like = CommentLike.objects.create(
+                author=liker,
+                comment=comment,
+            )
+            # first creation: send to remote owner(s)
+            send_comment_like_to_post_owner(comment_like)
+
+            return JsonResponse(
+                build_comment_like_dict(comment_like, request),
+                status=201,
+            )
+
+            
 
 
 @method_decorator(http_basic_auth_or_session, name='dispatch')
