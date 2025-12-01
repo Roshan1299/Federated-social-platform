@@ -100,6 +100,58 @@ def get_remote_followers_and_friends(author):
 
     return list(results.values())
 
+def get_remote_connected_authors():
+    """
+    Return (RemoteNode, remote_author) for every *remote* author
+    who follows at least one *local* author.
+
+    This is used for node-level sharing of PUBLIC posts:
+    - If remote_author follows ANY author on our node,
+      they get ALL PUBLIC posts from our node.
+    """
+    local_base = _base_from_url(getattr(settings, "BASE_URL", "")) or ""
+    results = {}
+
+    # All follows where the follower is remote and the following is local
+    follows = (
+        Follow.objects
+        .select_related("follower", "following")
+        .all()
+    )
+
+    for f in follows:
+        remote_author = f.follower
+        local_author  = f.following
+
+        # Safeguard in case host is missing
+        remote_host = _base_from_url(remote_author.host or "")
+        local_host  = _base_from_url(local_author.host or "")
+
+        # We only care about: remote -> local
+        if not remote_host or not local_host:
+            continue
+
+        # local_host == our BASE_URL (this is our node)
+        if local_base and local_host.rstrip("/") != local_base.rstrip("/"):
+            continue
+
+        # remote_host must be different from our node
+        if remote_host.rstrip("/") == local_base.rstrip("/"):
+            continue
+
+        try:
+            node = RemoteNode.objects.get(
+                base_url__icontains=remote_host,
+                enabled=True,
+            )
+        except RemoteNode.DoesNotExist:
+            continue
+
+        # Deduplicate per remote author
+        results[remote_author.id] = (node, remote_author)
+
+    return list(results.values())
+
 # Build the remote inbox URL for a remote author
 def inbox_url_for_remote(node: RemoteNode, remote_author_url: str) -> str:
     author_id = remote_author_url.rstrip("/").split("/")[-1]
@@ -273,44 +325,51 @@ def build_comment_unlike_payload(comment_like):
     return payload
 
 
+def send_to_remote_inboxes(author, payload: dict, post_visibility: str = "PUBLIC"):
+    """
+    Sends payload to remote inboxes based on visibility.
 
-def send_to_remote_inboxes(author, payload: dict, post_visibility: str = 'PUBLIC'):
-    # PUBLIC_UNLISTED posts should be sent to followers' inboxes like PUBLIC posts
-    # Only FRIENDS posts have special restrictions
-    if post_visibility == 'FRIENDS':
-        # Will be handled by the friend-specific logic below
-        pass  # Continue to processing
-    elif post_visibility == 'PUBLIC_UNLISTED':
-        # Send to all followers (both local and remote), same as PUBLIC
-        pass  # Continue to processing  
-    elif post_visibility == 'PUBLIC':
-        # Send to all followers (both local and remote)
-        pass  # Continue to processing
+    - PUBLIC:
+        → send to *all remote authors who follow at least one local author*
+          (node-level sharing)
+    - PUBLIC_UNLISTED:
+        → send only to remote followers/friends of *this* author
+    - FRIENDS:
+        → send only to remote mutual friends of *this* author
+    """
+
+    # Ignore weird visibilities early
+    if post_visibility not in ("PUBLIC", "PUBLIC_UNLISTED", "FRIENDS"):
+        return
+
+    # Choose recipient set
+    if post_visibility == "FRIENDS":
+        # Same behaviour as before: follower + mutual follow check
+        recipients = get_remote_followers_and_friends(author)
+    elif post_visibility == "PUBLIC_UNLISTED":
+        # Only followers of this author, not node-wide
+        recipients = get_remote_followers_and_friends(author)
+    elif post_visibility == "PUBLIC":
+        # 🔑 New behaviour:
+        # Any remote author who follows at least ONE local author on this node
+        recipients = get_remote_connected_authors()
     else:
-        return  # For any other unexpected visibilities
-
-    recipients = get_remote_followers_and_friends(author)
+        return
 
     for node, remote_author in recipients:
-        # For FRIENDS posts, only send to friends (mutual follows), not to followers
-        if post_visibility == 'FRIENDS':
-            # Check if this is a mutual follow (friend relationship)
-            # remote_author follows the post author, and post author follows remote_author
-            is_friend = (
-                # Check if remote_author follows the post author (they are in followers/friends list, so this is true)
-                # AND check if post author follows remote_author back (mutual)
-                Follow.objects.filter(follower=author, following=remote_author).exists()
-            )
-            
+        # Extra restriction for FRIENDS: require mutual follow
+        if post_visibility == "FRIENDS":
+            is_friend = Follow.objects.filter(
+                follower=author,
+                following=remote_author,
+            ).exists()
             if not is_friend:
-                continue  # Skip non-friends for FRIENDS posts
+                continue
 
-        # Build inbox URL using the remote author's canonical author URL
         inbox_url = inbox_url_for_remote(node, remote_author.url)
         print(f"Sending to remote inbox: {inbox_url}")
         print(f"Payload: {payload}")
 
-        # Fire-and-forget; if a remote node fails, local behaviour is unaffected
         try:
             remote_post(
                 url=inbox_url,
