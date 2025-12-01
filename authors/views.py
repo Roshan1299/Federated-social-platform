@@ -276,17 +276,16 @@ class EditPostView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
         
         # Handle image content type
         content_type = form.cleaned_data.get('contentType')
+
         if content_type == 'image':
+            
             image_obj = form.cleaned_data.get('image')
             if image_obj:
-                # Encode image data as base64
                 image_data_bytes = bytes(image_obj.data)
                 base64_encoded = base64.b64encode(image_data_bytes).decode('utf-8')
-                
-                # Set content to base64 string
+
                 form.instance.content = base64_encoded
-                
-                # Set contentType based on image's content_type
+
                 img_content_type = image_obj.content_type.lower()
                 if 'png' in img_content_type:
                     form.instance.contentType = 'image/png;base64'
@@ -294,11 +293,16 @@ class EditPostView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
                     form.instance.contentType = 'image/jpeg;base64'
                 else:
                     form.instance.contentType = 'application/base64'
-        
-        # Call the parent form_valid to save the post
+        else:
+            # Switched away from image -> drop any existing image
+            form.instance.image = None
+            # contentType will already be 'text/plain' or 'text/markdown'
+            # from the form, so no extra change needed there.
+
+        # Save as usual
         response = super().form_valid(form)
 
-        # Notify remote followers and friends about the edited post
+        # Notify remotes
         notify_remote_edit_post(self.object)
 
         return response
