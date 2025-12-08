@@ -19,6 +19,11 @@ See [the web page](https://uofa-cmput404.github.io/general/project.html) for a d
 
 Make a distributed social network!
 
+## Darkblue - Promotional Video
+
+https://github.com/user-attachments/assets/ecb2816d-3781-4ab2-98e8-0d5b76a181b5
+
+
 ## Running the Project Locally
 
 Follow these steps to set up and run the development server. It is recommended to run these commands within an activated virtual environment.
