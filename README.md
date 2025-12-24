@@ -3,6 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
 [![Django](https://img.shields.io/badge/Django-4.2%2B-brightgreen.svg)](https://www.djangoproject.com/)
+[<img src="https://devin.ai/assets/deepwiki-badge.png" alt="Ask DeepWiki.com" height="20"/>](https://deepwiki.com/Roshan1299/Federated-social-platform)
 
 A distributed social networking system that enables multiple independent nodes to communicate with each other, similar to platforms like Diaspora. This project provides a decentralized alternative to centralized social media platforms.
 
