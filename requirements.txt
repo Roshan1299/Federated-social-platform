@@ -1,15 +1,30 @@
-asgiref==3.9.2
-certifi==2025.10.5
-charset-normalizer==3.4.4
-dj-database-url==3.0.1
+# Django Web Framework
 Django==4.2.25
-gunicorn==23.0.0
-idna==3.11
-Markdown==3.7
-packaging==25.0
-pillow==11.3.0
-psycopg2-binary==2.9.11
-requests==2.32.5
-sqlparse==0.5.3
-urllib3==2.5.0
-whitenoise==6.11.0
+
+# Database and Database Utilities
+psycopg2-binary==2.9.11  # PostgreSQL adapter for production
+dj-database-url==3.0.1   # Database URL parsing
+
+# Web Server and Deployment
+gunicorn==23.0.0         # Production WSGI server
+
+# Static File Serving
+whitenoise==6.11.0       # Static file serving for Django
+
+# HTTP Requests
+requests==2.32.5         # HTTP library for making requests
+
+# Image Processing
+Pillow==11.3.0           # Image processing library
+
+# Text Processing
+Markdown==3.7            # Markdown processing for posts
+
+# Utilities
+asgiref==3.9.2           # ASGI interface
+certifi==2025.10.5       # Certificate authority bundle
+charset-normalizer==3.4.4 # Character encoding detector
+idna==3.11               # Internationalized domain names
+packaging==25.0          # Core utilities for Python packages
+sqlparse==0.5.3          # SQL parsing and formatting
+urllib3==2.5.0           # HTTP library dependency
