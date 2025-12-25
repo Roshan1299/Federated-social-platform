@@ -1,0 +1,39 @@
+[project]
+name = "federated-social-platform"
+version = "1.0.0"
+description = "A distributed social networking system with federation capabilities"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Federated Social Platform Team", email = "team@example.com"}
+]
+
+dependencies = [
+    "Django>=4.2.25",
+    "psycopg2-binary>=2.9.11",
+    "dj-database-url>=3.0.1",
+    "gunicorn>=23.0.0",
+    "whitenoise>=6.11.0",
+    "requests>=2.32.5",
+    "Pillow>=11.3.0",
+    "Markdown>=3.7",
+    "asgiref>=3.9.2",
+    "certifi>=2025.10.5",
+    "charset-normalizer>=3.4.4",
+    "idna>=3.11",
+    "packaging>=25.0",
+    "sqlparse>=0.5.3",
+    "urllib3>=2.5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=24.0.0",
+    "flake8>=7.0.0",
+    "pytest>=8.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
