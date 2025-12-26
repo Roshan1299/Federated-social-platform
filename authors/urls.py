@@ -1,3 +1,9 @@
+"""
+URL configuration for the authors app in the Federated Social Platform.
+
+This module defines all the URL patterns for the authors app,
+including both UI views and API endpoints for the federated social platform.
+"""
 from django.urls import path, re_path
 from . import views
 from .views import (
@@ -24,6 +30,8 @@ from .api_views import (
 from .views import NodeConfigurationView, ConfigureRemoteNodeView
 
 app_name = "authors"
+
+# URL patterns for the authors app
 urlpatterns = [
     # ========== UI Routes (HTML Views) ==========
     path("explore/", views.ExploreView.as_view(), name="explore"),
@@ -59,15 +67,15 @@ urlpatterns = [
     path("posts/<uuid:post_id>/comments/add/", add_comment, name="add_comment"),
     path("comments/<uuid:comment_id>/like/", toggle_comment_like, name="toggle_comment_like"),
     path("api/posts/<uuid:post_id>/likes/", PostLikesView.as_view(), name="post_likes_page"),
-    
+
 
     # ========== REST API Routes (JSON) ==========
     # Note: Trailing slashes are optional for API endpoints
-    
+
     # Authors API
     path("api/authors/", AuthorsListAPIView.as_view(), name="authors_api"),
     path("api/authors/<uuid:author_id>/", AuthorAPIView.as_view(), name="author_api"),
-    
+
     # Author Image API
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/image/?$', AuthorImageAPIView.as_view(), name="author_image_api"),
 
@@ -75,74 +83,74 @@ urlpatterns = [
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/inbox/?$', InboxAPIView.as_view(), name="inbox_api"),
     # Follow Requests API (local author only)
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/follow_requests/?$', FollowRequestsAPIView.as_view(), name='follow_requests_api'),
-    
+
     # Followers API
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/followers/?$', FollowersAPIView.as_view(), name="followers_api"),
-    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/followers/(?P<follower_fqid>.+)$', 
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/followers/(?P<follower_fqid>.+)$',
         SingleFollowerAPIView.as_view(), name="single_follower_api"),
     # Following API (local author managing who they follow)
-    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/following/?$', 
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/following/?$',
         FollowingAPIView.as_view(), name="following_api"),
-    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/following/(?P<following_fqid>.+)$', 
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/following/(?P<following_fqid>.+)$',
         SingleFollowingAPIView.as_view(), name="single_following_api"),
-    
-    # Entries/Posts API 
+
+    # Entries/Posts API
     # List/create endpoint
     path("api/authors/<uuid:author_id>/entries/", EntriesAPIView.as_view(), name="entries_api"),
     # Single entry
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/?$', SingleEntryAPIView.as_view(), name="single_entry_api"),
-    
+
     # Image Entry API
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/image/?$', ImageEntryAPIView.as_view(), name="image_entry_api"),
-    
+
     # Comments API
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments/?$', CommentsAPIView.as_view(), name="comments_api"),
-    
+
     # Commented API - List of comments by author (UUID)
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/commented/?$', CommentsAPIView.as_view(), name="commented_api"),
-    
+
     # Single Comment by SERIAL (UUID)
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/commented/(?P<comment_id>[0-9a-f-]+)/?$', CommentsAPIView.as_view(), name="single_comment_api"),
-    
+
     # Comment Likes API
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments/(?P<comment_id>[0-9a-f-]+)/likes/?$', CommentLikesAPIView.as_view(), name="comment_likes_api"),
-    
+
     # Likes API
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/likes/?$', LikesAPIView.as_view(), name="entry_likes_api"),
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/liked/?$', LikedAPIView.as_view(), name="liked_api"),
-    
+
     # Single Like by SERIAL (UUID)
     re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/liked/(?P<like_id>[0-9a-f-]+)/?$', LikedAPIView.as_view(), name="single_like_api"),
-    
+
     # ========== FQID Routes (for cross-node federation) ==========
     # Accept percent-encoded full URLs as parameters
     # NOTE: After UUID-based routes to avoid conflicts
-    
+
     # Entries API with FQID
     re_path(r'^api/entries/(?P<entry_fqid>.+)/image$', ImageEntryAPIView.as_view(), name="entry_fqid_image_api"),
     re_path(r'^api/entries/(?P<entry_fqid>.+)/comments$', CommentsAPIView.as_view(), name="entry_fqid_comments_api"),
     re_path(r'^api/entries/(?P<entry_fqid>.+)/likes$', LikesAPIView.as_view(), name="entry_fqid_likes_api"),
     re_path(r'^api/entries/(?P<entry_fqid>.+)$', SingleEntryAPIView.as_view(), name="entry_fqid_api"),
-    
+
     # Comment Likes with FQID - MUST come before general comment FQID route
-    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments/(?P<comment_fqid>.+)/likes$', 
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments/(?P<comment_fqid>.+)/likes$',
             CommentLikesAPIView.as_view(), name="comment_fqid_likes_api"),
-    
+
     # Comment with FQID in path
-    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments?/(?P<comment_fqid>.+)$', 
+    re_path(r'^api/authors/(?P<author_id>[0-9a-f-]+)/entries/(?P<entry_id>[0-9a-f-]+)/comments?/(?P<comment_fqid>.+)$',
         CommentsAPIView.as_view(), name="remote_comment_api"),
-    
+
     # Commented API with FQID
     re_path(r'^api/authors/(?P<author_fqid>.+)/commented$', CommentsAPIView.as_view(), name="author_fqid_commented_api"),
     re_path(r'^api/commented/(?P<comment_fqid>.+)$', CommentsAPIView.as_view(), name="comment_fqid_api"),
-    
+
     # Liked API with FQID
     re_path(r'^api/authors/(?P<author_fqid>.+)/liked/?$', LikedAPIView.as_view(), name="author_fqid_liked_api"),
     re_path(r'^api/liked/(?P<like_fqid>.+)$', LikedAPIView.as_view(), name="like_fqid_api"),
-    
+
     # Single Author API with FQID (remote nodes can query by full URL) - MUST BE LAST
     re_path(r'^api/authors/(?P<author_fqid>.+)/$', AuthorAPIView.as_view(), name="author_fqid_api"),
-    
+
     # ========== Legacy API Routes (kept for backwards compatibility) ==========
     path("api/posts/<uuid:post_id>/", PostAPIView.as_view(), name="post_api"),
     path('upload_image/', views.upload_image, name='upload_image'),
