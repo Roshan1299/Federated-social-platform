@@ -1,8 +1,9 @@
 """
-URL configuration for social_distribution project.
+URL configuration for the Federated Social Platform project.
 
 The `urlpatterns` list routes URLs to views. For more information please see:
     https://docs.djangoproject.com/en/5.2/topics/http/urls/
+
 Examples:
 Function views
     1. Add an import:  from my_app import views
@@ -22,10 +23,21 @@ from authors.views import CustomLoginView
 from django.urls import path, include
 from django.views.generic import RedirectView
 
+# Main URL patterns for the federated social platform
 urlpatterns = [
+    # Admin interface
     path('admin/', admin.site.urls),
+    
+    # Authentication URLs
     path("accounts/login/", CustomLoginView.as_view(), name="login"),
     path("accounts/", include("django.contrib.auth.urls")),  # Include other auth URLs like logout, password reset, etc.
+    
+    # Main application URLs
     path("", include("authors.urls")),
+    
+    # Default redirect to explore page
     path('', RedirectView.as_view(url='/explore/', permanent=False)),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) # tells django to serve files from MEDIA_ROOT directory at URLs starting with MEDIA_URL
+]
+
+# Serve media files during development
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
