@@ -7,7 +7,11 @@
 
 A distributed social networking system that enables multiple independent nodes to communicate with each other, similar to platforms like Diaspora. This project provides a decentralized alternative to centralized social media platforms.
 
-https://github.com/user-attachments/assets/ecb2816d-3781-4ab2-98e8-0d5b76a181b5
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=sMIH7bDkano">
+    <img src="https://img.youtube.com/vi/sMIH7bDkano/hqdefault.jpg" width="700">
+  </a>
+</p>
 
 ## 🚀 Features
 
